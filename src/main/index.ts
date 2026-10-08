@@ -68,13 +68,20 @@ function attachWebviewGuard(): void {
 }
 
 function createWindow(): void {
+  const mac = process.platform === 'darwin';
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 960,
     minHeight: 640,
     title: 'Huyuan AI 工作台 Hub',
-    backgroundColor: '#f3efe7',
+    backgroundColor: '#f6f6f6',
+    ...(mac
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 14, y: 10 },
+        }
+      : {}),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

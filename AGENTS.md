@@ -21,6 +21,7 @@ Electron 宿主扫描插件、注册服务，并用 `app-plugin://` 打开插件
 9. **打发版 tag**：用户明确要求发版 / 打 tag / 建 Release 时 → 读并执行 [`docs/builtin-workflows/cut-release-tag.md`](./docs/builtin-workflows/cut-release-tag.md)。日常发版只雇本篇。推送 `v*` tag 后由 GitHub Actions 打包并创建 Release，不要本地 `gh release create`。
 10. 团队命令在 [`.cursor/commands/team/`](./.cursor/commands/team/)，母版在 Obsidian Vibecoding 团队成员库，命令全文不抄进本文件。
 11. **代码检索**：先走 Codebase MCP，不可用再退回文件检索。细则见下节。
+12. **界面风格**：改 `src/renderer/` 外观前先读 [`docs/DESIGN.md`](./docs/DESIGN.md)。色值、按钮和圆角以该文件为准。
 
 ## 代码检索
 
@@ -75,6 +76,7 @@ Electron 宿主扫描插件、注册服务，并用 `app-plugin://` 打开插件
 | 路径 | 内容 |
 |---|---|
 | `docs/doc_index.md` | 唯一入口索引，每行路径 + 一行摘要 |
+| `docs/DESIGN.md` | 工作台壳视觉事实源；改 `src/renderer/` 外观前先读，色值、按钮和圆角以它为准 |
 | `docs/workflows/<slug>.md` | 业务可复跑动作；人/Agent 新建只放这里（入口 / 参数 / 步骤 / 产物 / 排查 / 测试） |
 | `docs/builtin-workflows/<slug>.md` | 脚手架自带；改已有文件可以，禁止当业务目录用；每篇必须在「开始工作前」有触发，否则不要新增 |
 | `docs/best-practices/<slug>.md` | 可选：项目无关最佳实践（提取经验时再建）；须含 semver `version` |

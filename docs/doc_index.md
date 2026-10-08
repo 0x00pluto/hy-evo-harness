@@ -3,6 +3,7 @@
 ## Index
 
 - `README.md`: Huyuan Hub 产品说明：Electron 宿主、插件契约、开发挂载与打包
+- `docs/DESIGN.md`: 工作台壳视觉事实源：白底、浅灰选中、细线文字按钮；改 src/renderer 外观前先读
 - `docs/build-and-release.md`: 桌面安装包、三端 CI、GitHub Release 页与应用内自动更新
 - `docs/hub-plugin-architecture.md`: 插件化 Hub 技术选型与方案原文备份：注册表、app-plugin 协议、开发挂载、ZIP 安装；在线市场不在当前版本
 - `AGENTS.md`: 本仓工作约定、目录语义与能力声明；代码检索先走 Codebase MCP；scaffold_version 2.4.0

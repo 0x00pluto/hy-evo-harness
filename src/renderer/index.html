@@ -6,6 +6,8 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="titlebar"></div>
+  <div id="shell">
   <aside id="sidebar">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">H</div>
@@ -16,17 +18,32 @@
     </div>
     <div class="section-title">应用与工具</div>
     <nav id="plugin-nav" aria-label="插件列表"></nav>
-    <button id="install-btn" type="button">安装插件</button>
+    <button id="install-btn" type="button">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <path d="M8 3.25v9.5M3.25 8h9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      安装插件
+    </button>
     <div id="update-footer" hidden>
       <button id="update-retry" type="button" hidden>重试</button>
       <button id="update-btn" type="button" hidden aria-label="安装更新">
         <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          <path d="M8 2.5v8.2M4.8 6.2 8 2.8l3.2 3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M3 13.2h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M8 2.5v8.2M4.8 6.2 8 2.8l3.2 3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3 13.2h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
       </button>
     </div>
   </aside>
+  <div
+    id="splitter"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="调整侧栏宽度"
+    aria-valuemin="220"
+    aria-valuemax="480"
+    aria-valuenow="292"
+    tabindex="0"
+  ></div>
 
   <main id="main-container">
     <p id="status" role="status"></p>
@@ -54,6 +71,7 @@
     </div>
     <div id="viewport-host" hidden></div>
   </main>
+  </div>
 
   <dialog id="update-dialog">
     <h2 id="update-dialog-title"></h2>
