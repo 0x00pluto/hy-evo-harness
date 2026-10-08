@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>AI 漫剧大师</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      background: #f7f1e8;
+      color: #1c1915;
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+    h1 {
+      font-family: Palatino, "Songti SC", serif;
+      font-weight: 600;
+      margin: 0 0 8px;
+    }
+    p { color: #6f675e; }
+    label { display: block; font-size: 14px; margin-bottom: 8px; }
+    textarea {
+      width: 100%;
+      min-height: 96px;
+      box-sizing: border-box;
+      border: 1px solid #e3dbcf;
+      border-radius: 12px;
+      padding: 12px;
+      font: inherit;
+      background: white;
+    }
+    button {
+      margin-top: 12px;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 16px;
+      background: #e07a3d;
+      color: #2a160d;
+      font: inherit;
+      cursor: pointer;
+    }
+    pre {
+      margin-top: 18px;
+      padding: 14px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid #e3dbcf;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>AI 漫剧大师创作台</h1>
+    <p>通过宿主服务生成，不占用本地端口。</p>
+    <label for="prompt">提示词</label>
+    <textarea id="prompt">古风修仙场景</textarea>
+    <button id="btn" type="button">生成漫剧</button>
+    <pre id="result">等待生成</pre>
+  </main>
+  <script>
+    const result = document.getElementById('result');
+    document.getElementById('btn').onclick = async () => {
+      const prompt = document.getElementById('prompt').value;
+      result.textContent = '正在生成…';
+      try {
+        const payload = await window.hub.call('aiComicService', 'renderVideo', [{ prompt }]);
+        result.textContent = JSON.stringify(payload, null, 2);
+      } catch (err) {
+        result.textContent = err && err.message ? err.message : '生成失败';
+      }
+    };
+  </script>
+</body>
+</html>

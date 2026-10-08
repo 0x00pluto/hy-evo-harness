@@ -1,0 +1,8 @@
+{
+  "id": "ai-comic-master",
+  "displayName": "AI 漫剧大师",
+  "version": "1.0.0",
+  "type": "ui",
+  "main": "index.js",
+  "uiEntry": "ui/index.html"
+}

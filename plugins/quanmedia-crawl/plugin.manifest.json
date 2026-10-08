@@ -1,0 +1,7 @@
+{
+  "id": "quanmedia-crawl",
+  "displayName": "全媒体爬虫引擎",
+  "version": "1.0.0",
+  "type": "headless",
+  "main": "index.js"
+}
