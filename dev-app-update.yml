@@ -1,4 +1,4 @@
 provider: github
 owner: 0x00pluto
 repo: hy-evo-harness
-updaterCacheDirName: huyuan-hub-updater
+updaterCacheDirName: dex-buddy-updater

@@ -1,6 +1,6 @@
 # 打包与发布
 
-Huyuan Hub 使用 TypeScript 编译主进程，再用 electron-builder 产出桌面安装包。跨平台构建由 GitHub Actions 完成。界面仍是原生 HTML / CSS / JS，没有前端构建。
+Dex Buddy 使用 TypeScript 编译主进程，再用 electron-builder 产出桌面安装包。跨平台构建由 GitHub Actions 完成。界面仍是原生 HTML / CSS / JS，没有前端构建。
 
 ## 本地打包
 
@@ -36,9 +36,9 @@ tag 去掉 `v` 之后必须等于 `package.json` 的 `version`，否则 CI 校�
 
 | Job | 平台 | Artifact 名称 | 主要文件 |
 | --- | --- | --- | --- |
-| Build macOS Universal | macOS | `huyuan-hub-macos-universal` | `.dmg`、`-mac.zip`、`latest-mac.yml` 等 |
-| Build Windows x64 | Windows | `huyuan-hub-windows-x64` | `.exe`、`latest.yml`、`.blockmap` |
-| Build Linux x64 | Linux | `huyuan-hub-linux-x64` | `.AppImage`、`.deb`、`latest-linux.yml` 等 |
+| Build macOS Universal | macOS | `dex-buddy-macos-universal` | `.dmg`、`-mac.zip`、`latest-mac.yml` 等 |
+| Build Windows x64 | Windows | `dex-buddy-windows-x64` | `.exe`、`latest.yml`、`.blockmap` |
+| Build Linux x64 | Linux | `dex-buddy-linux-x64` | `.AppImage`、`.deb`、`latest-linux.yml` 等 |
 
 Artifact 保留 14 天，可在对应 Workflow Run 页面下载。CI 使用 `--publish never`，electron-builder 不会自己上传。上传由下面的 release job 完成。
 
@@ -56,7 +56,7 @@ Linux CI 产出 AppImage + deb（不含 snap，避免 snapcraft 依赖导致失�
 
 应用内自动更新基于 electron-updater，更新源为本仓库的 GitHub Releases（`electron-builder.yml` 的 `publish: provider: github`，仓库 `0x00pluto/hy-evo-harness`）。不使用系统通知。入口是侧栏底部的向上箭头。
 
-`appId` 固定为 **`com.huyuan.hub`**。首个正式发布之后不要再改，否则已安装客户端对不上更新身份。
+`appId` 固定为 **`com.huyuan.dexbuddy`**。这次改名之后不要再改，否则已安装客户端对不上更新身份。
 
 ### 共同行为
 
@@ -74,7 +74,7 @@ Linux CI 产出 AppImage + deb（不含 snap，避免 snapcraft 依赖导致失�
 ### macOS（下载 dmg 手动安装）
 
 - 当前未配置 Apple 签名/公证（`identity: null`），不走 electron-updater 静默安装。
-- 检测到新版本即显示箭头；用户确认后主进程从 GitHub Release 下载 `huyuan-hub-${version}.dmg` 到系统「下载」目录，完成后自动打开。
+- 检测到新版本即显示箭头；用户确认后主进程从 GitHub Release 下载 `dex-buddy-${version}.dmg` 到系统「下载」目录，完成后自动打开。
 - 用户需手动将应用拖入「应用程序」。未签名包首次打开可能需要在系统设置里放行。
 - 同版本 dmg 已存在且大小匹配时不重复下载，直接打开本地文件。
 
@@ -94,10 +94,10 @@ Release Assets 中的 `latest*.yml`、`.dmg` / `.exe` 与 `*.blockmap` 是更新
 
 | 项 | 说明 |
 | --- | --- |
-| `appId` / `productName` | `com.huyuan.hub` / `Huyuan Hub` |
+| `appId` / `productName` | `com.huyuan.dexbuddy` / `Dex Buddy` |
 | 输出目录 | `release/`，与 `tsc` 的 `dist/` 分开 |
 | 打包内容 | `dist/`、`src/renderer/`、`src/preload/`、`plugins/`，以及生产依赖 `electron-updater` |
 | `mac` | 本地与 CI 都产出 dmg 与 zip；签名默认 `identity: null`，`notarize: false` |
-| `win` / `nsis` | 可执行名 `HuyuanHub`，安装包名 `huyuan-hub-${version}-setup.exe`；`build/installer.nsh` 让更新后直接启动 exe |
+| `win` / `nsis` | 可执行名 `DexBuddy`，安装包名 `dex-buddy-${version}-setup.exe`；`build/installer.nsh` 让更新后直接启动 exe |
 | `linux` | 本地默认含 AppImage / snap / deb；CI 仅打 AppImage + deb |
 | `publish` | GitHub Releases（`0x00pluto/hy-evo-harness`）；构建仍用 `--publish never` |

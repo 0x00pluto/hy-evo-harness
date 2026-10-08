@@ -38,7 +38,7 @@ export async function installPluginZip(options: {
   const entries = await listZipEntries(zipFilePath);
   assertZipEntriesSafe(entries);
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'huyuan-plugin-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-'));
   try {
     await execFileAsync('unzip', ['-q', zipFilePath, '-d', tmpDir]);
     assertExtractedTree(tmpDir);

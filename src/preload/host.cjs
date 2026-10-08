@@ -1,20 +1,20 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
-contextBridge.exposeInMainWorld('hub', {
+contextBridge.exposeInMainWorld('dex', {
   listPlugins() {
-    return ipcRenderer.invoke('hub:list-plugins');
+    return ipcRenderer.invoke('dex:list-plugins');
   },
   preparePlugin(id) {
-    return ipcRenderer.invoke('hub:prepare-plugin', id);
+    return ipcRenderer.invoke('dex:prepare-plugin', id);
   },
   installZip(zipFilePath) {
-    return ipcRenderer.invoke('hub:install-zip', zipFilePath);
+    return ipcRenderer.invoke('dex:install-zip', zipFilePath);
   },
   pickAndInstall() {
-    return ipcRenderer.invoke('hub:pick-and-install');
+    return ipcRenderer.invoke('dex:pick-and-install');
   },
   uninstall(id) {
-    return ipcRenderer.invoke('hub:uninstall', id);
+    return ipcRenderer.invoke('dex:uninstall', id);
   },
   pathForFile(file) {
     return webUtils.getPathForFile(file);

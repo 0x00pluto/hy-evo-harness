@@ -21,7 +21,7 @@ const updateConfirm = document.getElementById('update-confirm');
 const sidebar = document.getElementById('sidebar');
 const splitter = document.getElementById('splitter');
 
-const SIDEBAR_KEY = 'hub.sidebarWidth';
+const SIDEBAR_KEY = 'dex.sidebarWidth';
 const SIDEBAR_DEFAULT = 292;
 const SIDEBAR_MIN = 220;
 const SIDEBAR_MAX = 480;
@@ -171,7 +171,7 @@ async function openPlugin(plugin) {
 
   try {
     if (plugin.type === 'ui' && plugin.uiUrl) {
-      const prepared = await window.hub.preparePlugin(plugin.id);
+      const prepared = await window.dex.preparePlugin(plugin.id);
       welcome.hidden = true;
       headless.hidden = true;
       toolbar.hidden = false;
@@ -202,7 +202,7 @@ async function openPlugin(plugin) {
 }
 
 async function refresh(nextPlugins) {
-  plugins = nextPlugins || (await window.hub.listPlugins());
+  plugins = nextPlugins || (await window.dex.listPlugins());
   if (activeId && !plugins.some((plugin) => plugin.id === activeId)) {
     showWelcome();
     return;
@@ -216,7 +216,7 @@ async function installFromPath(zipPath) {
     return;
   }
   setStatus('正在安装…');
-  const result = await window.hub.installZip(zipPath);
+  const result = await window.dex.installZip(zipPath);
   if (!result.ok) {
     setStatus(result.message || '安装失败', 'error');
     return;
@@ -227,7 +227,7 @@ async function installFromPath(zipPath) {
 
 async function uninstallActive() {
   if (!activeId) return;
-  const result = await window.hub.uninstall(activeId);
+  const result = await window.dex.uninstall(activeId);
   if (!result.ok) {
     setStatus(result.message || '卸载失败', 'error');
     await refresh(result.plugins);
@@ -239,7 +239,7 @@ async function uninstallActive() {
 }
 
 installBtn.addEventListener('click', async () => {
-  const result = await window.hub.pickAndInstall();
+  const result = await window.dex.pickAndInstall();
   if (result.cancelled) return;
   if (!result.ok) {
     setStatus(result.message || '安装失败', 'error');
@@ -272,7 +272,7 @@ dropZone.addEventListener('drop', (event) => {
   dropZone.classList.remove('dragover');
   const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
   if (!file) return;
-  const zipPath = window.hub.pathForFile(file);
+  const zipPath = window.dex.pathForFile(file);
   void installFromPath(zipPath);
 });
 
@@ -354,7 +354,7 @@ updateConfirm.addEventListener('click', async () => {
   if (!updateState || updateConfirm.disabled) return;
   updateConfirm.disabled = true;
   try {
-    const result = await window.hub.installUpdate();
+    const result = await window.dex.installUpdate();
     if (result && result.blockedByTask) {
       setStatus('请先结束当前任务，再安装更新', 'error');
       updaterOwnsStatus = true;
@@ -371,11 +371,11 @@ updateConfirm.addEventListener('click', async () => {
 });
 
 updateRetry.addEventListener('click', () => {
-  void window.hub.retryUpdateCheck();
+  void window.dex.retryUpdateCheck();
 });
 
-window.hub.onUpdateStatus(renderUpdate);
-void window.hub.getUpdateStatus().then(renderUpdate).catch(() => {});
+window.dex.onUpdateStatus(renderUpdate);
+void window.dex.getUpdateStatus().then(renderUpdate).catch(() => {});
 
 void refresh().catch((err) => {
   setStatus(err instanceof Error ? err.message : '无法读取插件列表', 'error');

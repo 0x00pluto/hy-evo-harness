@@ -70,7 +70,7 @@
       const prompt = document.getElementById('prompt').value;
       result.textContent = '正在生成…';
       try {
-        const payload = await window.hub.call('aiComicService', 'renderVideo', [{ prompt }]);
+        const payload = await window.dex.call('aiComicService', 'renderVideo', [{ prompt }]);
         result.textContent = JSON.stringify(payload, null, 2);
       } catch (err) {
         result.textContent = err && err.message ? err.message : '生成失败';

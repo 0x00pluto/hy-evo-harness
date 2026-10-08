@@ -1,8 +1,8 @@
 {
-  "name": "huyuan-hub",
+  "name": "dex-buddy",
   "version": "0.1.1",
   "private": true,
-  "description": "Huyuan AI 统一工作台 Hub",
+  "description": "Dex Buddy",
   "type": "module",
   "main": "dist/main/index.js",
   "engines": {

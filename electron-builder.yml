@@ -1,5 +1,5 @@
-appId: com.huyuan.hub
-productName: Huyuan Hub
+appId: com.huyuan.dexbuddy
+productName: Dex Buddy
 directories:
   output: release
   buildResources: build
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - src/preload/**
 win:
-  executableName: HuyuanHub
+  executableName: DexBuddy
   target:
     - nsis
 nsis:

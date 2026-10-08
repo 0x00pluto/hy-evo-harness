@@ -1,4 +1,4 @@
-export const UPDATE_APP_SLUG = 'huyuan-hub';
+export const UPDATE_APP_SLUG = 'dex-buddy';
 export const UPDATE_GITHUB_OWNER = '0x00pluto';
 export const UPDATE_GITHUB_REPO = 'hy-evo-harness';
 

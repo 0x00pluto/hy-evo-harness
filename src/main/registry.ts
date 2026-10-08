@@ -40,8 +40,8 @@ export class DuplicatePluginError extends Error {
 }
 
 const defaultLogger: Logger = {
-  info: (msg) => console.log(`[Plugin Hub INFO] ${msg}`),
-  error: (msg) => console.error(`[Plugin Hub ERROR] ${msg}`),
+  info: (msg) => console.log(`[Dex Buddy INFO] ${msg}`),
+  error: (msg) => console.error(`[Dex Buddy ERROR] ${msg}`),
 };
 
 export class ServiceRegistry implements AppContext {

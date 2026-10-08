@@ -1,6 +1,6 @@
-# Huyuan Hub
+# Dex Buddy
 
-Huyuan AI 统一工作台。宿主用 Electron 扫描插件、注册服务，并用 `app-plugin://` 打开插件界面。插件后端是普通 CommonJS，不需要自己监听端口。
+Huyuan AI 的统一工作台。宿主用 Electron 扫描插件、注册服务，并用 `app-plugin://` 打开插件界面。插件后端是普通 CommonJS，不需要自己监听端口。
 
 在线插件市场不在当前版本里。
 
@@ -33,7 +33,7 @@ src/renderer/    工作台界面
 plugins/         内置示例插件，也可放开发软链接
 ```
 
-包类型是 ESM，所以预加载脚本使用 `.cjs`，才能在隔离环境里 `require('electron')`。插件入口 `index.js` 仍按 CommonJS 执行（`module.exports`），不跟随 Hub 的 `"type": "module"`。插件页面拿不到 Node，只能调用 `window.hub.call`。
+包类型是 ESM，所以预加载脚本使用 `.cjs`，才能在隔离环境里 `require('electron')`。插件入口 `index.js` 仍按 CommonJS 执行（`module.exports`），不跟随 Dex Buddy 的 `"type": "module"`。插件页面拿不到 Node，只能调用 `window.dex.call`。
 
 ## 插件契约
 
@@ -77,7 +77,7 @@ module.exports = {
 界面里这样调用服务：
 
 ```javascript
-const result = await window.hub.call('aiComicService', 'renderVideo', [
+const result = await window.dex.call('aiComicService', 'renderVideo', [
   { prompt: '古风修仙场景' },
 ]);
 ```
@@ -100,7 +100,7 @@ const result = await window.hub.call('aiComicService', 'renderVideo', [
 ln -s "/绝对路径/你的项目" "/绝对路径/0001-HyHarness/plugins/你的项目"
 ```
 
-改完插件代码后重启 Hub。同名 `id` 先加载的保留，后扫描到的跳过。顺序是：`plugins/`、`config.dev.json`、用户安装目录。
+改完插件代码后重启 Dex Buddy。同名 `id` 先加载的保留，后扫描到的跳过。顺序是：`plugins/`、`config.dev.json`、用户安装目录。
 
 ## 打包给别人安装
 

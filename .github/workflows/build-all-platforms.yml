@@ -79,7 +79,7 @@ jobs:
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: huyuan-hub-macos-universal
+          name: dex-buddy-macos-universal
           path: |
             release/*.dmg
             release/*-mac.zip
@@ -115,7 +115,7 @@ jobs:
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: huyuan-hub-windows-x64
+          name: dex-buddy-windows-x64
           path: |
             release/*.exe
             release/latest*.yml
@@ -155,7 +155,7 @@ jobs:
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: huyuan-hub-linux-x64
+          name: dex-buddy-linux-x64
           path: |
             release/*.AppImage
             release/*.deb

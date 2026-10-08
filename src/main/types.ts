@@ -41,7 +41,7 @@ export interface PluginSummary {
   source: PluginSource;
 }
 
-export interface HubResult {
+export interface DexResult {
   ok: boolean;
   cancelled?: boolean;
   message?: string;

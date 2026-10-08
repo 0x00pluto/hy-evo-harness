@@ -1,11 +1,12 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, type NativeImage } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readExtraPluginPaths } from './dev-config.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
 import { ensurePluginProtocol, pluginPartition, registerPluginScheme } from './protocol.ts';
 import { ServiceRegistry } from './registry.ts';
-import type { HubResult } from './types.ts';
+import type { DexResult } from './types.ts';
 import { initUpdater } from './updater.ts';
 
 registerPluginScheme();
@@ -67,15 +68,29 @@ function attachWebviewGuard(): void {
   });
 }
 
-function createWindow(): void {
+function loadAppIcon(): NativeImage | null {
+  const iconPath = path.join(app.getAppPath(), 'build', 'icon.png');
+  if (!fs.existsSync(iconPath)) return null;
+  const image = nativeImage.createFromPath(iconPath);
+  return image.isEmpty() ? null : image;
+}
+
+function applyDockIcon(icon: NativeImage | null): void {
+  // 未打包时进程是 Electron 本体，程序坞会一直显示原子图标。
+  if (!icon || process.platform !== 'darwin') return;
+  app.dock?.setIcon(icon);
+}
+
+function createWindow(icon: NativeImage | null): void {
   const mac = process.platform === 'darwin';
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 960,
     minHeight: 640,
-    title: 'Huyuan AI 工作台 Hub',
+    title: 'Dex Buddy',
     backgroundColor: '#f6f6f6',
+    ...(icon && !mac ? { icon } : {}),
     ...(mac
       ? {
           titleBarStyle: 'hiddenInset' as const,
@@ -112,7 +127,7 @@ function readCallPayload(payload: unknown): { serviceName: string; method: strin
   };
 }
 
-async function installFromZip(zipFilePath: string): Promise<HubResult> {
+async function installFromZip(zipFilePath: string): Promise<DexResult> {
   if (!zipFilePath.toLowerCase().endsWith('.zip')) {
     return { ok: false, message: '请选择 .zip 插件包', plugins: registry.getPluginList() };
   }
@@ -133,9 +148,9 @@ async function installFromZip(zipFilePath: string): Promise<HubResult> {
 }
 
 function registerIpc(): void {
-  ipcMain.handle('hub:list-plugins', () => registry.getPluginList());
+  ipcMain.handle('dex:list-plugins', () => registry.getPluginList());
 
-  ipcMain.handle('hub:prepare-plugin', (_event, id: unknown) => {
+  ipcMain.handle('dex:prepare-plugin', (_event, id: unknown) => {
     if (typeof id !== 'string' || !registry.getPlugin(id)) {
       throw new Error('插件不存在');
     }
@@ -147,19 +162,19 @@ function registerIpc(): void {
     };
   });
 
-  ipcMain.handle('hub:call-service', async (_event, payload: unknown) => {
+  ipcMain.handle('dex:call-service', async (_event, payload: unknown) => {
     const call = readCallPayload(payload);
     return registry.callService(call.serviceName, call.method, call.args);
   });
 
-  ipcMain.handle('hub:install-zip', async (_event, zipFilePath: unknown) => {
+  ipcMain.handle('dex:install-zip', async (_event, zipFilePath: unknown) => {
     if (typeof zipFilePath !== 'string') {
       return { ok: false, message: '请选择 .zip 插件包', plugins: registry.getPluginList() };
     }
     return installFromZip(zipFilePath);
   });
 
-  ipcMain.handle('hub:pick-and-install', async () => {
+  ipcMain.handle('dex:pick-and-install', async () => {
     const result = await dialog.showOpenDialog({
       title: '选择插件压缩包',
       properties: ['openFile'],
@@ -172,7 +187,7 @@ function registerIpc(): void {
     return installFromZip(zipFilePath);
   });
 
-  ipcMain.handle('hub:uninstall', async (_event, id: unknown) => {
+  ipcMain.handle('dex:uninstall', async (_event, id: unknown) => {
     if (typeof id !== 'string') {
       return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
     }
@@ -194,15 +209,17 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(async () => {
+  const icon = loadAppIcon();
+  applyDockIcon(icon);
   attachWebviewGuard();
   registerIpc();
   initUpdater();
   await loadAllPlugins();
-  createWindow();
+  createWindow(icon);
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (BrowserWindow.getAllWindows().length === 0) createWindow(loadAppIcon());
 });
 
 app.on('window-all-closed', () => {

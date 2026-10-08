@@ -1,4 +1,4 @@
-# Huyuan Hub — Huyuan AI 统一工作台
+# Dex Buddy — Huyuan AI 统一工作台
 
 Electron 宿主扫描插件、注册服务，并用 `app-plugin://` 打开插件界面。插件后端是普通 CommonJS，不需要自己监听端口。在线插件市场不在当前版本里。产品契约见 [README.md](./README.md)。
 
@@ -100,5 +100,5 @@ pnpm start
 | 字段 | 值 |
 |---|---|
 | lifecycle | active |
-| owns | 插件扫描与服务注册；app-plugin:// 打开插件界面；zip 安装与卸载；插件 manifest 与 hub.call 契约 |
+| owns | 插件扫描与服务注册；app-plugin:// 打开插件界面；zip 安装与卸载；插件 manifest 与 dex.call 契约 |
 | not | 在线插件市场；插件产品本体（仓内示例不在本仓演进）；数据库与 HTTP API；把外部项目源码复制进 plugins/ |

@@ -1,6 +1,6 @@
-# Huyuan Hub 插件化技术选型与方案（备份）
+# Dex Buddy 插件化技术选型与方案（备份）
 
-本文是方案原文的备份，记录整套轻量插件化 Hub 的技术选型。上半部分是落地时已经采纳的选型；下半部分按原稿保留，方便对照，不改原文措辞。
+本文是方案原文的备份，记录整套轻量插件化 Dex Buddy 的技术选型。上半部分是落地时已经采纳的选型；下半部分按原稿保留，方便对照，不改原文措辞。
 
 日常接入步骤以 [README.md](../README.md) 为准。在线插件市场不在当前版本。
 
@@ -10,7 +10,7 @@
 
 | 议题 | 原稿 | 落地 |
 |---|---|---|
-| 插件页面权限 | `nodeIntegration: true`，页面里 `require('electron')` | 宿主和 `<webview>` 都关闭 Node，`contextIsolation: true`。页面只调用 `window.hub.call(serviceName, method, args)` |
+| 插件页面权限 | `nodeIntegration: true`，页面里 `require('electron')` | 宿主和 `<webview>` 都关闭 Node，`contextIsolation: true`。页面只调用 `window.dex.call(serviceName, method, args)` |
 | 静态资源协议 | `protocol.registerFileProtocol` | 启动前 `registerSchemesAsPrivileged`，就绪后 `protocol.handle`。按插件真实目录 `absPath` 解析，拒绝逃出插件目录 |
 | 插件上下文 | `apply` 拿到整个注册表 | `apply` 期间登记的服务和事件记在该插件名下，`unload` 时一并摘掉 |
 | 扫描根 | 只扫 `plugins/` 子目录 | 既扫「里面放多个插件的目录」，也扫「自身就有 manifest 的项目根」 |

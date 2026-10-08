@@ -18,7 +18,7 @@ const silent: Logger = { info() {}, error() {} };
 const repoPlugins = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../plugins');
 
 function tempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'huyuan-hub-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-'));
 }
 
 function writePlugin(dir: string, manifest: PluginManifest, source: string): void {
@@ -112,7 +112,7 @@ test('路径本身是插件根时直接加载', async (t) => {
 
 test('不存在的目录不会报错', async () => {
   const registry = new ServiceRegistry(silent);
-  await registry.scanAndLoadPlugins(path.join(os.tmpdir(), 'huyuan-missing-plugins'), 'bundled');
+  await registry.scanAndLoadPlugins(path.join(os.tmpdir(), 'dex-buddy-missing-plugins'), 'bundled');
   assert.deepEqual(registry.getPluginList(), []);
 });
 

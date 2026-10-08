@@ -1,8 +1,8 @@
-# 给 Huyuan Hub 写插件
+# 给 Dex Buddy 写插件
 
-这份说明可以单独转发。按下面做，Hub 启动后就能在侧边栏看到你的插件。插件不需要自己监听端口，也不需要知道 Electron 怎么启动。
+这份说明可以单独转发。按下面做，Dex Buddy 启动后就能在侧边栏看到你的插件。插件不需要自己监听端口，也不需要知道 Electron 怎么启动。
 
-Hub 负责三件事：扫描你的目录、运行你的 `index.js`、如果有界面就打开你的 HTML。
+Dex Buddy 负责三件事：扫描你的目录、运行你的 `index.js`、如果有界面就打开你的 HTML。
 
 ## 你要交出来的东西
 
@@ -23,11 +23,11 @@ my-tool/
 | `ui` | 右侧打开你的 HTML | `uiEntry` 指向的页面。通常还有 `index.js` |
 | `headless` | 主区域说明它已在后台运行 | `index.js` |
 
-`index.js` 在 Hub 主进程里按 CommonJS 执行。这里可以用 Node，例如 `fs`、`child_process`，也可以拉起本机脚本。页面跑在隔离窗口里，没有 Node，不能 `require`，只能调用 `window.hub.call`。
+`index.js` 在 Dex Buddy 主进程里按 CommonJS 执行。这里可以用 Node，例如 `fs`、`child_process`，也可以拉起本机脚本。页面跑在隔离窗口里，没有 Node，不能 `require`，只能调用 `window.dex.call`。
 
 ## 页面不要调命令行
 
-页面只收集输入、展示结果。按钮里调用 `window.hub.call`，把普通对象交给 `index.js`。拼命令行参数、`child_process`、Python、FFmpeg 都写在 `index.js` 的服务方法里。
+页面只收集输入、展示结果。按钮里调用 `window.dex.call`，把普通对象交给 `index.js`。拼命令行参数、`child_process`、Python、FFmpeg 都写在 `index.js` 的服务方法里。
 
 逻辑本来就是 Node 函数时，在服务方法里直接调用。逻辑是 Python 或现成命令行时，在服务方法里拉起进程，把输出收成返回值。已有的命令行保持原样，继续由 `index.js` 调用。
 
@@ -65,12 +65,12 @@ module.exports = {
 页面这边仍然只有：
 
 ```javascript
-const result = await window.hub.call('myToolService', 'run', [{ lesson: '6-upper' }]);
+const result = await window.dex.call('myToolService', 'run', [{ lesson: '6-upper' }]);
 ```
 
-`window.hub.call` 是一次请求、一次返回。命令还在跑的时候，页面收不到中途进度。等命令结束，再返回 `{ success: true, outputPath: '/path/to/result.mp4' }` 这样的普通对象。
+`window.dex.call` 是一次请求、一次返回。命令还在跑的时候，页面收不到中途进度。等命令结束，再返回 `{ success: true, outputPath: '/path/to/result.mp4' }` 这样的普通对象。
 
-改布局时可以先用浏览器打开 HTML。放进 Hub 之后，按钮必须走 `window.hub.call`。
+改布局时可以先用浏览器打开 HTML。放进 Dex Buddy 之后，按钮必须走 `window.dex.call`。
 
 ## plugin.manifest.json
 
@@ -112,7 +112,7 @@ const result = await window.hub.call('myToolService', 'run', [{ lesson: '6-upper
 
 `main` 和 `uiEntry` 必须落在插件目录里面。不要写绝对路径，也不要写 `../`。
 
-页面里的 CSS、图片、脚本用相对路径即可。Hub 会按 `uiEntry` 所在位置去找它们。
+页面里的 CSS、图片、脚本用相对路径即可。Dex Buddy 会按 `uiEntry` 所在位置去找它们。
 
 ## 后端 index.js
 
@@ -138,20 +138,20 @@ module.exports = {
 
 `ctx` 上有这些方法：
 
-- `registerService(name, service)`：把一组方法挂到 Hub。名字全局唯一，已经被别人注册过会拒绝。
+- `registerService(name, service)`：把一组方法挂到 Dex Buddy。名字全局唯一，已经被别人注册过会拒绝。
 - `getService(name)`：拿到别的插件注册的服务，在后端里直接调用。
-- `logger.info(msg)` / `logger.error(msg)`：写到 Hub 日志。
+- `logger.info(msg)` / `logger.error(msg)`：写到 Dex Buddy 日志。
 - `emit(event, ...args)`：向所有插件广播。
 - `on(event, handler)`：收广播。
 
-卸载时 Hub 会调用 `dispose`，并摘掉这个插件注册的服务和 `on` 监听。不要把清理工作只留在 `dispose` 外面。
+卸载时 Dex Buddy 会调用 `dispose`，并摘掉这个插件注册的服务和 `on` 监听。不要把清理工作只留在 `dispose` 外面。
 
 服务方法的参数和返回值必须是普通数据：对象、数组、字符串、数字、布尔值、`null`。不要返回函数、类实例、`Map`、`Set` 或带循环引用的对象。
 
 ## 页面里调用服务
 
 ```javascript
-const result = await window.hub.call('myToolService', 'run', [{ text: '你好' }]);
+const result = await window.dex.call('myToolService', 'run', [{ text: '你好' }]);
 ```
 
 - 第一个参数是 `registerService` 时的名字。
@@ -205,7 +205,7 @@ module.exports = {
 };
 ```
 
-`dispose` 没有 `ctx` 参数。需要停掉的定时器、子进程，在 `apply` 里保存句柄，再到 `dispose` 里关掉。`dispose` 返回之后，Hub 会摘掉这个插件注册的服务和监听。
+`dispose` 没有 `ctx` 参数。需要停掉的定时器、子进程，在 `apply` 里保存句柄，再到 `dispose` 里关掉。`dispose` 返回之后，Dex Buddy 会摘掉这个插件注册的服务和监听。
 
 `ui/index.html`：
 
@@ -227,7 +227,7 @@ module.exports = {
       const text = document.getElementById('text').value;
       result.textContent = '正在执行…';
       try {
-        const payload = await window.hub.call('myToolService', 'run', [{ text }]);
+        const payload = await window.dex.call('myToolService', 'run', [{ text }]);
         result.textContent = JSON.stringify(payload, null, 2);
       } catch (err) {
         result.textContent = err && err.message ? err.message : '执行失败';
@@ -238,7 +238,7 @@ module.exports = {
 </html>
 ```
 
-把 `id`、显示名、服务名换成你自己的。`window.hub.call` 的第一个参数必须和 `registerService` 的名字一致。
+把 `id`、显示名、服务名换成你自己的。`window.dex.call` 的第一个参数必须和 `registerService` 的名字一致。
 
 ## 示例：无界面
 
@@ -280,7 +280,7 @@ module.exports = {
 };
 ```
 
-侧边栏里点它，不会打开页面。别的插件可以在后端用 `ctx.getService('myCrawlerService')` 调用它，也可以在自己的页面里 `window.hub.call('myCrawlerService', 'fetchAccount', ['douyin', '123'])`。
+侧边栏里点它，不会打开页面。别的插件可以在后端用 `ctx.getService('myCrawlerService')` 调用它，也可以在自己的页面里 `window.dex.call('myCrawlerService', 'fetchAccount', ['douyin', '123'])`。
 
 要让它开始工作，由某个插件或你自己的 `apply` 里执行：
 
@@ -288,17 +288,17 @@ module.exports = {
 ctx.emit('trigger-all-spiders');
 ```
 
-## 开发时挂到 Hub
+## 开发时挂到 Dex Buddy
 
-不要把源码复制进 Hub 的 `plugins/` 目录，否则改一处、另一处还是旧的。任选一种：
+不要把源码复制进 Dex Buddy 的 `plugins/` 目录，否则改一处、另一处还是旧的。任选一种：
 
 软链接（Mac / Linux）：
 
 ```bash
-ln -s "/绝对路径/my-tool" "/绝对路径/HuyuanHub/plugins/my-tool"
+ln -s "/绝对路径/my-tool" "/绝对路径/DexBuddy/plugins/my-tool"
 ```
 
-或者请 Hub 维护者在 Hub 仓库根目录复制 `config.dev.example.json` 为 `config.dev.json`，写上你的项目绝对路径：
+或者请 Dex Buddy 维护者在 Dex Buddy 仓库根目录复制 `config.dev.example.json` 为 `config.dev.json`，写上你的项目绝对路径：
 
 ```json
 {
@@ -310,7 +310,7 @@ ln -s "/绝对路径/my-tool" "/绝对路径/HuyuanHub/plugins/my-tool"
 
 这条路径可以是插件根目录（里面直接有 `plugin.manifest.json`），也可以是一个文件夹，里面每个子目录是一个插件。`config.dev.json` 只在未打包的开发版里生效。
 
-改完 `index.js` 或页面后，重启 Hub。同名 `id` 谁先被扫到就用谁，后扫到的会跳过。顺序是：Hub 仓库里的 `plugins/`、`config.dev.json`、用户后来安装的插件。
+改完 `index.js` 或页面后，重启 Dex Buddy。同名 `id` 谁先被扫到就用谁，后扫到的会跳过。顺序是：Dex Buddy 仓库里的 `plugins/`、`config.dev.json`、用户后来安装的插件。
 
 ## 打成 zip 给别人安装
 
@@ -335,13 +335,17 @@ zip -r my-tool-v1.0.0.zip my-tool \
 
 不要打进 `.git`、`.venv`、`node_modules`、`cache/`、`output/`。包里不要出现绝对路径或 `..`。
 
-对方打开 Hub，把 zip 拖进欢迎页，或点击「安装插件」选这个文件。侧边栏会马上出现，不用重启。同一个已安装插件再次安装会覆盖。如果这个 `id` 已经来自 Hub 内置目录或开发路径，安装会被拒绝，需要换一个 `id`。
+对方打开 Dex Buddy，把 zip 拖进欢迎页，或点击「安装插件」选这个文件。侧边栏会马上出现，不用重启。同一个已安装插件再次安装会覆盖。如果这个 `id` 已经来自 Dex Buddy 内置目录或开发路径，安装会被拒绝，需要换一个 `id`。
+
+核心是 Python 时，前面示例里的 `python3` 只适合你自己的开发机。开发阶段可以让 `index.js` 调用本机虚拟环境里的解释器，命令行脚本保持原样。
+
+发给别人时，把脚本打成可执行文件，放进插件目录，`index.js` 用相对路径调用它。依赖跟着这个可执行文件走。`.venv` 不打进 zip。页面不用改，仍然只调用 `window.hub.call`。
 
 ## 这样会加载失败
 
 - `id` 含大写、中文、下划线，或超过 64 个字符。
 - `type` 写成 `ui`，但没有 `uiEntry`。
 - `main` 或 `uiEntry` 写成绝对路径，或路径里有 `..`。
-- zip 里没有 `plugin.manifest.json`，或有多份、Hub 无法确定用哪一份。
+- zip 里没有 `plugin.manifest.json`，或有多份、Dex Buddy 无法确定用哪一份。
 - 服务方法返回了函数、类实例，或页面调用了一个不存在的方法。
 - 服务名已经被别的插件注册过。
