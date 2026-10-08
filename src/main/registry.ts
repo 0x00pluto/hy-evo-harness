@@ -3,6 +3,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { Module } from 'node:module';
 import { readManifestFile } from './manifest.ts';
+import { PluginSettingsStore, type SettingsPluginView, type SettingsSaveResult } from './plugin-settings.ts';
 import { resolvePluginFile } from './protocol.ts';
 import type { AppContext, AppPlugin, Logger, PluginSource, PluginSummary } from './types.ts';
 
@@ -44,16 +45,22 @@ const defaultLogger: Logger = {
   error: (msg) => console.error(`[Dex Buddy ERROR] ${msg}`),
 };
 
-export class ServiceRegistry implements AppContext {
+export class ServiceRegistry {
   private readonly services = new Map<string, unknown>();
   private readonly plugins = new Map<string, AppPlugin>();
   private readonly ownership = new Map<string, Owned>();
   private readonly bus = new EventEmitter();
+  private settings: PluginSettingsStore;
   readonly logger: Logger;
 
-  constructor(logger: Logger = defaultLogger) {
+  constructor(logger: Logger = defaultLogger, settings?: PluginSettingsStore) {
     this.logger = logger;
+    this.settings = settings ?? new PluginSettingsStore(null, logger);
     this.bus.setMaxListeners(100);
+  }
+
+  setSettings(settings: PluginSettingsStore): void {
+    this.settings = settings;
   }
 
   registerService<T = unknown>(name: string, service: T): void {
@@ -74,6 +81,26 @@ export class ServiceRegistry implements AppContext {
 
   getPlugin(id: string): AppPlugin | undefined {
     return this.plugins.get(id);
+  }
+
+  listSettingsViews(): SettingsPluginView[] {
+    return this.settings.listViews(Array.from(this.plugins.values()));
+  }
+
+  settingsView(id: string): SettingsPluginView {
+    const plugin = this.plugins.get(id);
+    if (!plugin) throw new Error('插件不存在');
+    return this.settings.viewFor(plugin);
+  }
+
+  savePluginSettings(id: string, draft: unknown): SettingsSaveResult {
+    const plugin = this.plugins.get(id);
+    if (!plugin) return { ok: false, message: '插件不存在' };
+    return this.settings.save(plugin.manifest, draft);
+  }
+
+  deletePluginSettings(id: string): void {
+    this.settings.deletePlugin(id);
   }
 
   getPluginList(): PluginSummary[] {
@@ -155,7 +182,7 @@ export class ServiceRegistry implements AppContext {
     }
 
     const owned: Owned = { services: [], listeners: [] };
-    const ctx = this.createContext(owned);
+    const ctx = this.createContext(owned, plugin);
     try {
       this.logger.info(`挂载插件: ${plugin.manifest.displayName} (${id})`);
       await plugin.apply(ctx);
@@ -216,7 +243,7 @@ export class ServiceRegistry implements AppContext {
     };
   }
 
-  private createContext(owned: Owned): AppContext {
+  private createContext(owned: Owned, plugin: AppPlugin): AppContext {
     return {
       logger: this.logger,
       registerService: (name, service) => {
@@ -229,6 +256,8 @@ export class ServiceRegistry implements AppContext {
       on: (event, handler) => {
         this.trackListener(owned, event, handler);
       },
+      getPluginConfig: () => this.settings.getPluginConfig(plugin.manifest),
+      pluginEnv: () => this.settings.pluginEnv(plugin.manifest, process.env),
     };
   }
 

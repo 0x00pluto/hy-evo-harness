@@ -16,13 +16,30 @@
         <div class="brand-sub">统一工作台</div>
       </div>
     </div>
-    <div class="section-title">应用与工具</div>
-    <nav id="plugin-nav" aria-label="插件列表"></nav>
+    <div id="plugin-pane">
+      <div class="section-title">应用与工具</div>
+      <nav id="plugin-nav" aria-label="插件列表"></nav>
+    </div>
+    <div id="settings-nav" hidden>
+      <button id="settings-back" class="nav-item" type="button">返回</button>
+      <h2 id="settings-heading">设置</h2>
+      <input id="settings-search" type="search" placeholder="搜索" aria-label="搜索设置" autocomplete="off">
+      <div class="section-title">插件</div>
+      <div id="settings-list"></div>
+    </div>
+    <div id="sidebar-actions">
     <button id="install-btn" type="button">
       <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
         <path d="M8 3.25v9.5M3.25 8h9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       安装插件
+    </button>
+    <button id="settings-btn" type="button">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M8 1.8v1.5M8 12.7v1.5M1.8 8h1.5M12.7 8h1.5M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      设置
     </button>
     <div id="update-footer" hidden>
       <button id="update-retry" type="button" hidden>重试</button>
@@ -32,6 +49,7 @@
           <path d="M3 13.2h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
       </button>
+    </div>
     </div>
   </aside>
   <div
@@ -70,6 +88,16 @@
       <button id="uninstall-btn" type="button" hidden>卸载</button>
     </div>
     <div id="viewport-host" hidden></div>
+    <section id="settings-screen" hidden>
+      <h1 id="settings-plugin-title"></h1>
+      <p id="settings-schema-error" class="settings-error" hidden></p>
+      <div id="settings-form"></div>
+      <div id="settings-actions" hidden>
+        <button id="settings-save" type="button">保存</button>
+      </div>
+      <p id="settings-empty" class="settings-empty" hidden></p>
+      <div id="settings-entry-host" hidden></div>
+    </section>
   </main>
   </div>
 

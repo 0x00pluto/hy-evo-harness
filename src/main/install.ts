@@ -63,6 +63,8 @@ export async function uninstallInstalledPlugin(options: {
   const dest = resolveChildDir(options.userPluginsDir, options.id);
   await options.registry.unloadPlugin(options.id);
   fs.rmSync(dest, { recursive: true, force: true });
+  // 目录已经删掉才动配置。删除失败时上面的 rmSync 会抛出，配置块留着。
+  options.registry.deletePluginSettings(options.id);
   return options.registry.getPluginList();
 }
 
@@ -119,6 +121,7 @@ function assertExtractedTree(root: string): void {
   }
 }
 
+// 覆盖安装只换插件目录。用户配置在 userData/plugin-settings.json，不随目录一起删。
 async function replaceInstalledPlugin(
   registry: ServiceRegistry,
   userPluginsDir: string,

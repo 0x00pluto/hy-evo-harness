@@ -16,6 +16,15 @@ contextBridge.exposeInMainWorld('dex', {
   uninstall(id) {
     return ipcRenderer.invoke('dex:uninstall', id);
   },
+  settingsCatalog() {
+    return ipcRenderer.invoke('dex:settings-catalog');
+  },
+  savePluginSettings(id, draft) {
+    return ipcRenderer.invoke('dex:settings-save', { id, draft });
+  },
+  pickDirectory() {
+    return ipcRenderer.invoke('dex:pick-directory');
+  },
   pathForFile(file) {
     return webUtils.getPathForFile(file);
   },

@@ -4,5 +4,38 @@
   "version": "1.0.0",
   "type": "ui",
   "main": "index.js",
-  "uiEntry": "ui/index.html"
+  "uiEntry": "ui/index.html",
+  "configSchema": {
+    "AUTHOR_NAME": {
+      "type": "string",
+      "title": "署名",
+      "description": "显示在成片信息里的名字",
+      "default": ""
+    },
+    "COMIC_STYLE": {
+      "type": "select",
+      "title": "画面风格",
+      "description": "生成漫剧时使用的画面风格",
+      "options": ["古风", "现代"],
+      "default": "古风"
+    },
+    "AUTO_RETRY": {
+      "type": "boolean",
+      "title": "失败自动重试",
+      "description": "渲染失败时再试一次",
+      "default": true
+    },
+    "MAX_RETRY": {
+      "type": "number",
+      "title": "最大重试次数",
+      "description": "自动重试的次数上限",
+      "default": 3
+    },
+    "OUTPUT_DIR": {
+      "type": "path",
+      "title": "输出目录",
+      "description": "成片保存的位置",
+      "default": ""
+    }
+  }
 }

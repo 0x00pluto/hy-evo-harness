@@ -52,7 +52,9 @@ plugins/         内置示例插件，也可放开发软链接
 
 - `id`：小写字母、数字、连字符，最长 64 个字符。
 - `type`：`ui` 必须有 `uiEntry`；`headless` 只有后台逻辑。
-- `main` 和 `uiEntry` 必须是插件目录内的相对路径。
+- `main`、`uiEntry`、`settingsEntry` 必须是插件目录内的相对路径。
+- `configSchema`：可选。键名是环境变量名，工作台按它生成设置页。没有声明就不要写空对象。
+- `settingsEntry`：可选。插件自带的设置页，和生成的表单读写同一份配置。
 
 `index.js` 导出 `apply` 和可选的 `dispose`：
 
@@ -72,7 +74,16 @@ module.exports = {
 };
 ```
 
-`ctx` 提供 `registerService`、`getService`、`logger`、`emit`、`on`。卸载时宿主会调用 `dispose`，并移除该插件注册的服务和事件。
+`ctx` 提供 `registerService`、`getService`、`logger`、`emit`、`on`、`getPluginConfig`、`pluginEnv`。卸载时宿主会调用 `dispose`，并移除该插件注册的服务和事件。
+
+`getPluginConfig()` 只返回当前插件已声明的配置。拉起子进程时显式传入环境，不要改宿主的 `process.env`：
+
+```javascript
+const { execFile } = require('node:child_process');
+execFile(binPath, args, { env: ctx.pluginEnv() }, callback);
+```
+
+配置保存在用户数据目录的 `plugin-settings.json`，不放进插件目录，也不要靠插件目录里的 `.env`。声明非法时插件仍会加载，但这两个方法不会注入该声明。自带设置页通过 `window.dex.readSettings()` / `window.dex.saveSettings(draft)` 读写同一块配置，读到的结果不含已保存的密钥明文。
 
 界面里这样调用服务：
 

@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, type NativeImage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, type IpcMainInvokeEvent, type NativeImage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readExtraPluginPaths } from './dev-config.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
+import { PluginSettingsStore } from './plugin-settings.ts';
 import { ensurePluginProtocol, pluginPartition, registerPluginScheme } from './protocol.ts';
 import { ServiceRegistry } from './registry.ts';
 import type { DexResult } from './types.ts';
@@ -19,6 +20,29 @@ function bundledPluginsDir(): string {
 
 function installedPluginsDir(): string {
   return path.join(app.getPath('userData'), 'installed_plugins');
+}
+
+function pluginSettingsFile(): string {
+  return path.join(app.getPath('userData'), 'plugin-settings.json');
+}
+
+function pluginIdFromSender(event: IpcMainInvokeEvent): string {
+  const frameUrl = event.senderFrame?.url;
+  const url = typeof frameUrl === 'string' && frameUrl.length > 0 ? frameUrl : event.sender.getURL();
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('无法识别插件页面');
+  }
+  if (parsed.protocol !== 'app-plugin:') {
+    throw new Error('无法识别插件页面');
+  }
+  const id = parsed.hostname;
+  if (!registry.getPlugin(id)) {
+    throw new Error('插件不存在');
+  }
+  return id;
 }
 
 function pluginPreloadFile(): string {
@@ -187,6 +211,31 @@ function registerIpc(): void {
     return installFromZip(zipFilePath);
   });
 
+  ipcMain.handle('dex:settings-catalog', () => registry.listSettingsViews());
+
+  ipcMain.handle('dex:settings-save', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') return { ok: false, message: '配置无效' };
+    const raw = payload as { id?: unknown; draft?: unknown };
+    if (typeof raw.id !== 'string') return { ok: false, message: '插件 id 无效' };
+    return registry.savePluginSettings(raw.id, raw.draft);
+  });
+
+  ipcMain.handle('dex:pick-directory', async () => {
+    const result = await dialog.showOpenDialog({
+      title: '选择目录',
+      properties: ['openDirectory'],
+    });
+    const picked = result.filePaths[0];
+    if (result.canceled || !picked) return { cancelled: true };
+    return { cancelled: false, path: picked };
+  });
+
+  ipcMain.handle('dex:plugin-settings-get', (event) => registry.settingsView(pluginIdFromSender(event)));
+
+  ipcMain.handle('dex:plugin-settings-save', (event, draft: unknown) => {
+    return registry.savePluginSettings(pluginIdFromSender(event), draft);
+  });
+
   ipcMain.handle('dex:uninstall', async (_event, id: unknown) => {
     if (typeof id !== 'string') {
       return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
@@ -209,6 +258,7 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(async () => {
+  registry.setSettings(new PluginSettingsStore(pluginSettingsFile(), registry.logger));
   const icon = loadAppIcon();
   applyDockIcon(icon);
   attachWebviewGuard();
