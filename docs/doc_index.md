@@ -3,7 +3,8 @@
 ## Index
 
 - `README.md`: Huyuan Hub 产品说明：Electron 宿主、插件契约、开发挂载与打包
-- `AGENTS.md`: 本仓工作约定、目录语义与能力声明；scaffold_version 2.4.0
+- `docs/hub-plugin-architecture.md`: 插件化 Hub 技术选型与方案原文备份：注册表、app-plugin 协议、开发挂载、ZIP 安装；在线市场不在当前版本
+- `AGENTS.md`: 本仓工作约定、目录语义与能力声明；代码检索先走 Codebase MCP；scaffold_version 2.4.0
 - `docs/builtin-workflows/post-task-reflect.md`: 任务后反思（白痴指数 → 删 → 程序化 → 鲁棒 → 加速）；用户明确要求时触发，不自动跑
 - `docs/builtin-workflows/extract-experience.md`: 提取经验 → 项目无关最佳实践；用户明确要求时触发；落盘须问或读 experience_target，默认本仓 docs/best-practices/
 - `docs/builtin-workflows/consolidate-memory.md`: 记忆巩固与遗忘（冲突消解 → 情景提纯 → 剪枝）；仅用户显式触发；与反思 / 提取经验互不串联

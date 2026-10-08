@@ -24,6 +24,15 @@ Electron 宿主扫描插件、注册服务，并用 `app-plugin://` 打开插件
    `python3 ../AgentWikiIndex/scripts/refresh_catalog.py`
    若不存在该目录，**跳过**，不要报错、不要去建。
 12. 团队命令在 [`.cursor/commands/team/`](./.cursor/commands/team/)，母版在 Obsidian Vibecoding 团队成员库，命令全文不抄进本文件。
+13. **代码检索**：先走 Codebase MCP，不可用再退回文件检索。细则见下节。
+
+## 代码检索
+
+检索本仓符号、调用链、架构或字面量时，按这个顺序：
+
+1. 先用 Codebase Memory MCP（namespace `user-codebase-memory-mcp`，项目名 `Users-peng.zhi-Documents-Codex-0001-HyHarness`）。结构用 `search_graph`、`trace_path`、`get_code_snippet`、`get_architecture`；字面量用 `search_code`。
+2. MCP 不可用（未连接、调用失败、索引未就绪）时，再退回仓库内文件检索：Grep、Glob、Read。
+3. 图只负责定位。改代码前仍以读到的源文件为准。`check_index_coverage` 报缺口的路径，用文件检索补齐。
 
 ## 基线规则
 
