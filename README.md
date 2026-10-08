@@ -9,11 +9,11 @@ Huyuan AI 统一工作台。宿主用 Electron 扫描插件、注册服务，并
 本仓库用 pnpm 管理依赖。在仓库根目录执行：
 
 ```bash
-pnpm add electron
-pnpm add -D typescript @types/node
+pnpm add -D electron typescript @types/node electron-builder
+pnpm add electron-updater
 ```
 
-TypeScript 需要 5.7 或更高版本（直接安装最新稳定版即可）。
+`electron` 必须放在 devDependencies。electron-builder 不允许它出现在 dependencies，否则打包会直接失败。TypeScript 需要 5.7 或更高版本（直接安装最新稳定版即可）。
 
 ## 启动与测试
 
@@ -112,3 +112,15 @@ zip -r ../ai-comic-master-v1.0.0.zip ai-comic-master -x '*.DS_Store' -x '*node_m
 ```
 
 在工作台把 zip 拖进欢迎页，或点击「安装插件」。宿主解压到用户数据目录的 `installed_plugins/<id>/`，校验 manifest 后立刻出现在侧边栏。只有这样安装的插件可以卸载。内置插件和开发路径里的插件不能被安装包覆盖。
+
+## 桌面安装包与自动更新
+
+本地打包：
+
+```bash
+pnpm build:mac
+pnpm build:win
+pnpm build:linux
+```
+
+产物在 `release/`。推送 `v*` 标签后，GitHub Actions 打包三端并创建 Release 页，说明由提交记录自动生成。已安装的 Windows 客户端可静默更新；macOS 在未签名时下载 dmg 后手动安装。细节见 [docs/build-and-release.md](docs/build-and-release.md)。

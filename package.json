@@ -13,13 +13,19 @@
     "preinstall": "node -e \"if(!/pnpm/.test(process.env.npm_execpath||'')){console.error('请使用 pnpm 安装依赖');process.exit(1)}\"",
     "build": "tsc",
     "start": "tsc && electron .",
-    "test": "node --experimental-strip-types --test test/*.test.ts"
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "build:unpack": "tsc && electron-builder --dir",
+    "build:win": "tsc && electron-builder --win",
+    "build:mac": "tsc && electron-builder --mac",
+    "build:linux": "tsc && electron-builder --linux"
   },
   "dependencies": {
-    "electron": "^44.7.0"
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^7.0.2"
   }
 }

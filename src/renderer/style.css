@@ -156,6 +156,85 @@ button, .nav-item { font: inherit; }
 
 #install-btn { margin-top: auto; }
 
+#update-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+#update-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #2a160d;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+#update-retry {
+  border: 0;
+  background: transparent;
+  color: var(--sidebar-text);
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 6px 4px;
+}
+
+#update-btn:focus-visible,
+#update-retry:focus-visible,
+#update-later:focus-visible,
+#update-confirm:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+#update-dialog {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 24px;
+  background: var(--card);
+  color: var(--ink);
+  width: min(420px, calc(100vw - 32px));
+}
+
+#update-dialog::backdrop {
+  background: rgba(28, 25, 21, 0.35);
+}
+
+#update-dialog h2 {
+  margin: 0 0 8px;
+  font-family: "Iowan Old Style", Palatino, "Songti SC", serif;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+#update-dialog p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.update-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+#update-later {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 10px 14px;
+}
+
 #uninstall-btn,
 #uninstall-headless {
   background: transparent;

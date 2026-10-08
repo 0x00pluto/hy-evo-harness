@@ -6,6 +6,7 @@ import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
 import { ensurePluginProtocol, pluginPartition, registerPluginScheme } from './protocol.ts';
 import { ServiceRegistry } from './registry.ts';
 import type { HubResult } from './types.ts';
+import { initUpdater } from './updater.ts';
 
 registerPluginScheme();
 
@@ -188,6 +189,7 @@ function registerIpc(): void {
 app.whenReady().then(async () => {
   attachWebviewGuard();
   registerIpc();
+  initUpdater();
   await loadAllPlugins();
   createWindow();
 });

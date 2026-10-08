@@ -18,13 +18,9 @@ Electron 宿主扫描插件、注册服务，并用 `app-plugin://` 打开插件
 6. **跳过反思**：当前任务就是在跑本反思（禁止套娃）；用户明确说不要回顾。
 7. **提取经验**：用户明确要求提取经验 / 提炼最佳实践 / 抽跨项目共性时 → 读并执行 [`docs/builtin-workflows/extract-experience.md`](./docs/builtin-workflows/extract-experience.md)。与反思同为手动触发、互不串联；**不**在每次任务后自动跑。落盘目录见该流（须问用户或读 AGENTS `experience_target`）。
 8. **记忆巩固与遗忘**：用户明确要求遗忘 / 记忆巩固 / consolidate-memory / 剪枝记忆时 → 读并执行 [`docs/builtin-workflows/consolidate-memory.md`](./docs/builtin-workflows/consolidate-memory.md)。与反思、提取经验同为手动触发、互不串联；**不**自动跑。当前任务已是本流则禁止套娃。
-9. **发工牌**：用户明确要求发工牌 / 写工牌 / 首次发布 / 改合同字段（`name`·`origin`·`depends_on`）时 → 读并执行 [`docs/builtin-workflows/publish-evo-agent-pack.md`](./docs/builtin-workflows/publish-evo-agent-pack.md)。**日常发版不要从本条进门**。
-10. **打发版 tag**：用户明确要求发版 / 打 tag / 建 Release 时 → 读并执行 [`docs/builtin-workflows/cut-release-tag.md`](./docs/builtin-workflows/cut-release-tag.md)。已有工牌与 remote 后，日常发版只雇本篇。
-11. （可选总目录）若同级存在 [`../AgentWikiIndex/`](../AgentWikiIndex/)，改完「能力声明」后执行：
-   `python3 ../AgentWikiIndex/scripts/refresh_catalog.py`
-   若不存在该目录，**跳过**，不要报错、不要去建。
-12. 团队命令在 [`.cursor/commands/team/`](./.cursor/commands/team/)，母版在 Obsidian Vibecoding 团队成员库，命令全文不抄进本文件。
-13. **代码检索**：先走 Codebase MCP，不可用再退回文件检索。细则见下节。
+9. **打发版 tag**：用户明确要求发版 / 打 tag / 建 Release 时 → 读并执行 [`docs/builtin-workflows/cut-release-tag.md`](./docs/builtin-workflows/cut-release-tag.md)。日常发版只雇本篇。推送 `v*` tag 后由 GitHub Actions 打包并创建 Release，不要本地 `gh release create`。
+10. 团队命令在 [`.cursor/commands/team/`](./.cursor/commands/team/)，母版在 Obsidian Vibecoding 团队成员库，命令全文不抄进本文件。
+11. **代码检索**：先走 Codebase MCP，不可用再退回文件检索。细则见下节。
 
 ## 代码检索
 
@@ -57,12 +53,12 @@ Electron 宿主扫描插件、注册服务，并用 `app-plugin://` 打开插件
 | `assets/` | 输入侧原料与样例 | 目录是；大媒体见 .gitignore |
 | `docs/` | 文档，见 docs 约定 | 是 |
 | `specs/prds/` | PRD；索引见 `specs/prds/prd-wiki-index.md` | 是 |
-| `upgrades/` | 发版说明（GitHub Release 正文）；文件名与 tag 一致；首次发版再建 | 是 |
+| `upgrades/` | 仓内发版记录，文件名与 tag 一致；GitHub Release 页由 Actions 按提交生成，不把本目录当正文；首次发版再建 | 是 |
 | `cache/` | 可重建缓存，按内容哈希命名 | 否 |
 | `temp/` | 中间产物，可随时清空 | 否 |
 | `output/` | 最终产物，按 `output/<主题>/` 归档 | 否 |
 
-约束：`cache/`、`temp/`、`output/` 全部 gitignore；删掉它们不影响代码可运行。根目录已有的工程文件（`package.json`、`README.md`、`tsconfig.json`、`config.dev.example.json`）保留；新的散文件不要再堆到根目录。根目录 `evo_agent_pack.json` 首次发工牌再建（入库）。
+约束：`cache/`、`temp/`、`output/` 全部 gitignore；删掉它们不影响代码可运行。根目录已有的工程文件（`package.json`、`README.md`、`tsconfig.json`、`config.dev.example.json`）保留；新的散文件不要再堆到根目录。
 
 ### skills/ 约定
 

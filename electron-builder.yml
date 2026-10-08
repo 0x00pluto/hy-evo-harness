@@ -1,0 +1,45 @@
+appId: com.huyuan.hub
+productName: Huyuan Hub
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - src/renderer/**
+  - src/preload/**
+  - plugins/**
+  - '!dev-app-update.yml'
+asarUnpack:
+  - src/preload/**
+win:
+  executableName: HuyuanHub
+  target:
+    - nsis
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+  include: build/installer.nsh
+mac:
+  identity: null
+  notarize: false
+  target:
+    - dmg
+    - zip
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - AppImage
+    - snap
+    - deb
+  maintainer: huyuan
+  category: Utility
+appImage:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false
+publish:
+  provider: github
+  owner: 0x00pluto
+  repo: hy-evo-harness

@@ -19,4 +19,18 @@ contextBridge.exposeInMainWorld('hub', {
   pathForFile(file) {
     return webUtils.getPathForFile(file);
   },
+  getUpdateStatus() {
+    return ipcRenderer.invoke('updater:get-status');
+  },
+  onUpdateStatus(callback) {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('updater:status', listener);
+    return () => ipcRenderer.removeListener('updater:status', listener);
+  },
+  retryUpdateCheck() {
+    return ipcRenderer.invoke('updater:retry');
+  },
+  installUpdate() {
+    return ipcRenderer.invoke('updater:install');
+  },
 });

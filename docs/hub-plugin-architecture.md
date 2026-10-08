@@ -19,7 +19,7 @@
 | 安装包 | `adm-zip` 或 `unzipper` | 使用 macOS 自带 `unzip`，不增加解压依赖。解压前拒绝绝对路径和 `..` |
 | 卸载 | 未写界面 | 只有安装到用户目录的插件可卸载。内置示例和开发路径不能被安装包覆盖 |
 | 在线市场 | 作为商业化扩展写出 | 当前版本不做 |
-| 依赖 | 零框架，示例里出现解压库 | 运行时依赖只有 Electron。插件后端保持 CommonJS。包管理用 pnpm |
+| 依赖 | 零框架，示例里出现解压库 | 运行时依赖为 Electron 与 electron-updater。插件后端保持 CommonJS。包管理用 pnpm |
 | 预加载脚本 | 未单列 | 宿主与插件各一份预加载脚本，扩展名 `.cjs`（本仓 `package.json` 为 ESM） |
 | 界面 | `<webview>` + 侧边栏 | 保留。`ui` 插件进独立 `partition`；`headless` 在主区域说明已在后台运行，不用 `alert` |
 
