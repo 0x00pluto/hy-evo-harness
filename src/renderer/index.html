@@ -3,9 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <title>Dex Buddy</title>
+  <script>
+    if (/Mac/i.test(navigator.platform)) document.documentElement.classList.add('is-mac');
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="boot" aria-hidden="true">
+    <img src="logo.svg" alt="">
+  </div>
   <div id="titlebar"></div>
   <div id="shell">
   <aside id="sidebar">
@@ -110,6 +116,6 @@
     </div>
   </dialog>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

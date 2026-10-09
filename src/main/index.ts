@@ -113,7 +113,8 @@ function createWindow(icon: NativeImage | null): void {
     minWidth: 960,
     minHeight: 640,
     title: 'Dex Buddy',
-    backgroundColor: '#f6f6f6',
+    show: false,
+    backgroundColor: '#ffffff',
     ...(icon && !mac ? { icon } : {}),
     ...(mac
       ? {
@@ -130,6 +131,10 @@ function createWindow(icon: NativeImage | null): void {
     },
   });
 
+  // 等首帧画好再显示，避免标题栏占高前先露出贴顶的字标。
+  win.once('ready-to-show', () => {
+    win.show();
+  });
   void win.loadFile(path.join(app.getAppPath(), 'src/renderer/index.html'));
 }
 

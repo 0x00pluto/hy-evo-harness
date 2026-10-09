@@ -43,7 +43,27 @@ body {
   -webkit-app-region: drag;
 }
 
-body.is-mac #titlebar { display: block; }
+html.is-mac #titlebar { display: block; }
+
+#boot {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper);
+  transition: opacity 180ms ease;
+}
+
+#boot img {
+  width: 64px;
+  height: 64px;
+}
+
+#boot.is-leaving {
+  opacity: 0;
+}
 
 #shell {
   flex: 1;
