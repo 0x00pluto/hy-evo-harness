@@ -1,44 +1,40 @@
-const SIDEBAR_KEY = 'dex.sidebarWidth';
-const SIDEBAR_DEFAULT = 292;
-const SIDEBAR_MIN = 220;
-const SIDEBAR_MAX = 480;
+const COLUMN_DEFAULT = 292;
+const COLUMN_MIN = 220;
+const COLUMN_MAX = 480;
 
-function clampSidebar(width) {
-  return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(width)));
+function clampColumn(width) {
+  return Math.min(COLUMN_MAX, Math.max(COLUMN_MIN, Math.round(width)));
 }
 
-export function mountSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const splitter = document.getElementById('splitter');
-
-  function applySidebarWidth(width) {
-    const next = clampSidebar(width);
-    document.documentElement.style.setProperty('--sidebar-width', `${next}px`);
+function mountResizableColumn({ column, splitter, storageKey, cssVariable }) {
+  function applyWidth(width) {
+    const next = clampColumn(width);
+    document.documentElement.style.setProperty(cssVariable, `${next}px`);
     splitter.setAttribute('aria-valuenow', String(next));
     return next;
   }
 
-  function readSidebarWidth() {
+  function readWidth() {
     try {
-      const raw = localStorage.getItem(SIDEBAR_KEY);
-      if (raw == null || raw === '') return SIDEBAR_DEFAULT;
+      const raw = localStorage.getItem(storageKey);
+      if (raw == null || raw === '') return COLUMN_DEFAULT;
       const width = Number(raw);
-      if (!Number.isFinite(width)) return SIDEBAR_DEFAULT;
-      return clampSidebar(width);
+      if (!Number.isFinite(width)) return COLUMN_DEFAULT;
+      return clampColumn(width);
     } catch {
-      return SIDEBAR_DEFAULT;
+      return COLUMN_DEFAULT;
     }
   }
 
-  function storeSidebarWidth(width) {
+  function storeWidth(width) {
     try {
-      localStorage.setItem(SIDEBAR_KEY, String(width));
+      localStorage.setItem(storageKey, String(width));
     } catch {
       // 隐私模式写不进去时，这次会话里的宽度仍然有效。
     }
   }
 
-  applySidebarWidth(readSidebarWidth());
+  applyWidth(readWidth());
 
   splitter.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
@@ -46,10 +42,10 @@ export function mountSidebar() {
     try { splitter.setPointerCapture(event.pointerId); } catch { /* 指针尚未激活时忽略 */ }
     document.body.classList.add('is-resizing');
     const startX = event.clientX;
-    const startWidth = sidebar.getBoundingClientRect().width;
+    const startWidth = column.getBoundingClientRect().width;
 
     function move(ev) {
-      applySidebarWidth(startWidth + (ev.clientX - startX));
+      applyWidth(startWidth + (ev.clientX - startX));
     }
 
     function up(ev) {
@@ -58,7 +54,7 @@ export function mountSidebar() {
       splitter.removeEventListener('pointerup', up);
       splitter.removeEventListener('pointercancel', up);
       document.body.classList.remove('is-resizing');
-      storeSidebarWidth(applySidebarWidth(startWidth + (ev.clientX - startX)));
+      storeWidth(applyWidth(startWidth + (ev.clientX - startX)));
     }
 
     splitter.addEventListener('pointermove', move);
@@ -67,14 +63,30 @@ export function mountSidebar() {
   });
 
   splitter.addEventListener('dblclick', () => {
-    storeSidebarWidth(applySidebarWidth(SIDEBAR_DEFAULT));
+    storeWidth(applyWidth(COLUMN_DEFAULT));
   });
 
   splitter.addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     event.preventDefault();
-    const current = sidebar.getBoundingClientRect().width;
+    const current = column.getBoundingClientRect().width;
     const delta = event.key === 'ArrowRight' ? 16 : -16;
-    storeSidebarWidth(applySidebarWidth(current + delta));
+    storeWidth(applyWidth(current + delta));
+  });
+}
+
+export function mountSidebar() {
+  mountResizableColumn({
+    column: document.getElementById('sidebar'),
+    splitter: document.getElementById('splitter'),
+    storageKey: 'dex.sidebarWidth',
+    cssVariable: '--sidebar-width',
+  });
+  // 设置左栏和宽侧栏宽度分开记，避免拖一边时改掉另一边。
+  mountResizableColumn({
+    column: document.getElementById('settings-nav'),
+    splitter: document.getElementById('settings-splitter'),
+    storageKey: 'dex.settingsNavWidth',
+    cssVariable: '--settings-nav-width',
   });
 }

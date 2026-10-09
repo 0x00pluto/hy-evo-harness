@@ -2,6 +2,8 @@ import { mountSidebar } from './sidebar.js';
 import { mountPlugins } from './plugins.js';
 import { mountUpdater } from './updater.js';
 import { mountSettings } from './settings.js';
+import { mountChrome } from './chrome.js';
+import { mountIcons } from './icons.js';
 
 const shell = {
   plugins: [],
@@ -17,6 +19,7 @@ function setStatus(message, kind) {
   else delete statusEl.dataset.kind;
 }
 
+mountIcons();
 mountSidebar();
 
 // 插件列表刷新时可能正停在设置里，设置返回时又要回到刚才的插件。
@@ -26,10 +29,22 @@ const settingsBridge = {
   dismissSurface() {},
 };
 
-const plugins = mountPlugins({ shell, setStatus, settings: settingsBridge });
+const chromeBridge = {
+  clearForward() {},
+};
+
+const plugins = mountPlugins({
+  shell,
+  setStatus,
+  settings: settingsBridge,
+  onClearForward() { chromeBridge.clearForward(); },
+});
 const settings = mountSettings({ shell, setStatus, plugins });
 settingsBridge.onPluginsChanged = settings.onPluginsChanged;
 settingsBridge.dismissSurface = settings.dismissSurface;
+
+const chrome = mountChrome({ settings, setStatus });
+chromeBridge.clearForward = chrome.clearForward;
 
 mountUpdater({ setStatus });
 

@@ -1,11 +1,14 @@
-export function mountPlugins({ shell, setStatus, settings }) {
+export function mountPlugins({ shell, setStatus, settings, onClearForward = () => {} }) {
   const nav = document.getElementById('plugin-nav');
   const welcome = document.getElementById('welcome-screen');
   const headless = document.getElementById('headless-screen');
   const viewportHost = document.getElementById('viewport-host');
   const toolbar = document.getElementById('plugin-toolbar');
   const dropZone = document.getElementById('drop-zone');
-  const installBtn = document.getElementById('install-btn');
+  const installButtons = [
+    document.getElementById('rail-install'),
+    document.getElementById('titlebar-install'),
+  ];
   const uninstallBtn = document.getElementById('uninstall-btn');
   const uninstallHeadless = document.getElementById('uninstall-headless');
   const pluginTitle = document.getElementById('plugin-title');
@@ -51,6 +54,8 @@ export function mountPlugins({ shell, setStatus, settings }) {
 
       button.append(top, meta);
       button.addEventListener('click', () => {
+        // 从设置返回时 resume 会再次打开插件，那种恢复不能清掉前进。
+        onClearForward();
         void openPlugin(plugin);
       });
       nav.appendChild(button);
@@ -149,7 +154,6 @@ export function mountPlugins({ shell, setStatus, settings }) {
 
   function suspend() {
     pluginPane.hidden = true;
-    installBtn.hidden = true;
     welcome.hidden = true;
     headless.hidden = true;
     toolbar.hidden = true;
@@ -159,13 +163,13 @@ export function mountPlugins({ shell, setStatus, settings }) {
 
   function resume(pluginId) {
     pluginPane.hidden = false;
-    installBtn.hidden = false;
     const plugin = shell.plugins.find((item) => item.id === pluginId);
     if (plugin) void openPlugin(plugin);
     else showWelcome();
   }
 
-  installBtn.addEventListener('click', async () => {
+  async function installFromPicker() {
+    onClearForward();
     const result = await window.dex.pickAndInstall();
     if (result.cancelled) return;
     if (!result.ok) {
@@ -175,7 +179,13 @@ export function mountPlugins({ shell, setStatus, settings }) {
     }
     setStatus('插件已安装', 'ok');
     await refresh(result.plugins);
-  });
+  }
+
+  for (const installBtn of installButtons) {
+    installBtn.addEventListener('click', () => {
+      void installFromPicker();
+    });
+  }
 
   uninstallBtn.addEventListener('click', () => {
     void uninstallActive();
@@ -199,6 +209,7 @@ export function mountPlugins({ shell, setStatus, settings }) {
     dropZone.classList.remove('dragover');
     const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
     if (!file) return;
+    onClearForward();
     const zipPath = window.dex.pathForFile(file);
     void installFromPath(zipPath);
   });

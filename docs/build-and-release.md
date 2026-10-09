@@ -54,7 +54,7 @@ Linux CI 产出 AppImage + deb（不含 snap，避免 snapcraft 依赖导致失�
 
 ## 自动更新
 
-应用内自动更新基于 electron-updater，更新源为本仓库的 GitHub Releases（`electron-builder.yml` 的 `publish: provider: github`，仓库 `0x00pluto/hy-evo-harness`）。不使用系统通知。入口是侧栏底部的向上箭头。
+应用内自动更新基于 electron-updater，更新源为本仓库的 GitHub Releases（`electron-builder.yml` 的 `publish: provider: github`，仓库 `0x00pluto/hy-evo-harness`）。不使用系统通知。入口在图标轨齿轮弹出层的更新行。仅可安装时，齿轮上出现蓝点。
 
 `appId` 固定为 **`com.huyuan.dexbuddy`**。这次改名之后不要再改，否则已安装客户端对不上更新身份。
 
@@ -63,18 +63,18 @@ Linux CI 产出 AppImage + deb（不含 snap，避免 snapcraft 依赖导致失�
 - 生产环境启动时检查更新，运行期间每 6 小时复查；开发模式（`pnpm start`）不检查。
 - 仅接收正式稳定版 Release（忽略 draft / prerelease）。
 - 更新状态由主进程维护，经预加载脚本的四个通道推到界面：查询状态、订阅状态、重试、安装。界面不能传入下载地址。
-- 检查或下载连续失败时，主区域状态行提示并提供「重试」；第一次失败静默重试一次。
+- 检查或下载连续失败时，主区域状态行提示，齿轮弹出层里可以重试；第一次失败静默重试一次。
 
 ### Windows（完整自动更新）
 
-- 发现新版本后后台静默下载；下载完成后侧栏显示向上箭头。
-- 点击箭头确认「立即重启并更新」或「稍后」；立即路径安装后自动重启；稍后并正常退出时自动安装。
+- 发现新版本后后台静默下载；下载完成后齿轮上出现蓝点。
+- 从弹出层打开确认，选择「立即重启并更新」或「稍后」；立即路径安装后自动重启；稍后并正常退出时自动安装。
 - 存在运行中任务时阻止立即重启。当前任务查询固定返回没有任务，接口留在主进程。
 
 ### macOS（下载 dmg 手动安装）
 
 - 当前未配置 Apple 签名/公证（`identity: null`），不走 electron-updater 静默安装。
-- 检测到新版本即显示箭头；用户确认后主进程从 GitHub Release 下载 `dex-buddy-${version}.dmg` 到系统「下载」目录，完成后自动打开。
+- 检测到新版本即在齿轮上显示蓝点；用户从弹出层确认后，主进程从 GitHub Release 下载 `dex-buddy-${version}.dmg` 到系统「下载」目录，完成后自动打开。
 - 用户需手动将应用拖入「应用程序」。未签名包首次打开可能需要在系统设置里放行。
 - 同版本 dmg 已存在且大小匹配时不重复下载，直接打开本地文件。
 

@@ -8,68 +8,97 @@
   </script>
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-pin="on" data-surface="workspace">
   <div id="boot" aria-hidden="true">
     <img src="logo.svg" alt="">
   </div>
-  <div id="titlebar"></div>
-  <div id="shell">
-  <aside id="sidebar">
-    <div class="brand">
-      <img class="brand-mark" src="logo.svg" alt="">
-      <div>
-        <div class="brand-name">Dex Buddy</div>
-        <div class="brand-sub">统一工作台</div>
-      </div>
-    </div>
-    <div id="plugin-pane">
-      <div class="section-title">应用与工具</div>
-      <nav id="plugin-nav" aria-label="插件列表"></nav>
-    </div>
-    <div id="settings-nav" hidden>
-      <button id="settings-back" class="nav-item" type="button">返回</button>
-      <h2 id="settings-heading">设置</h2>
-      <input id="settings-search" type="search" placeholder="搜索" aria-label="搜索设置" autocomplete="off">
-      <div class="section-title">插件</div>
-      <div id="settings-list"></div>
-    </div>
-    <div id="sidebar-actions">
-    <button id="install-btn" type="button">
-      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-        <path d="M8 3.25v9.5M3.25 8h9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-      安装插件
-    </button>
-    <button id="settings-btn" type="button">
-      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-        <circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/>
-        <path d="M8 1.8v1.5M8 12.7v1.5M1.8 8h1.5M12.7 8h1.5M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-      设置
-    </button>
-    <div id="update-footer" hidden>
-      <button id="update-retry" type="button" hidden>重试</button>
-      <button id="update-btn" type="button" hidden aria-label="安装更新">
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          <path d="M8 2.5v8.2M4.8 6.2 8 2.8l3.2 3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M3 13.2h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
+  <div id="titlebar">
+    <div class="titlebar-leading">
+      <button id="history-back" class="titlebar-btn" type="button" disabled aria-label="后退">
+        <i data-lucide="arrow-left"></i>
+      </button>
+      <button id="history-forward" class="titlebar-btn" type="button" disabled aria-label="前进">
+        <i data-lucide="arrow-right"></i>
+      </button>
+      <button id="sidebar-toggle" class="titlebar-btn" type="button" aria-pressed="false" aria-label="收起侧栏">
+        <i data-lucide="panel-left-close"></i>
       </button>
     </div>
+    <div class="titlebar-trailing">
+      <button id="titlebar-install" class="titlebar-btn" type="button" aria-label="安装插件">
+        <i data-lucide="plus"></i>
+      </button>
     </div>
-  </aside>
-  <div
-    id="splitter"
-    role="separator"
-    aria-orientation="vertical"
-    aria-label="调整侧栏宽度"
-    aria-valuemin="220"
-    aria-valuemax="480"
-    aria-valuenow="292"
-    tabindex="0"
-  ></div>
-
+  </div>
+  <div id="shell">
+  <nav id="rail" aria-label="图标轨">
+    <div class="rail-top">
+      <button id="rail-home" class="rail-btn" type="button" aria-label="主页">
+        <i data-lucide="house"></i>
+      </button>
+      <button id="rail-install" class="rail-btn" type="button" aria-label="安装插件">
+        <i data-lucide="plus"></i>
+      </button>
+      <button id="rail-ellipsis" class="rail-btn" type="button" aria-label="更多">
+        <i data-lucide="ellipsis"></i>
+      </button>
+      <div class="rail-rule" role="separator"></div>
+      <button id="rail-account" class="rail-btn" type="button" aria-label="用户">
+        <i data-lucide="circle-user"></i>
+      </button>
+    </div>
+    <div class="rail-bottom">
+      <div id="gear-popover" role="menu" hidden>
+        <div id="gear-username">本地用户</div>
+        <div class="gear-rule" role="separator"></div>
+        <button id="update-btn" class="gear-row" type="button" role="menuitem" hidden>
+          <i data-lucide="download"></i>
+          <span id="update-label" class="gear-label"></span>
+        </button>
+        <button id="update-retry" class="gear-row" type="button" role="menuitem" hidden>重试</button>
+        <button id="gear-open-settings" class="gear-row" type="button" role="menuitem">
+          <i data-lucide="settings"></i>
+          <span class="gear-label">设置</span>
+          <span id="settings-shortcut" class="gear-aside">⌘,</span>
+        </button>
+        <button id="gear-help" class="gear-row" type="button" role="menuitem">
+          <i data-lucide="circle-help"></i>
+          <span class="gear-label">帮助</span>
+          <i data-lucide="chevron-right" class="gear-aside"></i>
+        </button>
+      </div>
+      <button id="rail-settings" class="rail-btn" type="button" aria-label="设置" aria-haspopup="menu" aria-expanded="false">
+        <i data-lucide="settings"></i>
+        <span id="update-dot" hidden></span>
+      </button>
+    </div>
+  </nav>
   <main id="main-container">
+    <aside id="sidebar">
+      <div class="brand">
+        <img class="brand-mark" src="logo.svg" alt="">
+        <div>
+          <div class="brand-name">Dex Buddy</div>
+          <div class="brand-sub">统一工作台</div>
+        </div>
+      </div>
+      <div id="plugin-pane">
+        <div class="section-title">应用与工具</div>
+        <nav id="plugin-nav" aria-label="插件列表"></nav>
+      </div>
+    </aside>
+    <div
+      id="splitter"
+      class="pane-splitter"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="调整侧栏宽度"
+      aria-valuemin="220"
+      aria-valuemax="480"
+      aria-valuenow="292"
+      tabindex="0"
+    ></div>
+    <div id="workspace-pane">
     <p id="status" role="status"></p>
     <section id="welcome-screen">
       <div class="welcome-card">
@@ -94,6 +123,25 @@
       <button id="uninstall-btn" type="button" hidden>卸载</button>
     </div>
     <div id="viewport-host" hidden></div>
+    </div>
+    <div id="settings-nav" hidden>
+      <h2 id="settings-heading">设置</h2>
+      <input id="settings-search" type="search" placeholder="搜索" aria-label="搜索设置" autocomplete="off">
+      <div class="section-title">插件</div>
+      <div id="settings-list"></div>
+    </div>
+    <div
+      id="settings-splitter"
+      class="pane-splitter"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="调整设置导航宽度"
+      aria-valuemin="220"
+      aria-valuemax="480"
+      aria-valuenow="292"
+      tabindex="0"
+      hidden
+    ></div>
     <section id="settings-screen" hidden>
       <h1 id="settings-plugin-title"></h1>
       <p id="settings-schema-error" class="settings-error" hidden></p>
@@ -116,6 +164,7 @@
     </div>
   </dialog>
 
+  <script src="../../node_modules/lucide/dist/umd/lucide.min.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

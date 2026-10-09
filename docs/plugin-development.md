@@ -164,7 +164,7 @@ execFile(binPath, args, { env: ctx.pluginEnv() }, (err, stdout) => {
 
 ## 配置
 
-密钥和选项在工作台的设置页里填。侧栏底部点「设置」，选中你的插件，改完点「保存」。配置写在用户数据目录的 `plugin-settings.json`，按插件 `id` 分开。覆盖安装不会清掉它。用户卸载已安装的插件之后，对应的一块会被删掉。内置插件和开发路径不能从界面卸载，配置会留着。
+密钥和选项在工作台的设置页里填。点图标轨底部的齿轮，在弹出层里选「设置」，再选中你的插件，改完点「保存」。配置写在用户数据目录的 `plugin-settings.json`，按插件 `id` 分开。覆盖安装不会清掉它。用户卸载已安装的插件之后，对应的一块会被删掉。内置插件和开发路径不能从界面卸载，配置会留着。
 
 工作台不读 `.env`，也不替你写 `.env`。脚本本身只认环境变量，不引用 Dex Buddy：
 
@@ -223,7 +223,7 @@ tts_engine = os.getenv("TTS_ENGINE", "edge-tts")
 接入时按这个顺序：
 
 1. 在 `plugin.manifest.json` 写 `configSchema`。键名必须和脚本里 `os.getenv` 或 `process.env` 的名字一致。
-2. 改了 manifest 要重启 Dex Buddy。重启后，侧栏底部「设置」里会出现这个插件。
+2. 改了 manifest 要重启 Dex Buddy。重启后，从图标轨齿轮弹出层进入「设置」，就会看到这个插件。
 3. 在设置页填完，点「保存」。之后再调用 `pluginEnv()` 就是新值，不用为了改一项再重启。
 4. `index.js` 里 `execFile` 或 `spawn` 必须传入 `{ env: ctx.pluginEnv() }`。漏传时，脚本只能看到 Dex Buddy 进程自己的环境，看不到设置页里的值。
 5. 日志里不要打印密钥。

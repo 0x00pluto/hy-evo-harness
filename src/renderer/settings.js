@@ -1,9 +1,7 @@
 export function mountSettings({ shell, setStatus, plugins }) {
   const settingsNav = document.getElementById('settings-nav');
-  const settingsBack = document.getElementById('settings-back');
   const settingsSearch = document.getElementById('settings-search');
   const settingsList = document.getElementById('settings-list');
-  const settingsBtn = document.getElementById('settings-btn');
   const settingsScreen = document.getElementById('settings-screen');
   const settingsTitle = document.getElementById('settings-plugin-title');
   const settingsSchemaError = document.getElementById('settings-schema-error');
@@ -355,6 +353,7 @@ export function mountSettings({ shell, setStatus, plugins }) {
     settingsScreen.hidden = false;
     setStatus('');
     await reloadSettingsCatalog();
+    if (!shell.settingsMode) return;
     const first = visibleSettings()[0];
     if (first) await selectSettings(first.id);
     else clearSettingsMain();
@@ -423,14 +422,6 @@ export function mountSettings({ shell, setStatus, plugins }) {
     }
   }
 
-  settingsBtn.addEventListener('click', () => {
-    void enterSettings().catch((err) => {
-      setStatus(err instanceof Error ? err.message : '无法打开设置', 'error');
-    });
-  });
-  settingsBack.addEventListener('click', () => {
-    leaveSettings();
-  });
   settingsSearch.addEventListener('input', () => {
     onSettingsSearch();
   });
@@ -438,5 +429,5 @@ export function mountSettings({ shell, setStatus, plugins }) {
     void saveActiveSettings();
   });
 
-  return { onPluginsChanged, dismissSurface };
+  return { onPluginsChanged, dismissSurface, enterSettings, leaveSettings };
 }

@@ -4,6 +4,9 @@ contextBridge.exposeInMainWorld('dex', {
   listPlugins() {
     return ipcRenderer.invoke('dex:list-plugins');
   },
+  localUsername() {
+    return ipcRenderer.invoke('dex:local-username');
+  },
   preparePlugin(id) {
     return ipcRenderer.invoke('dex:prepare-plugin', id);
   },

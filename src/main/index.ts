@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, type IpcMainInvokeEvent, type NativeImage } from 'electron';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readExtraPluginPaths } from './dev-config.ts';
@@ -178,6 +179,16 @@ async function installFromZip(zipFilePath: string): Promise<DexResult> {
 
 function registerIpc(): void {
   ipcMain.handle('dex:list-plugins', () => registry.getPluginList());
+
+  ipcMain.handle('dex:local-username', () => {
+    // 读不到账户名时交回空字符串，界面再显示「本地用户」。
+    try {
+      const name = os.userInfo().username;
+      return typeof name === 'string' ? name : '';
+    } catch {
+      return '';
+    }
+  });
 
   ipcMain.handle('dex:prepare-plugin', (_event, id: unknown) => {
     if (typeof id !== 'string' || !registry.getPlugin(id)) {

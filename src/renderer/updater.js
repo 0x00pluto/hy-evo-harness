@@ -1,7 +1,10 @@
+import { showUpdateDot, updateRowMode } from './chrome-state.js';
+
 export function mountUpdater({ setStatus }) {
-  const updateFooter = document.getElementById('update-footer');
   const updateBtn = document.getElementById('update-btn');
+  const updateLabel = document.getElementById('update-label');
   const updateRetry = document.getElementById('update-retry');
+  const updateDot = document.getElementById('update-dot');
   const updateDialog = document.getElementById('update-dialog');
   const updateDialogTitle = document.getElementById('update-dialog-title');
   const updateDialogBody = document.getElementById('update-dialog-body');
@@ -43,17 +46,17 @@ export function mountUpdater({ setStatus }) {
     if (!payload) return;
     const previous = updateState;
     updateState = payload;
-    const ready = payload.status === 'readyToInstall';
+    const row = updateRowMode(payload.status);
     const failed = payload.status === 'error';
-    updateBtn.hidden = !ready;
-    updateRetry.hidden = !failed;
-    updateFooter.hidden = !ready && !failed;
+    const ready = payload.status === 'readyToInstall';
+    updateBtn.hidden = row !== 'install';
+    updateRetry.hidden = row !== 'retry';
+    updateDot.hidden = !showUpdateDot(payload.status);
 
-    if (ready) {
+    if (row === 'install') {
       const version = versionLabel(payload.availableVersion);
-      updateBtn.title = isMacUpdate(payload)
-        ? `发现新版本 ${version}，点击下载`
-        : `新版本 ${version} 已就绪`;
+      const label = isMacUpdate(payload) ? `下载 ${version}` : `安装 ${version}`;
+      updateLabel.textContent = label;
       updateBtn.setAttribute('aria-label', isMacUpdate(payload) ? '下载新版本' : '重启并安装更新');
     }
 
