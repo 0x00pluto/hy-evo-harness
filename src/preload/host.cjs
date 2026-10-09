@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld('dex', {
   savePluginSettings(id, draft) {
     return ipcRenderer.invoke('dex:settings-save', { id, draft });
   },
+  revealPluginSecret(id, key) {
+    return ipcRenderer.invoke('dex:reveal-plugin-secret', { id, key });
+  },
   pickDirectory() {
     return ipcRenderer.invoke('dex:pick-directory');
   },
@@ -36,6 +39,9 @@ contextBridge.exposeInMainWorld('dex', {
   },
   openExternal(url) {
     return ipcRenderer.invoke('dex:open-external', url);
+  },
+  openPluginFolder(rootPath) {
+    return ipcRenderer.invoke('dex:open-plugin-folder', rootPath);
   },
   getUpdateStatus() {
     return ipcRenderer.invoke('updater:get-status');

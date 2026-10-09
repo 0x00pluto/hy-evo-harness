@@ -113,22 +113,24 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     }
   }
 
-  async function openSettings() {
+  async function openSettings(pluginId) {
     const next = enterSettingsState(session);
-    if (next === session) return;
-    session = next;
-    apply();
+    if (next !== session) {
+      session = next;
+      apply();
+    }
     try {
-      await settings.enterSettings();
+      await settings.enterSettings(pluginId);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : '无法打开设置', 'error');
     }
   }
 
-  function onBack() {
+  async function onBack() {
     const from = session.surface;
     const next = goBack(session);
     if (next === session) return;
+    if (from === 'settings' && !(await settings.confirmDiscard())) return;
     session = next;
     if (from === 'settings') settings.leaveSettings({ resume: session.surface === 'workspace' });
     if (from === 'plugins' && session.surface === 'workspace') plugins.resume(shell.activeId);
@@ -136,10 +138,11 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     apply();
   }
 
-  function openPlugins() {
+  async function openPlugins() {
     const from = session.surface;
     const next = enterPlugins(session);
     if (next === session) return;
+    if (from === 'settings' && !(await settings.confirmDiscard())) return;
     session = next;
     if (from === 'settings') settings.leaveSettings({ resume: false });
     if (from === 'workspace') plugins.suspend();
@@ -147,14 +150,18 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     apply();
   }
 
-  backBtn.addEventListener('click', onBack);
+  backBtn.addEventListener('click', () => {
+    void onBack();
+  });
 
   homeBtn.addEventListener('click', () => {
     if (session.surface === 'workspace') return;
     onBack();
   });
 
-  pluginsBtn.addEventListener('click', openPlugins);
+  pluginsBtn.addEventListener('click', () => {
+    void openPlugins();
+  });
 
   forwardBtn.addEventListener('click', () => {
     const next = goForward(session);
@@ -245,5 +252,6 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
       session = next;
       apply();
     },
+    openSettings,
   };
 }

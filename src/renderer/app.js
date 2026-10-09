@@ -39,6 +39,7 @@ const chromeBridge = {
   focusPlugin() {},
   async usePlugin() {},
   clearNavigation() {},
+  async openSettings() {},
 };
 
 const pluginsPageBridge = {
@@ -51,6 +52,7 @@ const plugins = mountPlugins({
   setStatus,
   settings: settingsBridge,
   onClearNavigation() { chromeBridge.clearNavigation(); },
+  onOpenPluginSettings(pluginId) { void chromeBridge.openSettings(pluginId); },
   onWorkspaceChanged() { chromeBridge.refresh(); },
   onListChanged() {
     const session = chromeBridge.session();

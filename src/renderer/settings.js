@@ -1,3 +1,7 @@
+import { mountIcons } from './icons.js';
+
+const GENERAL_GROUP = '通用配置';
+
 export function mountSettings({ shell, setStatus, plugins }) {
   const settingsSearch = document.getElementById('settings-search');
   const settingsList = document.getElementById('settings-list');
@@ -9,12 +13,17 @@ export function mountSettings({ shell, setStatus, plugins }) {
   const settingsSave = document.getElementById('settings-save');
   const settingsEmpty = document.getElementById('settings-empty');
   const settingsEntryHost = document.getElementById('settings-entry-host');
+  const discardDialog = document.getElementById('settings-discard-dialog');
+  const discardStay = document.getElementById('settings-discard-stay');
+  const discardConfirm = document.getElementById('settings-discard-confirm');
 
   let settingsCatalog = [];
   let activeSettingsId = null;
   let settingsDraft = null;
+  let settingsBaseline = '';
   let returnPluginId = null;
   let savingSettings = false;
+  let discardResolver = null;
 
   function settingsQueryText() {
     return settingsSearch.value.trim().toLowerCase();
@@ -74,6 +83,37 @@ export function mountSettings({ shell, setStatus, plugins }) {
     return { values, secrets };
   }
 
+  function rememberBaseline() {
+    settingsBaseline = JSON.stringify(settingsDraft);
+    syncSaveButton();
+  }
+
+  function isDirty() {
+    return Boolean(settingsDraft) && JSON.stringify(settingsDraft) !== settingsBaseline;
+  }
+
+  function syncSaveButton() {
+    const plugin = settingsCatalog.find((item) => item.id === activeSettingsId);
+    const canEdit = Boolean(plugin && plugin.fields.length > 0 && !plugin.schemaError);
+    settingsSave.disabled = savingSettings || !canEdit || !isDirty();
+  }
+
+  function finishDiscard(allowed) {
+    const resolve = discardResolver;
+    discardResolver = null;
+    if (discardDialog.open) discardDialog.close();
+    if (resolve) resolve(allowed);
+  }
+
+  function confirmDiscard() {
+    if (!isDirty()) return Promise.resolve(true);
+    if (discardResolver) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      discardResolver = resolve;
+      discardDialog.showModal();
+    });
+  }
+
   function restoreFieldDefault(field) {
     if (field.secret) {
       const next = typeof field.default === 'string' ? field.default : '';
@@ -104,19 +144,47 @@ export function mountSettings({ shell, setStatus, plugins }) {
     for (const plugin of visible) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'nav-item';
+      button.className = 'nav-item plugin-row';
       if (plugin.id === activeSettingsId) button.classList.add('active');
       button.setAttribute('aria-current', plugin.id === activeSettingsId ? 'true' : 'false');
+      const copy = document.createElement('span');
+      copy.className = 'plugin-row-copy';
+      copy.appendChild(pluginMark(plugin));
       const title = document.createElement('span');
       title.className = 'nav-title';
       title.textContent = plugin.displayName;
-      button.append(title);
+      copy.appendChild(title);
+      button.appendChild(copy);
       button.addEventListener('click', () => {
-        if (plugin.id === activeSettingsId) return;
         void selectSettings(plugin.id);
       });
       settingsList.appendChild(button);
     }
+    mountIcons(settingsList);
+  }
+
+  function defaultGlyph() {
+    const icon = document.createElement('i');
+    icon.dataset.lucide = 'puzzle';
+    return icon;
+  }
+
+  function pluginMark(plugin) {
+    const mark = document.createElement('span');
+    mark.className = 'plugin-mark plugin-mark-nav';
+    if (plugin.iconUrl) {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = plugin.iconUrl;
+      img.addEventListener('error', () => {
+        img.replaceWith(defaultGlyph());
+        mountIcons(mark);
+      });
+      mark.appendChild(img);
+    } else {
+      mark.appendChild(defaultGlyph());
+    }
+    return mark;
   }
 
   function clearSettingsMain() {
@@ -139,40 +207,69 @@ export function mountSettings({ shell, setStatus, plugins }) {
     reset.addEventListener('click', () => {
       restoreFieldDefault(field);
       renderSettingsForm(plugin);
+      syncSaveButton();
     });
     parent.appendChild(reset);
+  }
+
+  function fieldGroups(fields) {
+    const groups = [];
+    const index = new Map();
+    for (const field of fields) {
+      const name = field.group || GENERAL_GROUP;
+      let group = index.get(name);
+      if (!group) {
+        group = { name, fields: [] };
+        index.set(name, group);
+        groups.push(group);
+      }
+      group.fields.push(field);
+    }
+    return groups;
   }
 
   function renderSettingsForm(plugin) {
     settingsForm.replaceChildren();
     if (!settingsDraft || plugin.schemaError || plugin.fields.length === 0) return;
-    for (const field of plugin.fields) {
-      const card = document.createElement('article');
-      card.className = 'settings-card';
-      const copy = document.createElement('div');
-      copy.className = 'settings-card-copy';
+    for (const group of fieldGroups(plugin.fields)) {
+      const section = document.createElement('section');
+      section.className = 'settings-group';
       const heading = document.createElement('h2');
-      heading.textContent = field.title;
-      copy.appendChild(heading);
-      if (field.description) {
-        const description = document.createElement('p');
-        description.textContent = field.description;
-        copy.appendChild(description);
+      heading.className = 'settings-group-title';
+      heading.textContent = group.name;
+      const body = document.createElement('div');
+      body.className = 'settings-group-body';
+      section.append(heading, body);
+      for (const field of group.fields) {
+        const row = document.createElement('div');
+        row.className = 'settings-row';
+        const copy = document.createElement('div');
+        copy.className = 'settings-card-copy';
+        const title = document.createElement('h3');
+        title.textContent = field.title;
+        copy.appendChild(title);
+        if (field.description) {
+          const description = document.createElement('p');
+          description.textContent = field.description;
+          copy.appendChild(description);
+        }
+        appendReset(copy, field, plugin);
+        const control = document.createElement('div');
+        control.className = 'settings-control';
+        control.appendChild(renderFieldControl(field, plugin));
+        row.append(copy, control);
+        body.appendChild(row);
       }
-      appendReset(copy, field, plugin);
-      const control = document.createElement('div');
-      control.className = 'settings-control';
-      control.appendChild(renderFieldControl(field, plugin));
-      card.append(copy, control);
-      settingsForm.appendChild(card);
+      settingsForm.appendChild(section);
     }
+    mountIcons(settingsForm);
   }
 
-  function renderFieldControl(field) {
+  function renderFieldControl(field, plugin) {
     if (field.type === 'boolean') return renderSwitch(field);
     if (field.type === 'select') return renderSelect(field);
     if (field.type === 'path') return renderPath(field);
-    if (field.secret) return renderSecret(field);
+    if (field.secret) return renderSecret(field, plugin);
     return renderText(field, field.type === 'number' ? 'number' : 'text');
   }
 
@@ -185,6 +282,7 @@ export function mountSettings({ shell, setStatus, plugins }) {
     input.setAttribute('aria-label', field.title);
     input.addEventListener('change', () => {
       settingsDraft.values[field.key] = input.checked;
+      syncSaveButton();
     });
     const track = document.createElement('span');
     label.append(input, track);
@@ -204,6 +302,7 @@ export function mountSettings({ shell, setStatus, plugins }) {
     select.value = typeof settingsDraft.values[field.key] === 'string' ? settingsDraft.values[field.key] : '';
     select.addEventListener('change', () => {
       settingsDraft.values[field.key] = select.value;
+      syncSaveButton();
     });
     return select;
   }
@@ -218,40 +317,115 @@ export function mountSettings({ shell, setStatus, plugins }) {
       input.value = typeof current === 'number' && Number.isFinite(current) ? String(current) : '';
       input.addEventListener('input', () => {
         settingsDraft.values[field.key] = input.value === '' ? '' : input.valueAsNumber;
+        syncSaveButton();
       });
     } else {
       input.value = typeof settingsDraft.values[field.key] === 'string' ? settingsDraft.values[field.key] : '';
       input.addEventListener('input', () => {
         settingsDraft.values[field.key] = input.value;
+        syncSaveButton();
       });
     }
     return input;
   }
 
-  function renderSecret(field) {
+  function renderSecret(field, plugin) {
+    const mask = '••••••••';
     const wrap = document.createElement('div');
     wrap.className = 'settings-control';
     const input = document.createElement('input');
     input.className = 'settings-input';
-    input.type = 'password';
     input.autocomplete = 'new-password';
     input.spellcheck = false;
     input.setAttribute('aria-label', field.title);
     const intent = settingsDraft.secrets[field.key] || { action: 'keep' };
-    input.value = intent.action === 'set' ? intent.value : '';
+    let revealed = false;
+    let revealedKeep = null;
+    const currentIntent = () => settingsDraft.secrets[field.key] || { action: 'keep' };
     const syncPlaceholder = () => {
-      const current = settingsDraft.secrets[field.key];
-      input.placeholder = field.secretSet && (!current || current.action === 'keep') ? '已设置' : '';
+      const current = currentIntent();
+      const masked = field.secretSet === true && current.action === 'keep' && !revealed;
+      input.placeholder = masked ? mask : '';
     };
-    syncPlaceholder();
+    const eye = document.createElement('button');
+    eye.type = 'button';
+    eye.className = 'settings-icon-btn';
+    const eyeIcon = document.createElement('i');
+    eye.appendChild(eyeIcon);
+    const syncEye = () => {
+      const current = currentIntent();
+      const show = field.secretSet === true && current.action === 'keep';
+      eye.hidden = !show;
+      eyeIcon.dataset.lucide = revealed ? 'eye-off' : 'eye';
+      eye.setAttribute('aria-label', revealed ? '隐藏密钥' : '查看密钥');
+      eye.setAttribute('aria-pressed', revealed ? 'true' : 'false');
+      mountIcons(eye);
+    };
+    const showPlainDraft = () => {
+      revealed = false;
+      revealedKeep = null;
+      input.type = 'text';
+      const current = currentIntent();
+      input.value = current.action === 'set' ? current.value : '';
+      syncPlaceholder();
+      syncEye();
+    };
+    const showMasked = () => {
+      revealed = false;
+      revealedKeep = null;
+      input.type = 'password';
+      input.value = '';
+      syncPlaceholder();
+      syncEye();
+    };
+    if (intent.action === 'set') showPlainDraft();
+    else showMasked();
+    input.addEventListener('focus', () => {
+      if (revealed) return;
+      if (currentIntent().action === 'set') {
+        input.type = 'text';
+        return;
+      }
+      input.type = 'text';
+      input.value = '';
+    });
+    input.addEventListener('blur', () => {
+      if (revealed || currentIntent().action === 'set') return;
+      showMasked();
+    });
     input.addEventListener('input', () => {
-      if (input.value === '') {
-        const current = settingsDraft.secrets[field.key];
-        if (!current || current.action !== 'clear') settingsDraft.secrets[field.key] = { action: 'keep' };
+      const current = currentIntent();
+      if (revealedKeep !== null && input.value === revealedKeep && current.action === 'keep') {
+        settingsDraft.secrets[field.key] = { action: 'keep' };
+      } else if (input.value === '') {
+        revealedKeep = null;
+        revealed = false;
+        if (current.action !== 'clear') settingsDraft.secrets[field.key] = { action: 'keep' };
       } else {
+        revealedKeep = null;
+        revealed = false;
+        input.type = 'text';
         settingsDraft.secrets[field.key] = { action: 'set', value: input.value };
       }
       syncPlaceholder();
+      syncEye();
+      syncSaveButton();
+    });
+    eye.addEventListener('click', async () => {
+      if (currentIntent().action !== 'keep' || field.secretSet !== true) return;
+      if (revealed) {
+        showMasked();
+        return;
+      }
+      const result = await window.dex.revealPluginSecret(plugin.id, field.key);
+      if (!result || result.ok !== true || typeof result.value !== 'string' || result.value === '') return;
+      if (currentIntent().action !== 'keep') return;
+      revealed = true;
+      revealedKeep = result.value;
+      input.type = 'text';
+      input.value = result.value;
+      syncPlaceholder();
+      syncEye();
     });
     const clear = document.createElement('button');
     clear.type = 'button';
@@ -259,10 +433,10 @@ export function mountSettings({ shell, setStatus, plugins }) {
     clear.textContent = '清除';
     clear.addEventListener('click', () => {
       settingsDraft.secrets[field.key] = { action: 'clear' };
-      input.value = '';
-      syncPlaceholder();
+      showMasked();
+      syncSaveButton();
     });
-    wrap.append(input, clear);
+    wrap.append(input, eye, clear);
     return wrap;
   }
 
@@ -284,6 +458,7 @@ export function mountSettings({ shell, setStatus, plugins }) {
       settingsDraft.values[field.key] = picked.path;
       value.textContent = picked.path;
       value.title = picked.path;
+      syncSaveButton();
     });
     wrap.append(value, change);
     return wrap;
@@ -330,10 +505,13 @@ export function mountSettings({ shell, setStatus, plugins }) {
   }
 
   async function selectSettings(id) {
+    if (id === activeSettingsId) return;
+    if (activeSettingsId && !(await confirmDiscard())) return;
     const plugin = settingsCatalog.find((item) => item.id === id);
     if (!plugin) return;
     activeSettingsId = id;
     settingsDraft = draftFromPlugin(plugin);
+    rememberBaseline();
     renderSettingsNav();
     try {
       await renderSettingsMain(plugin, true);
@@ -342,8 +520,11 @@ export function mountSettings({ shell, setStatus, plugins }) {
     }
   }
 
-  async function enterSettings() {
-    if (shell.settingsMode) return;
+  async function enterSettings(pluginId) {
+    if (shell.settingsMode) {
+      if (typeof pluginId === 'string') await selectSettings(pluginId);
+      return;
+    }
     returnPluginId = shell.activeId;
     shell.settingsMode = true;
     settingsSearch.value = '';
@@ -352,8 +533,11 @@ export function mountSettings({ shell, setStatus, plugins }) {
     setStatus('');
     await reloadSettingsCatalog();
     if (!shell.settingsMode) return;
-    const first = visibleSettings()[0];
-    if (first) await selectSettings(first.id);
+    const preferred = typeof pluginId === 'string' && settingsCatalog.some((item) => item.id === pluginId)
+      ? pluginId
+      : null;
+    const first = preferred || visibleSettings()[0]?.id;
+    if (first) await selectSettings(first);
     else clearSettingsMain();
   }
 
@@ -362,6 +546,7 @@ export function mountSettings({ shell, setStatus, plugins }) {
     shell.settingsMode = false;
     activeSettingsId = null;
     settingsDraft = null;
+    settingsBaseline = '';
     settingsScreen.hidden = true;
     settingsEntryHost.replaceChildren();
     // 切到插件页时工作区仍应保持挂起，不能把刚才的插件页面露出来。
@@ -369,12 +554,6 @@ export function mountSettings({ shell, setStatus, plugins }) {
   }
 
   function onSettingsSearch() {
-    const visible = visibleSettings();
-    if (activeSettingsId && !visible.some((plugin) => plugin.id === activeSettingsId)) {
-      activeSettingsId = null;
-      settingsDraft = null;
-      clearSettingsMain();
-    }
     renderSettingsNav();
   }
 
@@ -394,13 +573,14 @@ export function mountSettings({ shell, setStatus, plugins }) {
       const fresh = settingsCatalog.find((item) => item.id === plugin.id);
       if (!fresh || activeSettingsId !== plugin.id) return;
       settingsDraft = draftFromPlugin(fresh);
+      rememberBaseline();
       await renderSettingsMain(fresh, false);
       reloadSettingsWebview();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : '保存失败', 'error');
     } finally {
       savingSettings = false;
-      settingsSave.disabled = false;
+      syncSaveButton();
     }
   }
 
@@ -426,6 +606,16 @@ export function mountSettings({ shell, setStatus, plugins }) {
   settingsSave.addEventListener('click', () => {
     void saveActiveSettings();
   });
+  discardStay.addEventListener('click', () => {
+    finishDiscard(false);
+  });
+  discardConfirm.addEventListener('click', () => {
+    finishDiscard(true);
+  });
+  discardDialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    finishDiscard(false);
+  });
 
-  return { onPluginsChanged, dismissSurface, enterSettings, leaveSettings };
+  return { onPluginsChanged, dismissSurface, enterSettings, leaveSettings, confirmDiscard };
 }

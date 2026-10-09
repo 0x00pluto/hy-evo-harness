@@ -108,6 +108,7 @@ test('路径本身是插件根时直接加载', async (t) => {
   await registry.scanAndLoadPlugins(root, 'dev');
   assert.equal(registry.getPluginList()[0]?.source, 'dev');
   assert.equal(registry.getPluginList()[0]?.rootPath, path.resolve(root));
+  assert.equal(registry.getPluginList()[0]?.hasSettings, false);
   assert.equal(registry.getPlugin('solo')?.manifest.displayName, '独立插件');
 });
 

@@ -295,6 +295,66 @@ test('卸载已安装插件才删除配置，失败时保留；覆盖安装不�
   assert.deepEqual(after['other-tool'], { OTHER: 'stay' });
 });
 
+test('分组可选，空分组当作没写，非法分组使声明失败', () => {
+  const manifest = parseManifest(baseManifest('demo', {
+    configSchema: {
+      NOTE: { type: 'string', title: '备注', default: '', group: ' 模型 ' },
+      TOKEN: { type: 'string', title: '密钥', secret: true, default: '', group: '' },
+    },
+  }));
+  assert.equal(manifest.configSchemaError, undefined);
+  assert.equal(manifest.configSchema?.NOTE?.group, '模型');
+  assert.equal(manifest.configSchema?.TOKEN?.group, undefined);
+
+  const tooLong = parseManifest(baseManifest('demo', {
+    configSchema: { NOTE: { type: 'string', title: '备注', group: '名'.repeat(33) } },
+  }));
+  assert.match(tooLong.configSchemaError ?? '', /分组/);
+
+  const badType = parseManifest(baseManifest('demo', {
+    configSchema: { NOTE: { type: 'string', title: '备注', group: 1 } },
+  }));
+  assert.match(badType.configSchemaError ?? '', /分组/);
+});
+
+test('设置视图带图标地址，reveal 只返回密钥明文', async (t) => {
+  const root = tempDir();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'plugin-settings.json');
+  const pluginDir = path.join(root, 'demo');
+  writePlugin(pluginDir, baseManifest('demo', {
+    icon: 'icon.png',
+    configSchema: {
+      TOKEN: { type: 'string', title: '密钥', secret: true, default: '' },
+      NOTE: { type: 'string', title: '备注', default: 'plain', group: '模型' },
+    },
+  }), probeSource);
+  fs.writeFileSync(path.join(pluginDir, 'icon.png'), 'icon');
+  const registry = new ServiceRegistry(silent, new PluginSettingsStore(file, silent));
+  await registry.scanAndLoadPlugins(root, 'bundled');
+  assert.equal(registry.savePluginSettings('demo', {
+    values: { NOTE: 'plain' },
+    secrets: { TOKEN: { action: 'set', value: 'super-secret' } },
+  }).ok, true);
+
+  const view = registry.settingsView('demo');
+  assert.equal(view.iconUrl, 'app-plugin://demo/icon.png');
+  assert.equal(view.fields.find((field) => field.key === 'NOTE')?.group, '模型');
+  const token = view.fields.find((field) => field.key === 'TOKEN');
+  assert.equal(token?.secretSet, true);
+  assert.equal(token?.group, undefined);
+  assert.equal('value' in (token ?? {}), false);
+  assert.equal(JSON.stringify(view).includes('super-secret'), false);
+
+  const probe = registry.getService<{ config: () => Record<string, unknown> }>('probe');
+  assert.equal(probe?.config().TOKEN, 'super-secret');
+  assert.equal(probe?.config().group, undefined);
+
+  assert.deepEqual(registry.revealPluginSecret('demo', 'TOKEN'), { ok: true, value: 'super-secret' });
+  assert.deepEqual(registry.revealPluginSecret('demo', 'NOTE'), { ok: false });
+  assert.deepEqual(registry.revealPluginSecret('missing', 'TOKEN'), { ok: false });
+});
+
 test('示例插件声明了可显示的配置字段', () => {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const manifest = readManifestFile(path.join(repoRoot, 'plugins/ai-comic-master'));

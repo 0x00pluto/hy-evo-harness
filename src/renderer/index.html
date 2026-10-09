@@ -81,7 +81,7 @@
         </div>
       </div>
       <div id="plugin-pane">
-        <div class="section-title">应用与工具</div>
+        <div class="section-title">应用</div>
         <nav id="plugin-nav" aria-label="插件列表"></nav>
       </div>
     </aside>
@@ -178,7 +178,7 @@
           <p id="settings-schema-error" class="settings-error" hidden></p>
           <div id="settings-form"></div>
           <div id="settings-actions" hidden>
-            <button id="settings-save" type="button">保存</button>
+            <button id="settings-save" type="button" disabled>保存</button>
           </div>
           <p id="settings-empty" class="settings-empty" hidden></p>
           <div id="settings-entry-host" hidden></div>
@@ -187,6 +187,14 @@
     </div>
   </main>
   </div>
+
+  <dialog id="settings-discard-dialog">
+    <h2>放弃已修改的内容？</h2>
+    <div class="update-dialog-actions">
+      <button id="settings-discard-stay" type="button">继续编辑</button>
+      <button id="settings-discard-confirm" class="primary" type="button">放弃</button>
+    </div>
+  </dialog>
 
   <dialog id="update-dialog">
     <h2 id="update-dialog-title"></h2>

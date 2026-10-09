@@ -251,6 +251,13 @@ function registerIpc(): void {
     return registry.savePluginSettings(raw.id, raw.draft);
   });
 
+  ipcMain.handle('dex:reveal-plugin-secret', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') return { ok: false };
+    const raw = payload as { id?: unknown; key?: unknown };
+    if (typeof raw.id !== 'string' || typeof raw.key !== 'string') return { ok: false };
+    return registry.revealPluginSecret(raw.id, raw.key);
+  });
+
   ipcMain.handle('dex:pick-directory', async () => {
     const result = await dialog.showOpenDialog({
       title: '选择目录',
@@ -272,6 +279,19 @@ function registerIpc(): void {
     try {
       await shell.openExternal(url);
       return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  });
+
+  ipcMain.handle('dex:open-plugin-folder', async (_event, rootPath: unknown) => {
+    if (typeof rootPath !== 'string' || rootPath.trim() === '') return { ok: false };
+    const target = path.resolve(rootPath);
+    const known = registry.getPluginList().some((plugin) => path.resolve(plugin.rootPath) === target);
+    if (!known) return { ok: false };
+    try {
+      const error = await shell.openPath(target);
+      return { ok: error === '' };
     } catch {
       return { ok: false };
     }

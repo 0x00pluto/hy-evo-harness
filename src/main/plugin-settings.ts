@@ -22,6 +22,8 @@ export interface SettingsFieldView {
   value?: PluginConfigValue;
   /** 密钥字段是否已有非空生效值。视图里不包含明文。 */
   secretSet?: boolean;
+  /** 设置页分组。没写的字段由界面归入「通用配置」。 */
+  group?: string;
 }
 
 export interface SettingsPluginView {
@@ -30,6 +32,8 @@ export interface SettingsPluginView {
   settingsEntryUrl: string | null;
   schemaError: string | null;
   fields: SettingsFieldView[];
+  /** 与插件列表同一条 app-plugin 地址。没有图标时省略。 */
+  iconUrl?: string;
 }
 
 export type SettingsSaveResult = { ok: true } | { ok: false; message: string };
@@ -79,7 +83,7 @@ export class PluginSettingsStore {
         fields.push(toFieldView(key, field, merged));
       }
     }
-    return {
+    const view: SettingsPluginView = {
       id: manifest.id,
       displayName: manifest.displayName,
       settingsEntryUrl: manifest.settingsEntry
@@ -88,6 +92,22 @@ export class PluginSettingsStore {
       schemaError: manifest.configSchemaError ?? null,
       fields,
     };
+    const iconUrl = catalogIconUrl(manifest);
+    if (iconUrl) view.iconUrl = iconUrl;
+    return view;
+  }
+
+  /**
+   * 只给出已加载插件里密钥字段的当前生效值。非密钥字段不返回。
+   * 调用方不要把返回值写进日志。
+   */
+  reveal(manifest: PluginManifest, key: string): { ok: true; value: string } | { ok: false } {
+    const schema = manifest.configSchema;
+    if (!schema || manifest.configSchemaError) return { ok: false };
+    const field = schema[key];
+    if (!field || field.secret !== true) return { ok: false };
+    const value = this.getPluginConfig(manifest)[key];
+    return { ok: true, value: typeof value === 'string' ? value : '' };
   }
 
   save(manifest: PluginManifest, draft: unknown): SettingsSaveResult {
@@ -219,6 +239,7 @@ function toFieldView(key: string, field: ConfigField, merged: PluginConfig): Set
     title: field.title,
   };
   if (field.description) view.description = field.description;
+  if (field.group) view.group = field.group;
   if (field.options) view.options = field.options;
   if (field.default !== undefined) view.default = field.default;
   if (field.secret) {
@@ -317,6 +338,12 @@ function checkValue(
   }
   if (typeof value !== 'string') return { ok: false, message: `${field.title}不合法` };
   return { ok: true, value };
+}
+
+function catalogIconUrl(manifest: PluginManifest): string | undefined {
+  if (!manifest.icon) return undefined;
+  const iconPath = manifest.icon.split(/[/\\]/).map((part) => encodeURIComponent(part)).join('/');
+  return `app-plugin://${manifest.id}/${iconPath}`;
 }
 
 function stringifyConfigValue(value: PluginConfigValue): string {

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { Module } from 'node:module';
 import { readManifestFile } from './manifest.ts';
-import { PluginSettingsStore, type SettingsPluginView, type SettingsSaveResult } from './plugin-settings.ts';
+import { PluginSettingsStore, isSettingsCandidate, type SettingsPluginView, type SettingsSaveResult } from './plugin-settings.ts';
 import { resolvePluginFile } from './protocol.ts';
 import type { AppContext, AppPlugin, Logger, PluginSource, PluginSummary } from './types.ts';
 
@@ -97,6 +97,12 @@ export class ServiceRegistry {
     const plugin = this.plugins.get(id);
     if (!plugin) return { ok: false, message: '插件不存在' };
     return this.settings.save(plugin.manifest, draft);
+  }
+
+  revealPluginSecret(id: string, key: string): { ok: true; value: string } | { ok: false } {
+    const plugin = this.plugins.get(id);
+    if (!plugin) return { ok: false };
+    return this.settings.reveal(plugin.manifest, key);
   }
 
   deletePluginSettings(id: string): void {
@@ -306,6 +312,7 @@ function summarizePlugin(plugin: AppPlugin): PluginSummary {
         : null,
     source: plugin.source,
     rootPath: plugin.absPath,
+    hasSettings: isSettingsCandidate(manifest),
   };
   if (manifest.description) summary.description = manifest.description;
   if (manifest.icon) {

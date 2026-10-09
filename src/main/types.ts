@@ -17,8 +17,10 @@ export interface ConfigField {
   type: ConfigFieldType;
   title: string;
   description?: string;
-  /** 仅字符串字段。为 true 时界面不回显已保存的明文。 */
+  /** 仅字符串字段。目录和插件页面不回显明文；设置页的眼睛可以临时查看。 */
   secret?: true;
+  /** 设置页分组。不写时归入「通用配置」，不进入配置值。 */
+  group?: string;
   options?: string[];
   default?: PluginConfigValue;
 }
@@ -79,8 +81,10 @@ export interface PluginSummary {
   type: PluginKind;
   uiUrl: string | null;
   source: PluginSource;
-  /** 插件目录的绝对路径，只用于详情里的目录提示。 */
+  /** 插件目录的绝对路径，用于首页悬停卡片和详情里的目录提示。 */
   rootPath: string;
+  /** 有 configSchema 或 settingsEntry 时，首页悬停卡片可以进入它的设置。 */
+  hasSettings: boolean;
   description?: string;
   iconUrl?: string;
   developer?: string;

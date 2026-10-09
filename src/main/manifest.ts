@@ -193,11 +193,14 @@ function parseConfigField(key: string, value: unknown): ConfigField | string {
   if (raw.options !== undefined && type !== 'select') {
     return `配置项 ${key} 不能包含选项`;
   }
+  const group = parseFieldGroup(key, raw.group);
+  if ('error' in group) return group.error;
 
   const field: ConfigField = { type, title: raw.title.trim() };
   if (typeof raw.description === 'string' && raw.description.trim() !== '') {
     field.description = raw.description.trim();
   }
+  if (group.name) field.group = group.name;
   if (raw.secret === true) field.secret = true;
 
   if (type === 'select') {
@@ -218,6 +221,15 @@ function parseConfigField(key: string, value: unknown): ConfigField | string {
     field.default = raw.default as PluginConfigValue;
   }
   return field;
+}
+
+function parseFieldGroup(key: string, value: unknown): { error: string } | { name?: string } {
+  if (value === undefined) return {};
+  if (typeof value !== 'string') return { error: `配置项 ${key} 的分组无效` };
+  const trimmed = value.trim();
+  if (trimmed === '') return {};
+  if (trimmed.length > 32) return { error: `配置项 ${key} 的分组须为 1–32 个字符` };
+  return { name: trimmed };
 }
 
 function readSelectOptions(key: string, value: unknown): string[] | string {
