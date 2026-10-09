@@ -5,6 +5,25 @@ import type { ConfigField, ConfigFieldType, ConfigSchema, PluginConfigValue, Plu
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const ENV_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 const FIELD_TYPES = new Set<ConfigFieldType>(['string', 'boolean', 'number', 'select', 'path']);
+const ICON_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.svg']);
+const CATALOG_TEXT = [
+  { key: 'description', max: 280 },
+  { key: 'developer', max: 64 },
+  { key: 'category', max: 32 },
+] as const;
+const CATALOG_URLS = ['website', 'privacyPolicy', 'termsOfService'] as const;
+
+/** 只接受带主机名的 http(s)。目录字段另有长度限制，打开外链不再卡这层。 */
+export function isHttpUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  return url.hostname.length > 0;
+}
 
 export function isPluginId(value: string): boolean {
   return ID_PATTERN.test(value);
@@ -45,6 +64,7 @@ export function parseManifest(value: unknown): PluginManifest {
     throw new Error('ui 插件必须提供 uiEntry');
   }
   const parsedSchema = parseConfigSchema(raw.configSchema);
+  const catalog = parseCatalog(raw);
   const manifest: PluginManifest = {
     id: raw.id,
     displayName: raw.displayName.trim(),
@@ -52,11 +72,84 @@ export function parseManifest(value: unknown): PluginManifest {
     type: raw.type,
     main,
     uiEntry,
+    ...catalog.fields,
   };
   if (settingsEntry) manifest.settingsEntry = settingsEntry;
   if (parsedSchema.schema) manifest.configSchema = parsedSchema.schema;
   if (parsedSchema.error) manifest.configSchemaError = parsedSchema.error;
+  if (catalog.error) manifest.catalogError = catalog.error;
   return manifest;
+}
+
+function parseCatalog(raw: Record<string, unknown>): {
+  fields: Pick<PluginManifest, 'description' | 'icon' | 'developer' | 'category' | 'website' | 'privacyPolicy' | 'termsOfService'>;
+  error?: string;
+} {
+  const errors: string[] = [];
+  const fields: Pick<PluginManifest, 'description' | 'icon' | 'developer' | 'category' | 'website' | 'privacyPolicy' | 'termsOfService'> = {};
+
+  for (const { key, max } of CATALOG_TEXT) {
+    const parsed = parseCatalogText(key, raw[key], max, errors);
+    if (parsed) fields[key] = parsed;
+  }
+  const icon = parseCatalogIcon(raw.icon, errors);
+  if (icon) fields.icon = icon;
+  for (const key of CATALOG_URLS) {
+    const parsed = parseCatalogUrl(key, raw[key], errors);
+    if (parsed) fields[key] = parsed;
+  }
+  return { fields, error: errors.length > 0 ? errors.join('；') : undefined };
+}
+
+function parseCatalogText(
+  key: string,
+  value: unknown,
+  max: number,
+  errors: string[],
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') {
+    errors.push(`${key} 必须是字符串`);
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') return undefined;
+  if (trimmed.length > max) {
+    errors.push(`${key} 须为 1–${max} 个字符`);
+    return undefined;
+  }
+  return trimmed;
+}
+
+function parseCatalogIcon(value: unknown, errors: string[]): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') {
+    errors.push('icon 必须是字符串');
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') return undefined;
+  const extension = path.extname(trimmed).toLowerCase();
+  if (path.isAbsolute(trimmed) || trimmed.split(/[/\\]/).includes('..') || !ICON_EXTENSIONS.has(extension)) {
+    errors.push('icon 必须是插件目录内的 png、jpg、jpeg、webp 或 svg');
+    return undefined;
+  }
+  return trimmed;
+}
+
+function parseCatalogUrl(key: string, value: unknown, errors: string[]): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') {
+    errors.push(`${key} 必须是字符串`);
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') return undefined;
+  if (trimmed.length > 300 || !isHttpUrl(trimmed)) {
+    errors.push(`${key} 须为不超过 300 字符的 http(s) 链接`);
+    return undefined;
+  }
+  return trimmed;
 }
 
 function parseConfigSchema(value: unknown): { schema?: ConfigSchema; error?: string } {
@@ -151,5 +244,27 @@ function defaultMatches(type: ConfigFieldType, value: unknown): boolean {
 export function readManifestFile(pluginDir: string): PluginManifest {
   const manifestPath = path.join(pluginDir, 'plugin.manifest.json');
   const text = fs.readFileSync(manifestPath, 'utf8');
-  return parseManifest(JSON.parse(text) as unknown);
+  return attachCatalogIcon(parseManifest(JSON.parse(text) as unknown), pluginDir);
+}
+
+function attachCatalogIcon(manifest: PluginManifest, pluginDir: string): PluginManifest {
+  if (!manifest.icon) return manifest;
+  if (iconFileExists(pluginDir, manifest.icon)) return manifest;
+  const next: PluginManifest = { ...manifest };
+  delete next.icon;
+  const missing = 'icon 文件不存在';
+  next.catalogError = next.catalogError ? `${next.catalogError}；${missing}` : missing;
+  return next;
+}
+
+function iconFileExists(pluginDir: string, icon: string): boolean {
+  const root = path.resolve(pluginDir);
+  const target = path.resolve(root, icon);
+  const relative = path.relative(root, target);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return false;
+  try {
+    return fs.statSync(target).isFile();
+  } catch {
+    return false;
+  }
 }

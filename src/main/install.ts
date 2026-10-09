@@ -29,7 +29,7 @@ export async function installPluginZip(options: {
   registry: ServiceRegistry;
   zipFilePath: string;
   userPluginsDir: string;
-}): Promise<PluginSummary[]> {
+}): Promise<{ installedId: string; plugins: PluginSummary[] }> {
   const zipFilePath = path.resolve(options.zipFilePath);
   if (!fs.existsSync(zipFilePath) || !fs.statSync(zipFilePath).isFile()) {
     throw new Error('找不到插件压缩包');
@@ -45,7 +45,7 @@ export async function installPluginZip(options: {
     const pluginRoot = findPluginRoot(tmpDir);
     const manifest = readManifestFile(pluginRoot);
     await replaceInstalledPlugin(options.registry, options.userPluginsDir, manifest.id, pluginRoot);
-    return options.registry.getPluginList();
+    return { installedId: manifest.id, plugins: options.registry.getPluginList() };
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

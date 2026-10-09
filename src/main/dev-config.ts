@@ -28,3 +28,18 @@ export function readExtraPluginPaths(configPath: string, logger: Logger): string
   }
   return result;
 }
+
+export function readForceUpdateIcon(configPath: string, logger: Logger): boolean {
+  if (!fs.existsSync(configPath)) return false;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as unknown;
+  } catch (err) {
+    logger.error(`读取开发配置失败: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
+
+  if (!parsed || typeof parsed !== 'object') return false;
+  return (parsed as { forceUpdateIcon?: unknown }).forceUpdateIcon === true;
+}

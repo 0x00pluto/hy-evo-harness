@@ -1,5 +1,6 @@
 import { mountSidebar } from './sidebar.js';
 import { mountPlugins } from './plugins.js';
+import { mountPluginsPage } from './plugins-page.js';
 import { mountUpdater } from './updater.js';
 import { mountSettings } from './settings.js';
 import { mountChrome } from './chrome.js';
@@ -20,7 +21,7 @@ function setStatus(message, kind) {
 }
 
 mountIcons();
-mountSidebar();
+const sidebar = mountSidebar();
 
 // 插件列表刷新时可能正停在设置里，设置返回时又要回到刚才的插件。
 // 两边的挂载函数互相还拿不到对方，所以先放桥，挂载完再接上。
@@ -30,21 +31,49 @@ const settingsBridge = {
 };
 
 const chromeBridge = {
-  clearForward() {},
+  session() {
+    return null;
+  },
+  refresh() {},
+  enterPlugins() {},
+  focusPlugin() {},
+  async usePlugin() {},
+  clearNavigation() {},
+};
+
+const pluginsPageBridge = {
+  sync() {},
+  clearStatus() {},
 };
 
 const plugins = mountPlugins({
   shell,
   setStatus,
   settings: settingsBridge,
-  onClearForward() { chromeBridge.clearForward(); },
+  onClearNavigation() { chromeBridge.clearNavigation(); },
+  onWorkspaceChanged() { chromeBridge.refresh(); },
+  onListChanged() {
+    const session = chromeBridge.session();
+    if (session) pluginsPageBridge.sync(session);
+  },
 });
+const pluginsPage = mountPluginsPage({ shell, plugins, chrome: chromeBridge });
+pluginsPageBridge.sync = pluginsPage.sync;
+pluginsPageBridge.clearStatus = pluginsPage.clearStatus;
+
 const settings = mountSettings({ shell, setStatus, plugins });
 settingsBridge.onPluginsChanged = settings.onPluginsChanged;
 settingsBridge.dismissSurface = settings.dismissSurface;
 
-const chrome = mountChrome({ settings, setStatus });
-chromeBridge.clearForward = chrome.clearForward;
+const chrome = mountChrome({
+  settings,
+  plugins,
+  pluginsPage,
+  shell,
+  setStatus,
+  applySplitWidth: sidebar.applySplitWidth,
+});
+Object.assign(chromeBridge, chrome);
 
 mountUpdater({ setStatus });
 

@@ -30,6 +30,7 @@ export interface UpdaterStatusPayload {
   availableVersion?: string;
   errorMessage?: string;
   lastCheckedAt?: string;
+  progressPercent?: number;
 }
 
 export interface InstallUpdateResult {
@@ -72,8 +73,22 @@ function broadcastStatus(): void {
 }
 
 function setPayload(partial: Partial<UpdaterStatusPayload>): void {
-  currentPayload = { ...currentPayload, ...partial };
+  const next: UpdaterStatusPayload = { ...currentPayload, ...partial };
+  // 百分比只属于下载中。重新进入下载、或离开下载时都清掉旧值。
+  if (next.status !== 'downloading') {
+    delete next.progressPercent;
+  } else if (partial.status === 'downloading' && partial.progressPercent === undefined) {
+    delete next.progressPercent;
+  }
+  currentPayload = next;
   broadcastStatus();
+}
+
+function contentLength(headers: Record<string, string | string[] | undefined>): number | null {
+  const raw = headers['content-length'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const size = Number(value);
+  return Number.isFinite(size) && size > 0 ? size : null;
 }
 
 function resetErrorState(): void {
@@ -152,6 +167,22 @@ function downloadMacDmg(version: string, url: string): Promise<void> {
 
       const fileStream = createWriteStream(localPath);
       let settled = false;
+      const headers = response.headers as Record<string, string | string[] | undefined>;
+      const total = contentLength(headers) ?? macDmgExpectedSize;
+      let received = 0;
+      let lastProgressAt = 0;
+
+      const pushProgress = (force: boolean): void => {
+        if (total == null || total <= 0) return;
+        const percent = Math.min(100, Math.round((received / total) * 100));
+        const now = Date.now();
+        if (!force && percent < 100 && now - lastProgressAt < 200) return;
+        if (!force && currentPayload.progressPercent === percent) return;
+        lastProgressAt = now;
+        setPayload({ progressPercent: percent });
+      };
+
+      pushProgress(true);
 
       const fail = (error: Error): void => {
         if (settled) return;
@@ -180,8 +211,10 @@ function downloadMacDmg(version: string, url: string): Promise<void> {
       });
       fileStream.on('error', fail);
 
-      response.on('data', (chunk) => {
+      response.on('data', (chunk: Buffer) => {
+        received += chunk.length;
         fileStream.write(chunk);
+        pushProgress(false);
       });
       response.on('end', () => {
         fileStream.end();
@@ -307,6 +340,11 @@ function registerAutoUpdaterEvents(): void {
         lastCheckedAt: new Date().toISOString(),
       });
     }
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
+    setPayload({ status: 'downloading', progressPercent: percent });
   });
 
   autoUpdater.on('update-downloaded', (info) => {

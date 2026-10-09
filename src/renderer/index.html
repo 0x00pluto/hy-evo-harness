@@ -24,11 +24,7 @@
         <i data-lucide="panel-left-close"></i>
       </button>
     </div>
-    <div class="titlebar-trailing">
-      <button id="titlebar-install" class="titlebar-btn" type="button" aria-label="安装插件">
-        <i data-lucide="plus"></i>
-      </button>
-    </div>
+    <div id="titlebar-plugin-name"></div>
   </div>
   <div id="shell">
   <nav id="rail" aria-label="图标轨">
@@ -36,8 +32,8 @@
       <button id="rail-home" class="rail-btn" type="button" aria-label="主页">
         <i data-lucide="house"></i>
       </button>
-      <button id="rail-install" class="rail-btn" type="button" aria-label="安装插件">
-        <i data-lucide="plus"></i>
+      <button id="rail-plugins" class="rail-btn" type="button" aria-label="插件">
+        <i data-lucide="puzzle"></i>
       </button>
       <button id="rail-ellipsis" class="rail-btn" type="button" aria-label="更多">
         <i data-lucide="ellipsis"></i>
@@ -67,9 +63,11 @@
           <i data-lucide="chevron-right" class="gear-aside"></i>
         </button>
       </div>
+      <button id="rail-update" class="rail-btn" type="button" aria-label="下载新版本" hidden>
+        <i data-lucide="download"></i>
+      </button>
       <button id="rail-settings" class="rail-btn" type="button" aria-label="设置" aria-haspopup="menu" aria-expanded="false">
         <i data-lucide="settings"></i>
-        <span id="update-dot" hidden></span>
       </button>
     </div>
   </nav>
@@ -114,44 +112,79 @@
         <p class="eyebrow">后台服务</p>
         <h1 id="headless-title"></h1>
         <p class="lede">该工具没有界面，已在系统后台运行。</p>
-        <button id="uninstall-headless" type="button" hidden>卸载此插件</button>
       </div>
     </section>
 
-    <div id="plugin-toolbar" hidden>
-      <span id="plugin-title"></span>
-      <button id="uninstall-btn" type="button" hidden>卸载</button>
-    </div>
     <div id="viewport-host" hidden></div>
     </div>
-    <div id="settings-nav" hidden>
-      <h2 id="settings-heading">设置</h2>
-      <input id="settings-search" type="search" placeholder="搜索" aria-label="搜索设置" autocomplete="off">
-      <div class="section-title">插件</div>
-      <div id="settings-list"></div>
-    </div>
-    <div
-      id="settings-splitter"
-      class="pane-splitter"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="调整设置导航宽度"
-      aria-valuemin="220"
-      aria-valuemax="480"
-      aria-valuenow="292"
-      tabindex="0"
-      hidden
-    ></div>
-    <section id="settings-screen" hidden>
-      <h1 id="settings-plugin-title"></h1>
-      <p id="settings-schema-error" class="settings-error" hidden></p>
-      <div id="settings-form"></div>
-      <div id="settings-actions" hidden>
-        <button id="settings-save" type="button">保存</button>
+    <div id="split-layout" hidden>
+      <aside id="split-nav" class="split-nav">
+        <div class="split-heading">
+          <h2 id="settings-heading" hidden>设置</h2>
+          <h2 id="plugins-heading" hidden>插件</h2>
+        </div>
+        <div class="split-search">
+          <input id="settings-search" type="search" placeholder="搜索" aria-label="搜索设置" autocomplete="off" hidden>
+          <input id="plugins-search" type="search" placeholder="搜索" aria-label="搜索插件" autocomplete="off" hidden>
+        </div>
+        <div class="split-section">
+          <div id="settings-section" class="section-title" hidden>插件</div>
+          <div id="plugins-section" class="section-title" hidden>已安装</div>
+        </div>
+        <div class="split-list">
+          <div id="settings-list" hidden></div>
+          <div id="plugins-list" hidden></div>
+        </div>
+      </aside>
+      <div
+        id="split-splitter"
+        class="pane-splitter"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整导航宽度"
+        aria-valuemin="220"
+        aria-valuemax="480"
+        aria-valuenow="292"
+        tabindex="0"
+      ></div>
+      <div class="split-main">
+        <section id="plugins-screen" hidden>
+          <p id="plugins-status" role="status"></p>
+          <div id="plugins-install">
+            <div class="split-main-bar plugins-stage-bar">
+              <h1>插件</h1>
+              <div class="plugins-stage-actions">
+                <button id="plugins-refresh" type="button" aria-label="刷新">
+                  <i data-lucide="refresh-cw"></i>
+                </button>
+                <button id="plugins-add" type="button">
+                  <i data-lucide="plus"></i>
+                  <span>添加</span>
+                </button>
+              </div>
+            </div>
+            <div id="plugins-drop" tabindex="0">
+              <i data-lucide="puzzle"></i>
+              <p>把插件压缩包拖到这里</p>
+              <p class="plugins-drop-hint">或点右上角的添加，选择 .zip</p>
+            </div>
+          </div>
+          <div id="plugins-detail" hidden></div>
+        </section>
+        <section id="settings-screen" hidden>
+          <div class="split-main-bar">
+            <h1 id="settings-plugin-title"></h1>
+          </div>
+          <p id="settings-schema-error" class="settings-error" hidden></p>
+          <div id="settings-form"></div>
+          <div id="settings-actions" hidden>
+            <button id="settings-save" type="button">保存</button>
+          </div>
+          <p id="settings-empty" class="settings-empty" hidden></p>
+          <div id="settings-entry-host" hidden></div>
+        </section>
       </div>
-      <p id="settings-empty" class="settings-empty" hidden></p>
-      <div id="settings-entry-host" hidden></div>
-    </section>
+    </div>
   </main>
   </div>
 
@@ -161,6 +194,9 @@
     <div class="update-dialog-actions">
       <button id="update-later" type="button">稍后</button>
       <button id="update-confirm" class="primary" type="button">下载新版本</button>
+    </div>
+    <div id="update-progress" hidden>
+      <span id="update-progress-fill"></span>
     </div>
   </dialog>
 

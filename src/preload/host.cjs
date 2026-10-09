@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('dex', {
+  devFlags() {
+    return ipcRenderer.invoke('dex:dev-flags');
+  },
   listPlugins() {
     return ipcRenderer.invoke('dex:list-plugins');
   },
@@ -30,6 +33,9 @@ contextBridge.exposeInMainWorld('dex', {
   },
   pathForFile(file) {
     return webUtils.getPathForFile(file);
+  },
+  openExternal(url) {
+    return ipcRenderer.invoke('dex:open-external', url);
   },
   getUpdateStatus() {
     return ipcRenderer.invoke('updater:get-status');

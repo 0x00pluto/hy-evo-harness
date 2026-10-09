@@ -1,5 +1,4 @@
 export function mountSettings({ shell, setStatus, plugins }) {
-  const settingsNav = document.getElementById('settings-nav');
   const settingsSearch = document.getElementById('settings-search');
   const settingsList = document.getElementById('settings-list');
   const settingsScreen = document.getElementById('settings-screen');
@@ -349,7 +348,6 @@ export function mountSettings({ shell, setStatus, plugins }) {
     shell.settingsMode = true;
     settingsSearch.value = '';
     plugins.suspend();
-    settingsNav.hidden = false;
     settingsScreen.hidden = false;
     setStatus('');
     await reloadSettingsCatalog();
@@ -359,15 +357,15 @@ export function mountSettings({ shell, setStatus, plugins }) {
     else clearSettingsMain();
   }
 
-  function leaveSettings() {
+  function leaveSettings(options = {}) {
     const backTo = returnPluginId;
     shell.settingsMode = false;
     activeSettingsId = null;
     settingsDraft = null;
-    settingsNav.hidden = true;
     settingsScreen.hidden = true;
     settingsEntryHost.replaceChildren();
-    plugins.resume(backTo);
+    // 切到插件页时工作区仍应保持挂起，不能把刚才的插件页面露出来。
+    if (options.resume !== false) plugins.resume(backTo);
   }
 
   function onSettingsSearch() {

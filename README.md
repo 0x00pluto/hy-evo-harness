@@ -55,6 +55,7 @@ plugins/         内置示例插件，也可放开发软链接
 - `main`、`uiEntry`、`settingsEntry` 必须是插件目录内的相对路径。
 - `configSchema`：可选。键名是环境变量名，工作台按它生成设置页。没有声明就不要写空对象。
 - `settingsEntry`：可选。插件自带的设置页，和生成的表单读写同一份配置。
+- `description`、`icon`、`developer`、`category`、`website`、`privacyPolicy`、`termsOfService`：可选，只在插件详情里展示。不写也能加载。图标是插件目录内的 png、jpg、jpeg、webp 或 svg。三个链接必须是带主机名的 http(s)。写错的字段不显示，插件仍然加载，也不会进入 `getPluginConfig()` 或 `pluginEnv()`。
 
 `index.js` 导出 `apply` 和可选的 `dispose`：
 
@@ -104,7 +105,7 @@ const result = await window.dex.call('aiComicService', 'renderVideo', [
 
 不要把源码复制进 `plugins/`。任选一种方式：
 
-1. 复制 `config.dev.example.json` 为 `config.dev.json`，把项目绝对路径写进 `extraPluginPaths`。这个文件已忽略，只在未打包时读取。路径可以是「里面放了多个插件的目录」，也可以是「自身就有 manifest 的项目根」。
+1. 复制 `config.dev.example.json` 为 `config.dev.json`，把项目绝对路径写进 `extraPluginPaths`。这个文件已忽略，只在未打包时读取。路径可以是「里面放了多个插件的目录」，也可以是「自身就有 manifest 的项目根」。把 `forceUpdateIcon` 设为 `true` 时，开发版会显示下载图标并打开和线上一样的确认框，方便看界面；确认不会下载或安装。打包后这个开关无效。
 2. 做软链接：
 
 ```bash
@@ -122,7 +123,7 @@ cd plugins
 zip -r ../ai-comic-master-v1.0.0.zip ai-comic-master -x '*.DS_Store' -x '*node_modules*'
 ```
 
-在工作台把 zip 拖进欢迎页，或点击「安装插件」。宿主解压到用户数据目录的 `installed_plugins/<id>/`，校验 manifest 后立刻出现在侧边栏。只有这样安装的插件可以卸载。内置插件和开发路径里的插件不能被安装包覆盖。
+在工作台把 zip 拖进欢迎页，或从图标轨的拼图进入插件页再添加、拖入。宿主解压到用户数据目录的 `installed_plugins/<id>/`，校验 manifest 后出现在插件列表里。欢迎页拖放成功后仍停在欢迎页。只有这样安装的插件可以卸载。内置插件和开发路径里的插件不能被安装包覆盖。
 
 ## 桌面安装包与自动更新
 

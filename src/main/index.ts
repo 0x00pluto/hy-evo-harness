@@ -1,10 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, type IpcMainInvokeEvent, type NativeImage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell, type IpcMainInvokeEvent, type NativeImage } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { readExtraPluginPaths } from './dev-config.ts';
+import { readExtraPluginPaths, readForceUpdateIcon } from './dev-config.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
+import { isHttpUrl } from './manifest.ts';
 import { PluginSettingsStore } from './plugin-settings.ts';
 import { ensurePluginProtocol, pluginPartition, registerPluginScheme } from './protocol.ts';
 import { ServiceRegistry } from './registry.ts';
@@ -53,7 +54,7 @@ function pluginPreloadFile(): string {
 async function loadAllPlugins(): Promise<void> {
   await registry.scanAndLoadPlugins(bundledPluginsDir(), 'bundled');
   if (!app.isPackaged) {
-    const configPath = path.join(app.getAppPath(), 'config.dev.json');
+    const configPath = devConfigPath();
     for (const extra of readExtraPluginPaths(configPath, registry.logger)) {
       await registry.scanAndLoadPlugins(extra, 'dev');
     }
@@ -136,6 +137,8 @@ function createWindow(icon: NativeImage | null): void {
   win.once('ready-to-show', () => {
     win.show();
   });
+  // 宿主页用 img 加载 app-plugin:// 图标。协议原先只挂在插件 partition 上，默认 session 也要有一份。
+  ensurePluginProtocol(registry, '');
   void win.loadFile(path.join(app.getAppPath(), 'src/renderer/index.html'));
 }
 
@@ -162,12 +165,12 @@ async function installFromZip(zipFilePath: string): Promise<DexResult> {
     return { ok: false, message: '请选择 .zip 插件包', plugins: registry.getPluginList() };
   }
   try {
-    const plugins = await installPluginZip({
+    const installed = await installPluginZip({
       registry,
       zipFilePath,
       userPluginsDir: installedPluginsDir(),
     });
-    return { ok: true, plugins };
+    return { ok: true, plugins: installed.plugins, installedId: installed.installedId };
   } catch (err) {
     return {
       ok: false,
@@ -177,7 +180,19 @@ async function installFromZip(zipFilePath: string): Promise<DexResult> {
   }
 }
 
+function devConfigPath(): string {
+  return path.join(app.getAppPath(), 'config.dev.json');
+}
+
+function devFlags(): { forceUpdateIcon: boolean } {
+  // 打包后固定关闭，避免安装包里的开发配置把下载图标留在界面上。
+  if (app.isPackaged) return { forceUpdateIcon: false };
+  return { forceUpdateIcon: readForceUpdateIcon(devConfigPath(), registry.logger) };
+}
+
 function registerIpc(): void {
+  ipcMain.handle('dex:dev-flags', () => devFlags());
+
   ipcMain.handle('dex:list-plugins', () => registry.getPluginList());
 
   ipcMain.handle('dex:local-username', () => {
@@ -250,6 +265,16 @@ function registerIpc(): void {
 
   ipcMain.handle('dex:plugin-settings-save', (event, draft: unknown) => {
     return registry.savePluginSettings(pluginIdFromSender(event), draft);
+  });
+
+  ipcMain.handle('dex:open-external', async (_event, url: unknown) => {
+    if (typeof url !== 'string' || !isHttpUrl(url)) return { ok: false };
+    try {
+      await shell.openExternal(url);
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
   });
 
   ipcMain.handle('dex:uninstall', async (_event, id: unknown) => {

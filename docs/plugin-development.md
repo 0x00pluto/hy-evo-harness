@@ -111,8 +111,15 @@ const result = await window.dex.call('myToolService', 'run', [{ lesson: '6-upper
 - `uiEntry`：页面入口，相对插件根目录。`type` 为 `ui` 时必填。
 - `configSchema`：可选。设置页要生成的字段，见下面「配置」。没有声明就不要写空对象。
 - `settingsEntry`：可选。插件自己的设置页，相对插件根目录。
+- `description`：可选。详情里的简介，去掉首尾空白后 1–280 个字符。
+- `icon`：可选。插件目录内的 `png`、`jpg`、`jpeg`、`webp` 或 `svg`。没写、文件不存在或图片打不开时，列表和详情用默认拼图图标。
+- `developer`：可选。1–64 个字符。
+- `category`：可选。1–32 个字符，详情只展示，不做分类货架。
+- `website`、`privacyPolicy`、`termsOfService`：可选。带主机名的 `http` 或 `https`，最长 300 个字符。工作台用系统浏览器打开。
 
-`main`、`uiEntry` 和 `settingsEntry` 必须落在插件目录里面。不要写绝对路径，也不要写 `../`。
+这些目录字段全部可以不写。没写、或去掉空白后是空字符串，就当作没有。写错了插件仍然加载，详情不显示该字段，并给出一段说明。它们不进 `getPluginConfig()`，也不进 `pluginEnv()`。插件目录由工作台显示在名称旁的文件夹上，不用写进 manifest。
+
+`main`、`uiEntry`、`settingsEntry` 和 `icon` 必须落在插件目录里面。不要写绝对路径，也不要写 `../`。`main`、`uiEntry`、`settingsEntry` 写错会导致加载失败；`icon` 写错只改用默认拼图。
 
 页面里的 CSS、图片、脚本用相对路径即可。Dex Buddy 会按 `uiEntry` 所在位置去找它们。
 
@@ -428,7 +435,7 @@ zip -r my-tool-v1.0.0.zip my-tool \
 
 不要打进 `.git`、`.env`、`.venv`、`node_modules`、`cache/`、`output/`。包里不要出现绝对路径或 `..`。
 
-对方打开 Dex Buddy，把 zip 拖进欢迎页，或点击「安装插件」选这个文件。侧边栏会马上出现，不用重启。同一个已安装插件再次安装会覆盖。如果这个 `id` 已经来自 Dex Buddy 内置目录或开发路径，安装会被拒绝，需要换一个 `id`。
+对方打开 Dex Buddy，把 zip 拖进欢迎页，或从图标轨的拼图进入插件页，点「添加」选这个文件。列表会马上出现，不用重启。同一个已安装插件再次安装会覆盖。如果这个 `id` 已经来自 Dex Buddy 内置目录或开发路径，安装会被拒绝，需要换一个 `id`。
 
 核心是 Python 时，前面示例里的 `python3` 只适合你自己的开发机。开发阶段可以让 `index.js` 调用本机虚拟环境里的解释器，命令行脚本保持原样。
 

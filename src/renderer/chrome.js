@@ -1,26 +1,45 @@
 import {
   canCollapse,
   canGoBack,
-  clearForward,
+  canGoForward,
+  clearNavigation,
   createChromeSession,
+  enterPlugins,
   enterSettings as enterSettingsState,
   goBack,
   goForward,
+  selectPluginsFocus,
   togglePin,
+  usePlugin as usePluginState,
 } from './chrome-state.js';
 
 const LOCAL_USER_LABEL = '本地用户';
 
-export function mountChrome({ settings, setStatus }) {
+export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, applySplitWidth = () => {} }) {
   const backBtn = document.getElementById('history-back');
   const forwardBtn = document.getElementById('history-forward');
   const collapseBtn = document.getElementById('sidebar-toggle');
   const gearBtn = document.getElementById('rail-settings');
   const popover = document.getElementById('gear-popover');
   const usernameEl = document.getElementById('gear-username');
-  const settingsNav = document.getElementById('settings-nav');
-  const settingsSplitter = document.getElementById('settings-splitter');
+  const splitLayout = document.getElementById('split-layout');
+  const settingsSlots = [
+    'settings-heading',
+    'settings-search',
+    'settings-section',
+    'settings-list',
+    'settings-screen',
+  ].map((id) => document.getElementById(id));
+  const pluginsSlots = [
+    'plugins-heading',
+    'plugins-search',
+    'plugins-section',
+    'plugins-list',
+    'plugins-screen',
+  ].map((id) => document.getElementById(id));
+  const titleName = document.getElementById('titlebar-plugin-name');
   const homeBtn = document.getElementById('rail-home');
+  const pluginsBtn = document.getElementById('rail-plugins');
   const sidebar = document.getElementById('sidebar');
   const shortcutEl = document.getElementById('settings-shortcut');
   const usesCommand = document.documentElement.classList.contains('is-mac');
@@ -38,18 +57,30 @@ export function mountChrome({ settings, setStatus }) {
     document.body.dataset.pin = session.pinned ? 'on' : 'off';
     document.body.dataset.surface = session.surface;
     const settingsOpen = session.surface === 'settings';
-    settingsNav.hidden = !settingsOpen;
-    settingsSplitter.hidden = !settingsOpen;
+    const pluginsOpen = session.surface === 'plugins';
+    const workspace = session.surface === 'workspace';
+    splitLayout.hidden = workspace;
+    for (const slot of settingsSlots) slot.hidden = !settingsOpen;
+    for (const slot of pluginsSlots) slot.hidden = !pluginsOpen;
+    if (!workspace) applySplitWidth();
     backBtn.disabled = !canGoBack(session);
-    forwardBtn.disabled = !session.canForward;
-    collapseBtn.hidden = settingsOpen;
+    forwardBtn.disabled = !canGoForward(session);
+    collapseBtn.hidden = !workspace;
     collapseBtn.disabled = !canCollapse(session);
     collapseBtn.setAttribute('aria-pressed', session.pinned ? 'false' : 'true');
+    titleName.textContent = workspace ? workspacePluginName() : '';
     if (!floating()) {
       window.clearTimeout(closeTimer);
       sidebar.classList.remove('is-open');
     }
-    if (session.surface !== 'workspace') setPopover(false);
+    if (!workspace) setPopover(false);
+    pluginsPage.sync(session);
+  }
+
+  function workspacePluginName() {
+    if (!shell.activeId) return '';
+    const plugin = shell.plugins.find((item) => item.id === shell.activeId);
+    return plugin ? plugin.displayName : '';
   }
 
   function openFloat() {
@@ -94,29 +125,50 @@ export function mountChrome({ settings, setStatus }) {
     }
   }
 
-  function leaveToWorkspace() {
+  function onBack() {
+    const from = session.surface;
     const next = goBack(session);
     if (next === session) return;
     session = next;
-    settings.leaveSettings();
+    if (from === 'settings') settings.leaveSettings({ resume: session.surface === 'workspace' });
+    if (from === 'plugins' && session.surface === 'workspace') plugins.resume(shell.activeId);
+    if (from === 'workspace' && session.surface === 'plugins') plugins.suspend();
     apply();
   }
 
-  backBtn.addEventListener('click', leaveToWorkspace);
+  function openPlugins() {
+    const from = session.surface;
+    const next = enterPlugins(session);
+    if (next === session) return;
+    session = next;
+    if (from === 'settings') settings.leaveSettings({ resume: false });
+    if (from === 'workspace') plugins.suspend();
+    if (from !== 'plugins') pluginsPage.clearStatus();
+    apply();
+  }
+
+  backBtn.addEventListener('click', onBack);
 
   homeBtn.addEventListener('click', () => {
-    if (session.surface !== 'settings') return;
-    leaveToWorkspace();
+    if (session.surface === 'workspace') return;
+    onBack();
   });
+
+  pluginsBtn.addEventListener('click', openPlugins);
 
   forwardBtn.addEventListener('click', () => {
     const next = goForward(session);
     if (next === session) return;
     session = next;
+    if (session.surface === 'settings') {
+      apply();
+      void settings.enterSettings().catch((err) => {
+        setStatus(err instanceof Error ? err.message : '无法打开设置', 'error');
+      });
+      return;
+    }
+    if (session.surface === 'plugins') plugins.suspend();
     apply();
-    void settings.enterSettings().catch((err) => {
-      setStatus(err instanceof Error ? err.message : '无法打开设置', 'error');
-    });
   });
 
   collapseBtn.addEventListener('click', () => {
@@ -165,8 +217,30 @@ export function mountChrome({ settings, setStatus }) {
   apply();
 
   return {
-    clearForward() {
-      const next = clearForward(session);
+    session() {
+      return session;
+    },
+    refresh() {
+      apply();
+    },
+    enterPlugins: openPlugins,
+    focusPlugin(pluginId) {
+      const next = selectPluginsFocus(session, pluginId);
+      if (next === session) return;
+      session = next;
+      apply();
+    },
+    async usePlugin(pluginId) {
+      const plugin = shell.plugins.find((item) => item.id === pluginId);
+      if (!plugin) return;
+      shell.activeId = pluginId;
+      session = usePluginState(session, pluginId);
+      apply();
+      await plugins.openPlugin(plugin);
+      apply();
+    },
+    clearNavigation() {
+      const next = clearNavigation(session);
       if (next === session) return;
       session = next;
       apply();

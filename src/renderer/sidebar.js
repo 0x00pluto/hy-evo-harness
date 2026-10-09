@@ -1,3 +1,5 @@
+import { splitWidthKey } from './chrome-state.js';
+
 const COLUMN_DEFAULT = 292;
 const COLUMN_MIN = 220;
 const COLUMN_MAX = 480;
@@ -14,9 +16,15 @@ function mountResizableColumn({ column, splitter, storageKey, cssVariable }) {
     return next;
   }
 
+  function currentKey() {
+    return typeof storageKey === 'function' ? storageKey() : storageKey;
+  }
+
   function readWidth() {
+    const key = currentKey();
+    if (!key) return COLUMN_DEFAULT;
     try {
-      const raw = localStorage.getItem(storageKey);
+      const raw = localStorage.getItem(key);
       if (raw == null || raw === '') return COLUMN_DEFAULT;
       const width = Number(raw);
       if (!Number.isFinite(width)) return COLUMN_DEFAULT;
@@ -27,8 +35,10 @@ function mountResizableColumn({ column, splitter, storageKey, cssVariable }) {
   }
 
   function storeWidth(width) {
+    const key = currentKey();
+    if (!key) return;
     try {
-      localStorage.setItem(storageKey, String(width));
+      localStorage.setItem(key, String(width));
     } catch {
       // 隐私模式写不进去时，这次会话里的宽度仍然有效。
     }
@@ -73,6 +83,8 @@ function mountResizableColumn({ column, splitter, storageKey, cssVariable }) {
     const delta = event.key === 'ArrowRight' ? 16 : -16;
     storeWidth(applyWidth(current + delta));
   });
+
+  return { applyStoredWidth() { applyWidth(readWidth()); } };
 }
 
 export function mountSidebar() {
@@ -82,11 +94,12 @@ export function mountSidebar() {
     storageKey: 'dex.sidebarWidth',
     cssVariable: '--sidebar-width',
   });
-  // 设置左栏和宽侧栏宽度分开记，避免拖一边时改掉另一边。
-  mountResizableColumn({
-    column: document.getElementById('settings-nav'),
-    splitter: document.getElementById('settings-splitter'),
-    storageKey: 'dex.settingsNavWidth',
-    cssVariable: '--settings-nav-width',
+  // 画面上只有一条分隔。拖的时候按当前表面写入对应的宽度键，避免改一边带掉另一边。
+  const split = mountResizableColumn({
+    column: document.getElementById('split-nav'),
+    splitter: document.getElementById('split-splitter'),
+    storageKey: () => splitWidthKey(document.body.dataset.surface),
+    cssVariable: '--split-nav-width',
   });
+  return { applySplitWidth: split.applyStoredWidth };
 }

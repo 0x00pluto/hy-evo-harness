@@ -1,17 +1,16 @@
-export function mountPlugins({ shell, setStatus, settings, onClearForward = () => {} }) {
+export function mountPlugins({
+  shell,
+  setStatus,
+  settings,
+  onClearNavigation = () => {},
+  onWorkspaceChanged = () => {},
+  onListChanged = () => {},
+}) {
   const nav = document.getElementById('plugin-nav');
   const welcome = document.getElementById('welcome-screen');
   const headless = document.getElementById('headless-screen');
   const viewportHost = document.getElementById('viewport-host');
-  const toolbar = document.getElementById('plugin-toolbar');
   const dropZone = document.getElementById('drop-zone');
-  const installButtons = [
-    document.getElementById('rail-install'),
-    document.getElementById('titlebar-install'),
-  ];
-  const uninstallBtn = document.getElementById('uninstall-btn');
-  const uninstallHeadless = document.getElementById('uninstall-headless');
-  const pluginTitle = document.getElementById('plugin-title');
   const headlessTitle = document.getElementById('headless-title');
   const pluginPane = document.getElementById('plugin-pane');
 
@@ -54,8 +53,8 @@ export function mountPlugins({ shell, setStatus, settings, onClearForward = () =
 
       button.append(top, meta);
       button.addEventListener('click', () => {
-        // 从设置返回时 resume 会再次打开插件，那种恢复不能清掉前进。
-        onClearForward();
+        // 从宽侧栏打开插件会打断「回到插件详情」和前进。
+        onClearNavigation();
         void openPlugin(plugin);
       });
       nav.appendChild(button);
@@ -66,11 +65,11 @@ export function mountPlugins({ shell, setStatus, settings, onClearForward = () =
     shell.activeId = null;
     welcome.hidden = false;
     headless.hidden = true;
-    toolbar.hidden = true;
     viewportHost.hidden = true;
     viewportHost.replaceChildren();
     settings.dismissSurface();
     renderNav();
+    onWorkspaceChanged();
   }
 
   async function openPlugin(plugin) {
@@ -84,10 +83,7 @@ export function mountPlugins({ shell, setStatus, settings, onClearForward = () =
         const prepared = await window.dex.preparePlugin(plugin.id);
         welcome.hidden = true;
         headless.hidden = true;
-        toolbar.hidden = false;
         viewportHost.hidden = false;
-        pluginTitle.textContent = plugin.displayName;
-        uninstallBtn.hidden = plugin.source !== 'installed';
         viewportHost.replaceChildren();
         const webview = document.createElement('webview');
         webview.setAttribute('partition', prepared.partition);
@@ -95,68 +91,57 @@ export function mountPlugins({ shell, setStatus, settings, onClearForward = () =
         webview.setAttribute('webpreferences', 'contextIsolation=yes,nodeIntegration=no,sandbox=yes');
         webview.setAttribute('src', plugin.uiUrl);
         viewportHost.appendChild(webview);
+        onWorkspaceChanged();
         return;
       }
 
       welcome.hidden = true;
-      toolbar.hidden = true;
       viewportHost.hidden = true;
       viewportHost.replaceChildren();
       headless.hidden = false;
       headlessTitle.textContent = plugin.displayName;
-      uninstallHeadless.hidden = plugin.source !== 'installed';
+      onWorkspaceChanged();
     } catch (err) {
       showWelcome();
       setStatus(err instanceof Error ? err.message : '打开插件失败', 'error');
     }
   }
 
+  function forgetWorkspacePlugin() {
+    shell.activeId = null;
+    welcome.hidden = false;
+    headless.hidden = true;
+    viewportHost.hidden = true;
+    viewportHost.replaceChildren();
+    renderNav();
+    onWorkspaceChanged();
+  }
+
   async function refresh(nextPlugins) {
     shell.plugins = nextPlugins || (await window.dex.listPlugins());
+    renderNav();
+    onListChanged();
     if (shell.settingsMode) {
       await settings.onPluginsChanged();
       return;
     }
     if (shell.activeId && !shell.plugins.some((plugin) => plugin.id === shell.activeId)) {
-      showWelcome();
-      return;
+      if (document.body.dataset.surface === 'workspace') showWelcome();
+      else forgetWorkspacePlugin();
     }
-    renderNav();
   }
 
-  async function installFromPath(zipPath) {
+  async function installZip(zipPath) {
     if (!zipPath || !zipPath.toLowerCase().endsWith('.zip')) {
-      setStatus('请拖入 .zip 插件包', 'error');
-      return;
+      return { ok: false, message: '请拖入 .zip 插件包' };
     }
-    setStatus('正在安装…');
-    const result = await window.dex.installZip(zipPath);
-    if (!result.ok) {
-      setStatus(result.message || '安装失败', 'error');
-      return;
-    }
-    setStatus('插件已安装', 'ok');
-    await refresh(result.plugins);
-  }
-
-  async function uninstallActive() {
-    if (!shell.activeId) return;
-    const result = await window.dex.uninstall(shell.activeId);
-    if (!result.ok) {
-      setStatus(result.message || '卸载失败', 'error');
-      await refresh(result.plugins);
-      return;
-    }
-    setStatus('插件已卸载', 'ok');
-    showWelcome();
-    await refresh(result.plugins);
+    return window.dex.installZip(zipPath);
   }
 
   function suspend() {
     pluginPane.hidden = true;
     welcome.hidden = true;
     headless.hidden = true;
-    toolbar.hidden = true;
     viewportHost.hidden = true;
     viewportHost.replaceChildren();
   }
@@ -167,32 +152,6 @@ export function mountPlugins({ shell, setStatus, settings, onClearForward = () =
     if (plugin) void openPlugin(plugin);
     else showWelcome();
   }
-
-  async function installFromPicker() {
-    onClearForward();
-    const result = await window.dex.pickAndInstall();
-    if (result.cancelled) return;
-    if (!result.ok) {
-      setStatus(result.message || '安装失败', 'error');
-      await refresh(result.plugins);
-      return;
-    }
-    setStatus('插件已安装', 'ok');
-    await refresh(result.plugins);
-  }
-
-  for (const installBtn of installButtons) {
-    installBtn.addEventListener('click', () => {
-      void installFromPicker();
-    });
-  }
-
-  uninstallBtn.addEventListener('click', () => {
-    void uninstallActive();
-  });
-  uninstallHeadless.addEventListener('click', () => {
-    void uninstallActive();
-  });
 
   window.addEventListener('dragover', (event) => event.preventDefault());
   window.addEventListener('drop', (event) => event.preventDefault());
@@ -206,13 +165,27 @@ export function mountPlugins({ shell, setStatus, settings, onClearForward = () =
   });
   dropZone.addEventListener('drop', (event) => {
     event.preventDefault();
+    event.stopPropagation();
     dropZone.classList.remove('dragover');
     const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
     if (!file) return;
-    onClearForward();
+    onClearNavigation();
     const zipPath = window.dex.pathForFile(file);
-    void installFromPath(zipPath);
+    void (async () => {
+      if (!zipPath || !zipPath.toLowerCase().endsWith('.zip')) {
+        setStatus('请拖入 .zip 插件包', 'error');
+        return;
+      }
+      setStatus('正在安装…');
+      const result = await installZip(zipPath);
+      if (!result.ok) {
+        setStatus(result.message || '安装失败', 'error');
+        return;
+      }
+      setStatus('插件已安装', 'ok');
+      await refresh(result.plugins);
+    })();
   });
 
-  return { refresh, suspend, resume };
+  return { refresh, suspend, resume, openPlugin, installZip, showWelcome };
 }

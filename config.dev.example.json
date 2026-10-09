@@ -1,3 +1,4 @@
 {
-  "extraPluginPaths": []
+  "extraPluginPaths": [],
+  "forceUpdateIcon": false
 }

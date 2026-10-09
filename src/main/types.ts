@@ -52,6 +52,16 @@ export interface PluginManifest {
   configSchema?: ConfigSchema;
   /** 写出了 configSchema 但整份声明不可用。插件仍然加载。 */
   configSchemaError?: string;
+  description?: string;
+  /** 插件目录内的相对路径。文件不存在时不会留下这个字段。 */
+  icon?: string;
+  developer?: string;
+  category?: string;
+  website?: string;
+  privacyPolicy?: string;
+  termsOfService?: string;
+  /** 目录字段写了但不合法。插件仍然加载，非法字段不展示。 */
+  catalogError?: string;
 }
 
 export interface AppPlugin {
@@ -69,6 +79,16 @@ export interface PluginSummary {
   type: PluginKind;
   uiUrl: string | null;
   source: PluginSource;
+  /** 插件目录的绝对路径，只用于详情里的目录提示。 */
+  rootPath: string;
+  description?: string;
+  iconUrl?: string;
+  developer?: string;
+  category?: string;
+  website?: string;
+  privacyPolicy?: string;
+  termsOfService?: string;
+  catalogError?: string;
 }
 
 export interface DexResult {
@@ -76,4 +96,6 @@ export interface DexResult {
   cancelled?: boolean;
   message?: string;
   plugins: PluginSummary[];
+  /** 本次安装成功的插件 id。覆盖安装同一个 id 时界面靠它打开详情。 */
+  installedId?: string;
 }

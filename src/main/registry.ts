@@ -104,17 +104,7 @@ export class ServiceRegistry {
   }
 
   getPluginList(): PluginSummary[] {
-    return Array.from(this.plugins.values()).map((plugin) => ({
-      id: plugin.manifest.id,
-      displayName: plugin.manifest.displayName,
-      version: plugin.manifest.version,
-      type: plugin.manifest.type,
-      uiUrl:
-        plugin.manifest.type === 'ui' && plugin.manifest.uiEntry
-          ? `app-plugin://${plugin.manifest.id}/${plugin.manifest.uiEntry}`
-          : null,
-      source: plugin.source,
-    }));
+    return Array.from(this.plugins.values()).map((plugin) => summarizePlugin(plugin));
   }
 
   async callService(serviceName: string, method: string, args: unknown[]): Promise<unknown> {
@@ -301,6 +291,34 @@ export class ServiceRegistry {
     owned.listeners.length = 0;
   }
 
+}
+
+function summarizePlugin(plugin: AppPlugin): PluginSummary {
+  const manifest = plugin.manifest;
+  const summary: PluginSummary = {
+    id: manifest.id,
+    displayName: manifest.displayName,
+    version: manifest.version,
+    type: manifest.type,
+    uiUrl:
+      manifest.type === 'ui' && manifest.uiEntry
+        ? `app-plugin://${manifest.id}/${manifest.uiEntry}`
+        : null,
+    source: plugin.source,
+    rootPath: plugin.absPath,
+  };
+  if (manifest.description) summary.description = manifest.description;
+  if (manifest.icon) {
+    const iconPath = manifest.icon.split(/[/\\]/).map((part) => encodeURIComponent(part)).join('/');
+    summary.iconUrl = `app-plugin://${manifest.id}/${iconPath}`;
+  }
+  if (manifest.developer) summary.developer = manifest.developer;
+  if (manifest.category) summary.category = manifest.category;
+  if (manifest.website) summary.website = manifest.website;
+  if (manifest.privacyPolicy) summary.privacyPolicy = manifest.privacyPolicy;
+  if (manifest.termsOfService) summary.termsOfService = manifest.termsOfService;
+  if (manifest.catalogError) summary.catalogError = manifest.catalogError;
+  return summary;
 }
 
 function loadCommonJs(entryPath: string): PluginModule {

@@ -7,7 +7,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { crc32 } from 'node:zlib';
-import { readExtraPluginPaths } from '../src/main/dev-config.ts';
+import { readExtraPluginPaths, readForceUpdateIcon } from '../src/main/dev-config.ts';
 import { assertZipEntriesSafe, installPluginZip, uninstallInstalledPlugin } from '../src/main/install.ts';
 import { resolvePluginAsset, resolvePluginFile } from '../src/main/protocol.ts';
 import { DuplicatePluginError, ServiceRegistry } from '../src/main/registry.ts';
@@ -107,6 +107,7 @@ test('路径本身是插件根时直接加载', async (t) => {
   const registry = new ServiceRegistry(silent);
   await registry.scanAndLoadPlugins(root, 'dev');
   assert.equal(registry.getPluginList()[0]?.source, 'dev');
+  assert.equal(registry.getPluginList()[0]?.rootPath, path.resolve(root));
   assert.equal(registry.getPlugin('solo')?.manifest.displayName, '独立插件');
 });
 
@@ -290,6 +291,12 @@ test('开发配置只返回有效的额外路径', (t) => {
   const config = path.join(root, 'config.dev.json');
   fs.writeFileSync(config, JSON.stringify({ extraPluginPaths: ['/tmp/plugin-a', '', 3] }));
   assert.deepEqual(readExtraPluginPaths(config, logger), ['/tmp/plugin-a']);
+  assert.equal(readForceUpdateIcon(config, logger), false);
+  fs.writeFileSync(config, JSON.stringify({ extraPluginPaths: [], forceUpdateIcon: true }));
+  assert.equal(readForceUpdateIcon(config, logger), true);
+  fs.writeFileSync(config, JSON.stringify({ extraPluginPaths: [], forceUpdateIcon: 'yes' }));
+  assert.equal(readForceUpdateIcon(config, logger), false);
+  assert.equal(readForceUpdateIcon(path.join(root, 'missing.json'), logger), false);
   assert.ok(errors.length >= 2);
 });
 
@@ -308,7 +315,7 @@ test('zip 安装后可调用，再次安装会替换，卸载后服务消失', a
   const installed = path.join(work, 'installed');
   const registry = new ServiceRegistry(silent);
   const list = await installPluginZip({ registry, zipFilePath: zipV1, userPluginsDir: installed });
-  assert.equal(list.some((item) => item.id === 'sample-tool' && item.source === 'installed'), true);
+  assert.equal(list.plugins.some((item) => item.id === 'sample-tool' && item.source === 'installed'), true);
   assert.equal(await registry.callService('sampleTool', 'ping', []), 'v1');
 
   fs.writeFileSync(

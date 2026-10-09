@@ -13,6 +13,11 @@ const ICON_NAMES = [
   'CircleHelp',
   'ChevronRight',
   'Download',
+  'Puzzle',
+  'Folder',
+  'RefreshCw',
+  'Trash2',
+  'ExternalLink',
 ];
 
 export function mountIcons(root = document) {
