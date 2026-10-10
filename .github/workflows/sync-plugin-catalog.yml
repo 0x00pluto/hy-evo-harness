@@ -23,7 +23,6 @@ jobs:
       QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
       QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
       PLUGIN_CHECKOUT_TOKEN: ${{ secrets.PLUGIN_CHECKOUT_TOKEN }}
-      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
