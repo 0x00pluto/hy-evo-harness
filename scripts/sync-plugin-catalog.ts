@@ -88,6 +88,8 @@ async function prepare(repository: string, tag: string): Promise<PreparedPlugin>
       version: packed.release.version,
       zipPath: packed.zipPath,
       jsonPath: packed.jsonPath,
+      iconPath: packed.iconPath,
+      iconUrl: packed.release.iconUrl,
     };
   } catch (error) {
     fs.rmSync(work, { recursive: true, force: true });
@@ -106,8 +108,11 @@ async function hasZip(id: string, version: string): Promise<boolean> {
 
 async function upload(plugin: PreparedPlugin): Promise<void> {
   const prefix = `dex-buddy/plugins/${plugin.id}/${plugin.version}`;
-  // zip 是「已经发布」的标记。先传说明，再传 zip，中途失败时下次还会重试。
+  // zip 是「已经发布」的标记。先传说明，有图标再传图标，最后传 zip。中途失败时下次还会重试。
   put(`${prefix}.json`, plugin.jsonPath);
+  if (plugin.iconPath && plugin.iconUrl) {
+    put(new URL(plugin.iconUrl).pathname.replace(/^\//, ''), plugin.iconPath);
+  }
   put(`${prefix}.zip`, plugin.zipPath);
 }
 
@@ -141,6 +146,7 @@ async function rebuild(published: PreparedPlugin[]): Promise<void> {
     ...published.flatMap((plugin) => [
       `${PLUGIN_CDN_BASE}/${plugin.id}/${plugin.version}.zip`,
       `${PLUGIN_CDN_BASE}/${plugin.id}/${plugin.version}.json`,
+      ...(plugin.iconUrl ? [plugin.iconUrl] : []),
     ]),
     `${PLUGIN_CDN_BASE}/index.json`,
   ];

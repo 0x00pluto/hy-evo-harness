@@ -32,7 +32,8 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
   ].map((id) => document.getElementById(id));
   const pluginsSlots = [
     'plugins-heading',
-    'plugins-search',
+    'plugins-search-toggle',
+    'plugins-market-entry',
     'plugins-section',
     'plugins-list',
     'plugins-screen',
@@ -62,6 +63,10 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     splitLayout.hidden = workspace;
     for (const slot of settingsSlots) slot.hidden = !settingsOpen;
     for (const slot of pluginsSlots) slot.hidden = !pluginsOpen;
+    if (!pluginsOpen) {
+      document.getElementById('plugins-search').hidden = true;
+      document.getElementById('plugins-search-toggle').setAttribute('aria-expanded', 'false');
+    }
     if (!workspace) applySplitWidth();
     backBtn.disabled = !canGoBack(session);
     forwardBtn.disabled = !canGoForward(session);
@@ -140,19 +145,16 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
 
   async function openPlugins() {
     const from = session.surface;
-    pluginsPage.showInstallStage();
     const next = enterPlugins(session);
-    if (next === session) {
-      apply();
-      return;
+    if (next !== session) {
+      if (from === 'settings' && !(await settings.confirmDiscard())) return;
+      session = next;
+      if (from === 'settings') settings.leaveSettings({ resume: false });
+      if (from === 'workspace') plugins.suspend();
+      if (from !== 'plugins') pluginsPage.clearStatus();
     }
-    if (from === 'settings' && !(await settings.confirmDiscard())) return;
-    session = next;
-    if (from === 'settings') settings.leaveSettings({ resume: false });
-    if (from === 'workspace') plugins.suspend();
-    if (from !== 'plugins') pluginsPage.clearStatus();
-    pluginsPage.showInstallStage();
     apply();
+    if (from !== 'plugins') void pluginsPage.refreshCatalog();
   }
 
   backBtn.addEventListener('click', () => {

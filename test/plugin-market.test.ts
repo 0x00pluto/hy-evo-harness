@@ -9,8 +9,11 @@ import {
   assertAllowedPluginZipUrl,
   buildPluginCatalog,
   compareSemver,
+  groupReleasesByCategory,
   parsePluginCatalog,
   parsePluginRelease,
+  pluginIconUrl,
+  pluginInstallPath,
   pluginZipUrl,
   releaseKeysFromList,
   versionFromTag,
@@ -74,9 +77,55 @@ test('列举七牛键时只留下版本说明', () => {
     'dex-buddy/plugins/index.json\t1',
     'dex-buddy/plugins/manju-studio/0.1.1.json\t2',
     'dex-buddy/plugins/manju-studio/0.1.1.zip\t3',
+    'dex-buddy/plugins/manju-studio/0.1.1.icon.png\t5',
     'dex-buddy/plugins/manju-studio/notes.json\t4',
   ].join('\n');
   assert.deepEqual(releaseKeysFromList(text), ['dex-buddy/plugins/manju-studio/0.1.1.json']);
+});
+
+test('目录接受可选分类和图标，非法字段丢掉但条目还在', () => {
+  const release = {
+    id: 'manju-studio',
+    displayName: '漫剧操作台',
+    version: '0.1.1',
+    description: '生成分镜',
+    category: ' 创作 ',
+    iconUrl: pluginIconUrl('manju-studio', '0.1.1', 'png'),
+    downloadUrl: pluginZipUrl('manju-studio', '0.1.1'),
+    sha256: 'a'.repeat(64),
+  };
+  const parsed = parsePluginRelease(release);
+  assert.equal(parsed?.category, '创作');
+  assert.equal(parsed?.iconUrl, pluginIconUrl('manju-studio', '0.1.1', 'png'));
+  assert.equal(parsePluginRelease({ ...release, category: undefined, iconUrl: undefined })?.id, 'manju-studio');
+
+  const badIcon = parsePluginRelease({ ...release, iconUrl: 'https://example.com/icon.png' });
+  assert.equal(badIcon?.id, 'manju-studio');
+  assert.equal(badIcon?.iconUrl, undefined);
+  assert.equal(parsePluginRelease({ ...release, iconUrl: pluginIconUrl('other', '0.1.1', 'png') })?.iconUrl, undefined);
+  assert.equal(parsePluginRelease({ ...release, iconUrl: pluginIconUrl('manju-studio', '0.1.1', 'gif') })?.iconUrl, undefined);
+  assert.equal(parsePluginRelease({ ...release, iconUrl: pluginIconUrl('manju-studio', '9.9.9', 'png') })?.iconUrl, undefined);
+
+  const badCategory = parsePluginRelease({ ...release, category: 'x'.repeat(33) });
+  assert.equal(badCategory?.id, 'manju-studio');
+  assert.equal(badCategory?.category, undefined);
+  assert.equal(parsePluginRelease({ ...release, category: '   ' })?.category, undefined);
+  assert.equal(parsePluginRelease({ ...release, category: 12 })?.category, undefined);
+});
+
+test('预计路径落在用户插件目录，分类把其他放在最后', () => {
+  assert.equal(pluginInstallPath('/tmp/user/installed_plugins', 'manju-studio'), path.join('/tmp/user/installed_plugins', 'manju-studio'));
+  assert.throws(() => pluginInstallPath('/tmp/user/installed_plugins', '../escape'), /id/);
+  const groups = groupReleasesByCategory([
+    { displayName: '乙', category: '工具' },
+    { displayName: '甲' },
+    { displayName: '丙', category: '其他' },
+    { displayName: '丁', category: '创作' },
+    { displayName: '戊', category: '工具' },
+  ]);
+  assert.deepEqual(groups.map((group) => group.category), ['创作', '工具', '其他']);
+  assert.deepEqual(groups[1]?.plugins.map((item) => item.displayName), ['戊', '乙']);
+  assert.deepEqual(groups[2]?.plugins.map((item) => item.displayName), ['丙', '甲']);
 });
 
 test('打包跳过密钥和依赖目录，保留示例环境文件', () => {
@@ -141,6 +190,33 @@ test('pack 决定包含范围，ignore 再挖掉，宿主排除仍然生效', ()
   assert.throws(() => parsePackPatterns('**/*.md\n', 'dex-buddy-plugin.ignore'), /第 1 行无效/);
 });
 
+test('漏写目录斜杠时，清单点名的入口不在包里就失败', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-pack-'));
+  const source = path.join(root, 'plugin');
+  fs.mkdirSync(path.join(source, 'src'), { recursive: true });
+  fs.mkdirSync(path.join(source, '__pycache__'));
+  fs.writeFileSync(path.join(source, 'plugin.manifest.json'), JSON.stringify({
+    id: 'sample-tool',
+    displayName: '示例',
+    version: '1.2.0',
+    type: 'headless',
+    main: 'index.js',
+  }));
+  fs.writeFileSync(path.join(source, 'index.js'), 'module.exports = {};');
+  fs.writeFileSync(path.join(source, 'src', 'app.py'), 'print(1)');
+  fs.writeFileSync(path.join(source, '__pycache__', 'x.pyc'), 'byte');
+  fs.writeFileSync(path.join(source, 'dex-buddy-plugin.pack'), 'plugin.manifest.json\nsrc\n');
+  await assert.rejects(
+    () => packPluginRelease({ sourceDir: source, tag: 'v1.2.0', outDir: path.join(root, 'out') }),
+    /main（index\.js）/,
+  );
+  assert.equal(shouldPackRelative('__pycache__/x.pyc'), false);
+  assert.equal(shouldPackRelative('src/app.pyc'), false);
+  fs.writeFileSync(path.join(source, 'dex-buddy-plugin.pack'), '# 只有注释\n');
+  assert.deepEqual(listPackPaths(source), []);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('按 tag 打包后校验值写进版本说明', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-pack-'));
   const source = path.join(root, 'plugin');
@@ -165,6 +241,38 @@ test('按 tag 打包后校验值写进版本说明', async () => {
     () => packPluginRelease({ sourceDir: source, tag: 'v1.2.1', outDir: path.join(root, 'out') }),
     /不一致/,
   );
+  assert.equal(packed.release.iconUrl, undefined);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('打包把分类和图标地址写进版本说明', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-pack-'));
+  const source = path.join(root, 'plugin');
+  fs.mkdirSync(source);
+  fs.writeFileSync(path.join(source, 'plugin.manifest.json'), JSON.stringify({
+    id: 'sample-tool',
+    displayName: '示例',
+    version: '1.2.0',
+    type: 'headless',
+    main: 'index.js',
+    category: '创作',
+    icon: 'icon.png',
+  }));
+  fs.writeFileSync(path.join(source, 'index.js'), 'module.exports = {};');
+  fs.writeFileSync(path.join(source, 'icon.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  const packed = await packPluginRelease({ sourceDir: source, tag: 'v1.2.0', outDir: path.join(root, 'out') });
+  assert.equal(packed.release.category, '创作');
+  assert.equal(packed.release.iconUrl, pluginIconUrl('sample-tool', '1.2.0', 'png'));
+  assert.equal(packed.iconPath && fs.existsSync(packed.iconPath), true);
+  const written = JSON.parse(fs.readFileSync(packed.jsonPath, 'utf8')) as { category?: string; iconUrl?: string };
+  assert.equal(written.category, '创作');
+  assert.equal(written.iconUrl, pluginIconUrl('sample-tool', '1.2.0', 'png'));
+
+  fs.rmSync(path.join(source, 'icon.png'));
+  const missing = await packPluginRelease({ sourceDir: source, tag: 'v1.2.0', outDir: path.join(root, 'out') });
+  assert.equal(missing.release.iconUrl, undefined);
+  assert.equal(missing.iconPath, undefined);
+  assert.equal(missing.release.category, '创作');
   fs.rmSync(root, { recursive: true, force: true });
 });
 

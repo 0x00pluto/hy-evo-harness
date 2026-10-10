@@ -10,6 +10,9 @@ export interface PreparedPlugin {
   version: string;
   zipPath: string;
   jsonPath: string;
+  /** 这一版带了图标时才有。已有 zip 的版本整版跳过，不会补传。 */
+  iconPath?: string;
+  iconUrl?: string;
 }
 
 export interface CatalogSyncClient {

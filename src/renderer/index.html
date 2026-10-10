@@ -26,6 +26,13 @@
     </div>
     <div id="titlebar-plugin-name"></div>
   </div>
+  <div id="shell-toast" class="shell-toast" role="status" hidden>
+    <span id="shell-toast-icon"></span>
+    <span id="shell-toast-text"></span>
+    <button id="shell-toast-close" type="button" aria-label="关闭">
+      <i data-lucide="x"></i>
+    </button>
+  </div>
   <div id="shell">
   <nav id="rail" aria-label="图标轨">
     <div class="rail-top">
@@ -122,11 +129,18 @@
         <div class="split-heading">
           <h2 id="settings-heading" hidden>设置</h2>
           <h2 id="plugins-heading" hidden>插件</h2>
+          <button id="plugins-search-toggle" class="plugin-icon-btn" type="button" aria-label="搜索插件" aria-expanded="false" aria-controls="plugins-search" hidden>
+            <i data-lucide="search"></i>
+          </button>
         </div>
         <div class="split-search">
           <input id="settings-search" type="search" placeholder="搜索" aria-label="搜索设置" autocomplete="off" hidden>
-          <input id="plugins-search" type="search" placeholder="搜索" aria-label="搜索插件" autocomplete="off" hidden>
+          <input id="plugins-search" type="search" placeholder="搜索插件" aria-label="搜索插件" autocomplete="off" hidden>
         </div>
+        <button id="plugins-market-entry" class="nav-item plugins-market-entry" type="button" hidden>
+          <i data-lucide="layout-grid"></i>
+          <span>插件市场</span>
+        </button>
         <div class="split-section">
           <div id="settings-section" class="section-title" hidden>插件</div>
           <div id="plugins-section" class="section-title" hidden>已安装</div>
@@ -150,33 +164,16 @@
       <div class="split-main">
         <section id="plugins-screen" hidden>
           <p id="plugins-status" role="status"></p>
-          <div id="plugins-install">
+          <div id="plugins-market">
             <div class="split-main-bar plugins-stage-bar">
               <h1>插件</h1>
               <div class="plugins-stage-actions">
-                <button id="plugins-refresh" type="button" aria-label="刷新">
+                <input id="plugins-market-search" type="search" placeholder="搜索插件" aria-label="搜索插件" autocomplete="off">
+                <button id="plugins-refresh" type="button" aria-label="刷新插件市场">
                   <i data-lucide="refresh-cw"></i>
                 </button>
-                <button id="plugins-market-open" type="button">插件中心</button>
-                <button id="plugins-add" type="button">
+                <button id="plugins-add" class="plugin-icon-btn" type="button" aria-label="添加插件">
                   <i data-lucide="plus"></i>
-                  <span>添加</span>
-                </button>
-              </div>
-            </div>
-            <div id="plugins-drop" tabindex="0">
-              <i data-lucide="puzzle"></i>
-              <p>把插件压缩包拖到这里</p>
-              <p class="plugins-drop-hint">或点右上角的添加，选择 .zip</p>
-            </div>
-          </div>
-          <div id="plugins-market" hidden>
-            <div class="split-main-bar plugins-stage-bar">
-              <h1>插件中心</h1>
-              <div class="plugins-stage-actions">
-                <button id="plugins-market-back" type="button">安装台</button>
-                <button id="plugins-market-refresh" type="button" aria-label="刷新插件中心">
-                  <i data-lucide="refresh-cw"></i>
                 </button>
               </div>
             </div>

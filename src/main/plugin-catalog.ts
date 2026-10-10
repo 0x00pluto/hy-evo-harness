@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { isPluginId } from './manifest.ts';
 
 export const PLUGIN_CDN_HOST = 'oss.ai.66plat.com';
@@ -5,17 +6,26 @@ export const PLUGIN_CDN_BASE = `https://${PLUGIN_CDN_HOST}/dex-buddy/plugins`;
 export const PLUGIN_CATALOG_URL = `${PLUGIN_CDN_BASE}/index.json`;
 export const MAX_PLUGIN_ZIP_BYTES = 512 * 1024 * 1024;
 export const MAX_CATALOG_BYTES = 1024 * 1024;
+export const OTHER_CATEGORY = '其他';
 
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const SHA256_HEX = /^[a-f0-9]{64}$/i;
+const ICON_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'svg']);
 
 export interface PluginRelease {
   id: string;
   displayName: string;
   version: string;
   description?: string;
+  category?: string;
+  iconUrl?: string;
   downloadUrl: string;
   sha256: string;
+}
+
+export interface ReleaseCategoryGroup<T extends { category?: string; displayName: string }> {
+  category: string;
+  plugins: T[];
 }
 
 export interface PluginCatalog {
@@ -53,6 +63,16 @@ export function pluginZipUrl(id: string, version: string): string {
   return `${PLUGIN_CDN_BASE}/${id}/${version}.zip`;
 }
 
+export function pluginIconUrl(id: string, version: string, ext: string): string {
+  return `${PLUGIN_CDN_BASE}/${id}/${version}.icon.${ext.toLowerCase()}`;
+}
+
+/** 预计安装目录。id 已经过清单校验，渲染进程不要自己拼用户数据目录。 */
+export function pluginInstallPath(userPluginsDir: string, id: string): string {
+  if (!isPluginId(id)) throw new Error('插件 id 无效');
+  return path.join(path.resolve(userPluginsDir), id);
+}
+
 export function assertAllowedCatalogUrl(value: string): void {
   const url = readHttpsUrl(value);
   if (url.hostname !== PLUGIN_CDN_HOST || url.pathname !== '/dex-buddy/plugins/index.json') {
@@ -65,6 +85,23 @@ export function assertAllowedPluginZipUrl(value: string, id: string, version: st
   const expected = `/dex-buddy/plugins/${id}/${version}.zip`;
   if (url.hostname !== PLUGIN_CDN_HOST || url.pathname !== expected) {
     throw new Error('插件下载地址不在允许范围内');
+  }
+}
+
+export function assertAllowedPluginIconUrl(value: string, id: string, version: string): void {
+  const url = readHttpsUrl(value);
+  const match = /^\/dex-buddy\/plugins\/([^/]+)\/([^/]+)\.icon\.([a-z0-9]+)$/.exec(url.pathname);
+  const pathId = match?.[1];
+  const pathVersion = match?.[2];
+  const ext = match?.[3];
+  if (
+    url.hostname !== PLUGIN_CDN_HOST
+    || pathId !== id
+    || pathVersion !== version
+    || !ext
+    || !ICON_EXTENSIONS.has(ext)
+  ) {
+    throw new Error('插件图标地址不在允许范围内');
   }
 }
 
@@ -93,6 +130,10 @@ export function parsePluginRelease(value: unknown): PluginRelease | null {
     const description = raw.description.trim();
     if (description !== '' && description.length <= 280) release.description = description;
   }
+  const category = optionalCategory(raw.category);
+  if (category) release.category = category;
+  const iconUrl = optionalIconUrl(raw.iconUrl, release.id, release.version);
+  if (iconUrl) release.iconUrl = iconUrl;
   return release;
 }
 
@@ -133,6 +174,26 @@ export function buildPluginCatalog(releases: PluginRelease[], generatedAt: strin
   return { generatedAt, plugins: selectLatestReleases(releases) };
 }
 
+/** 缺省和作者写成「其他」的归在同一段，这一段固定在最后。 */
+export function groupReleasesByCategory<T extends { category?: string; displayName: string }>(
+  items: readonly T[],
+): Array<ReleaseCategoryGroup<T>> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const category = item.category && item.category !== OTHER_CATEGORY ? item.category : OTHER_CATEGORY;
+    const list = groups.get(category);
+    if (list) list.push(item);
+    else groups.set(category, [item]);
+  }
+  for (const list of groups.values()) {
+    list.sort((left, right) => left.displayName.localeCompare(right.displayName, 'zh-CN'));
+  }
+  const names = Array.from(groups.keys()).filter((name) => name !== OTHER_CATEGORY);
+  names.sort((left, right) => left.localeCompare(right, 'zh-CN'));
+  if (groups.has(OTHER_CATEGORY)) names.push(OTHER_CATEGORY);
+  return names.map((category) => ({ category, plugins: groups.get(category) ?? [] }));
+}
+
 export function releaseKeysFromList(text: string): string[] {
   const keys: string[] = [];
   for (const line of text.split(/\r?\n/)) {
@@ -142,6 +203,23 @@ export function releaseKeysFromList(text: string): string[] {
     }
   }
   return keys;
+}
+
+function optionalCategory(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (trimmed === '' || trimmed.length > 32) return undefined;
+  return trimmed;
+}
+
+function optionalIconUrl(value: unknown, id: string, version: string): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  try {
+    assertAllowedPluginIconUrl(value, id, version);
+  } catch {
+    return undefined;
+  }
+  return value;
 }
 
 function semverParts(value: string): [number, number, number] | null {

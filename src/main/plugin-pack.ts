@@ -3,9 +3,10 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { readManifestFile } from './manifest.ts';
-import { pluginZipUrl, versionFromTag, type PluginRelease } from './plugin-catalog.ts';
+import { pluginIconUrl, pluginZipUrl, versionFromTag, type PluginRelease } from './plugin-catalog.ts';
+import type { PluginManifest } from './types.ts';
 
-const SKIP_DIRS = new Set(['.git', '.venv', 'node_modules', 'cache', 'output', 'temp', '.cursor', 'bin', '.next']);
+const SKIP_DIRS = new Set(['.git', '.venv', 'node_modules', 'cache', 'output', 'temp', '.cursor', 'bin', '.next', '__pycache__']);
 
 export const PLUGIN_PACK_FILE = 'dex-buddy-plugin.pack';
 export const PLUGIN_PACK_IGNORE_FILE = 'dex-buddy-plugin.ignore';
@@ -21,7 +22,7 @@ export function shouldPackRelative(relativePosix: string): boolean {
   if (parts.length === 0) return false;
   if (parts.some((part) => SKIP_DIRS.has(part))) return false;
   const base = parts[parts.length - 1] ?? '';
-  if (base === '.DS_Store' || base === '.env') return false;
+  if (base === '.DS_Store' || base === '.env' || base.endsWith('.pyc')) return false;
   if (base.startsWith('.env.') && base !== '.env.example') return false;
   return true;
 }
@@ -74,7 +75,7 @@ export async function packPluginRelease(options: {
   sourceDir: string;
   tag: string;
   outDir: string;
-}): Promise<{ release: PluginRelease; zipPath: string; jsonPath: string }> {
+}): Promise<{ release: PluginRelease; zipPath: string; jsonPath: string; iconPath?: string }> {
   const version = versionFromTag(options.tag);
   const manifest = readManifestFile(options.sourceDir);
   if (manifest.version !== version) {
@@ -84,6 +85,7 @@ export async function packPluginRelease(options: {
   if (!files.includes('plugin.manifest.json')) {
     throw new Error('打包结果里没有 plugin.manifest.json');
   }
+  assertDeclaredFilesPacked(manifest, files);
   fs.mkdirSync(options.outDir, { recursive: true });
   const zipPath = path.join(options.outDir, `${manifest.id}-${version}.zip`);
   const jsonPath = path.join(options.outDir, `${manifest.id}-${version}.json`);
@@ -98,14 +100,51 @@ export async function packPluginRelease(options: {
     sha256,
   };
   if (manifest.description) release.description = manifest.description;
+  if (manifest.category) release.category = manifest.category;
+  const iconPath = copyReleaseIcon(options.sourceDir, options.outDir, manifest, version, release);
   fs.writeFileSync(jsonPath, `${JSON.stringify(release, null, 2)}\n`);
-  return { release, zipPath, jsonPath };
+  return { release, zipPath, jsonPath, iconPath };
+}
+
+function copyReleaseIcon(
+  sourceDir: string,
+  outDir: string,
+  manifest: PluginManifest,
+  version: string,
+  release: PluginRelease,
+): string | undefined {
+  if (!manifest.icon) return undefined;
+  const ext = path.extname(manifest.icon).slice(1).toLowerCase();
+  const sourceIcon = path.resolve(sourceDir, manifest.icon);
+  const iconPath = path.join(outDir, `${manifest.id}-${version}.icon.${ext}`);
+  fs.copyFileSync(sourceIcon, iconPath);
+  release.iconUrl = pluginIconUrl(manifest.id, version, ext);
+  return iconPath;
 }
 
 export function sha256File(filePath: string): string {
   const hash = createHash('sha256');
   hash.update(fs.readFileSync(filePath));
   return hash.digest('hex');
+}
+
+function assertDeclaredFilesPacked(manifest: PluginManifest, files: readonly string[]): void {
+  const required: Array<{ label: string; file: string }> = [];
+  if (manifest.main) required.push({ label: 'main', file: toPosixRelative(manifest.main) });
+  if (manifest.uiEntry) required.push({ label: 'uiEntry', file: toPosixRelative(manifest.uiEntry) });
+  const requirements = manifest.runtime?.python?.requirements;
+  if (requirements) required.push({ label: 'runtime.python.requirements', file: toPosixRelative(requirements) });
+  const packageFile = manifest.runtime?.node?.package;
+  if (packageFile) required.push({ label: 'runtime.node.package', file: toPosixRelative(packageFile) });
+  const packed = new Set(files);
+  const missing = required.filter((item) => !packed.has(item.file));
+  if (missing.length === 0) return;
+  const detail = missing.map((item) => `${item.label}（${item.file}）`).join('、');
+  throw new Error(`打包结果里没有清单点名的文件：${detail}`);
+}
+
+function toPosixRelative(value: string): string {
+  return value.replaceAll('\\', '/').replace(/^\.\//, '');
 }
 
 function readPackPatterns(root: string, fileName: string): PackPattern[] | null {

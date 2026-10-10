@@ -53,7 +53,7 @@ plugins/         内置示例插件，也可放开发软链接
 - `main`、`uiEntry`、`settingsEntry` 必须是插件目录内的相对路径。
 - `configSchema`：可选。键名是环境变量名，工作台按它生成设置页。没有声明就不要写空对象。
 - `settingsEntry`：可选。插件自带的设置页，和生成的表单读写同一份配置。
-- `description`、`icon`、`developer`、`category`、`website`、`privacyPolicy`、`termsOfService`：可选，只在插件详情里展示。不写也能加载。图标是插件目录内的 png、jpg、jpeg、webp 或 svg。三个链接必须是带主机名的 http(s)。写错的字段不显示，插件仍然加载，也不会进入 `getPluginConfig()` 或 `pluginEnv()`。
+- `description`、`icon`、`developer`、`category`、`website`、`privacyPolicy`、`termsOfService`：可选。不写也能加载。图标是插件目录内的 png、jpg、jpeg、webp 或 svg。`category` 会显示在详情里，插件市场也按它分段。发布时，合法的 `category` 和还在目录里的 `icon` 会抄进版本说明。三个链接必须是带主机名的 http(s)。写错的字段不显示，插件仍然加载，也不会进入 `getPluginConfig()` 或 `pluginEnv()`。
 
 `index.js` 导出 `apply` 和可选的 `dispose`：
 

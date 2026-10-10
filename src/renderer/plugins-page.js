@@ -5,34 +5,59 @@ const SOURCE_LABEL = {
   dev: '开发',
   installed: '已安装',
 };
+const CATALOG_SOURCE = '插件中心';
+const OTHER_CATEGORY = '其他';
+const TOAST_MS = 4000;
 
 export function mountPluginsPage({ shell, plugins, chrome }) {
   const search = document.getElementById('plugins-search');
+  const marketSearch = document.getElementById('plugins-market-search');
+  const searchToggle = document.getElementById('plugins-search-toggle');
   const list = document.getElementById('plugins-list');
   const statusEl = document.getElementById('plugins-status');
-  const installPane = document.getElementById('plugins-install');
-  const dropZone = document.getElementById('plugins-drop');
   const detail = document.getElementById('plugins-detail');
   const refreshBtn = document.getElementById('plugins-refresh');
   const addBtn = document.getElementById('plugins-add');
   const marketPane = document.getElementById('plugins-market');
   const marketList = document.getElementById('plugins-market-list');
-  const marketOpenBtn = document.getElementById('plugins-market-open');
-  const marketBackBtn = document.getElementById('plugins-market-back');
-  const marketRefreshBtn = document.getElementById('plugins-market-refresh');
+  const marketEntry = document.getElementById('plugins-market-entry');
+  const toast = document.getElementById('shell-toast');
+  const toastIcon = document.getElementById('shell-toast-icon');
+  const toastText = document.getElementById('shell-toast-text');
+  const toastClose = document.getElementById('shell-toast-close');
 
-  let installing = false;
-  let dragDepth = 0;
-  let menuOpen = false;
-  let showMarket = false;
+  let busy = false;
+  let busyId = null;
+  let menuHost = null;
   let catalogPlugins = [];
   let updates = [];
   let marketError = '';
+  let toastTimer = 0;
 
   function setStatus(message, kind) {
     statusEl.textContent = message || '';
     if (kind) statusEl.dataset.kind = kind;
     else delete statusEl.dataset.kind;
+  }
+
+  function showToast(message, kind) {
+    toastIcon.replaceChildren();
+    const icon = document.createElement('i');
+    icon.dataset.lucide = kind === 'ok' ? 'circle-check' : 'circle-x';
+    toastIcon.appendChild(icon);
+    toastText.textContent = message;
+    toast.dataset.kind = kind === 'ok' ? 'ok' : 'error';
+    toast.hidden = false;
+    mountIcons(toast);
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => {
+      toast.hidden = true;
+    }, TOAST_MS);
+  }
+
+  function hideToast() {
+    window.clearTimeout(toastTimer);
+    toast.hidden = true;
   }
 
   function sourceLabel(source) {
@@ -43,14 +68,25 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     return search.value.trim().toLowerCase();
   }
 
+  function marketQuery() {
+    return marketSearch.value.trim().toLowerCase();
+  }
+
   function visiblePlugins() {
     const q = query();
     if (!q) return shell.plugins;
     return shell.plugins.filter((plugin) => plugin.displayName.toLowerCase().includes(q));
   }
 
+  function localPlugin(id) {
+    return shell.plugins.find((plugin) => plugin.id === id) || null;
+  }
+
   function renderList(session) {
     const focus = session.pluginsFocus;
+    const marketOn = focus == null;
+    marketEntry.classList.toggle('active', marketOn);
+    marketEntry.setAttribute('aria-current', marketOn ? 'true' : 'false');
     list.replaceChildren();
     const items = visiblePlugins();
     if (shell.plugins.length === 0) {
@@ -105,7 +141,11 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
 
   function pluginMark(plugin, kind) {
     const mark = document.createElement('span');
-    mark.className = kind === 'detail' ? 'plugin-mark plugin-mark-detail' : 'plugin-mark plugin-mark-nav';
+    mark.className = kind === 'detail'
+      ? 'plugin-mark plugin-mark-detail'
+      : kind === 'market'
+        ? 'plugin-mark plugin-mark-market'
+        : 'plugin-mark plugin-mark-nav';
     if (plugin.iconUrl) {
       const img = document.createElement('img');
       img.alt = '';
@@ -138,7 +178,10 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     tip.style.left = `${left}px`;
   }
 
-  function folderButton(rootPath) {
+  function folderButton(options) {
+    const rootPath = typeof options === 'string' ? options : options.path;
+    const label = typeof options === 'string' ? '' : (options.sourceLabel || '');
+    const openable = typeof options === 'string' ? false : Boolean(options.openable);
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'plugin-folder';
@@ -149,7 +192,15 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     const tip = document.createElement('div');
     tip.className = 'plugin-folder-tip';
     tip.setAttribute('role', 'tooltip');
-    tip.textContent = rootPath;
+    if (label) {
+      const source = document.createElement('div');
+      source.textContent = label;
+      const pathLine = document.createElement('div');
+      pathLine.textContent = rootPath || '';
+      tip.append(source, pathLine);
+    } else {
+      tip.textContent = rootPath;
+    }
     tip.hidden = true;
     document.body.appendChild(tip);
     const show = () => placeFolderTip(button, tip);
@@ -158,15 +209,82 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     button.addEventListener('pointerleave', hide);
     button.addEventListener('focus', show);
     button.addEventListener('blur', hide);
+    if (openable && rootPath) {
+      button.addEventListener('click', () => {
+        void window.dex.openPluginFolder(rootPath);
+      });
+    }
     return button;
   }
 
   function closeMenu() {
-    menuOpen = false;
-    const menu = detail.querySelector('.plugin-menu');
-    const button = detail.querySelector('.plugin-more');
-    if (menu) menu.hidden = true;
-    if (button) button.setAttribute('aria-expanded', 'false');
+    if (menuHost) {
+      const menu = menuHost.querySelector('.plugin-menu');
+      const button = menuHost.querySelector('.plugin-more');
+      if (menu) menu.hidden = true;
+      if (button) button.setAttribute('aria-expanded', 'false');
+    }
+    menuHost = null;
+  }
+
+  function placeMenu(button, menu) {
+    menu.hidden = false;
+    const anchor = button.getBoundingClientRect();
+    const box = menu.getBoundingClientRect();
+    let top = anchor.bottom + 4;
+    if (top + box.height > window.innerHeight - 8) top = anchor.top - 4 - box.height;
+    if (top < 8) top = 8;
+    let left = anchor.right - box.width;
+    const maxLeft = window.innerWidth - box.width - 8;
+    left = Math.max(8, Math.min(left, maxLeft));
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+  }
+
+  function menuItem(item) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.setAttribute('role', 'menuitem');
+    if (item.danger) button.className = 'danger';
+    const icon = document.createElement('i');
+    icon.dataset.lucide = item.icon;
+    const label = document.createElement('span');
+    label.textContent = item.label;
+    button.append(icon, label);
+    button.addEventListener('click', () => {
+      closeMenu();
+      item.run();
+    });
+    return button;
+  }
+
+  function moreMenu(items) {
+    const moreWrap = document.createElement('div');
+    moreWrap.className = 'plugin-more-wrap';
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'plugin-icon-btn plugin-more';
+    more.setAttribute('aria-label', '更多');
+    more.setAttribute('aria-haspopup', 'menu');
+    more.setAttribute('aria-expanded', 'false');
+    const ellipsis = document.createElement('i');
+    ellipsis.dataset.lucide = 'ellipsis';
+    more.appendChild(ellipsis);
+    const menu = document.createElement('div');
+    menu.className = 'plugin-menu';
+    menu.setAttribute('role', 'menu');
+    menu.hidden = true;
+    for (const item of items) menu.appendChild(menuItem(item));
+    more.addEventListener('click', () => {
+      const wasOpen = menuHost === moreWrap && !menu.hidden;
+      closeMenu();
+      if (wasOpen) return;
+      placeMenu(more, menu);
+      more.setAttribute('aria-expanded', 'true');
+      menuHost = moreWrap;
+    });
+    moreWrap.append(more, menu);
+    return moreWrap;
   }
 
   function infoRow(label, value) {
@@ -204,9 +322,9 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   }
 
   function renderDetail(plugin) {
+    closeMenu();
     clearFolderTips();
     detail.replaceChildren();
-    menuOpen = false;
     const head = document.createElement('div');
     head.className = 'plugin-detail-head';
     head.appendChild(pluginMark(plugin, 'detail'));
@@ -234,42 +352,14 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     const actions = document.createElement('div');
     actions.className = 'plugin-detail-actions';
     if (plugin.source === 'installed') {
-      const moreWrap = document.createElement('div');
-      moreWrap.className = 'plugin-more-wrap';
-      const more = document.createElement('button');
-      more.type = 'button';
-      more.className = 'plugin-icon-btn plugin-more';
-      more.setAttribute('aria-label', '更多');
-      more.setAttribute('aria-haspopup', 'menu');
-      more.setAttribute('aria-expanded', 'false');
-      const ellipsis = document.createElement('i');
-      ellipsis.dataset.lucide = 'ellipsis';
-      more.appendChild(ellipsis);
-
-      const menu = document.createElement('div');
-      menu.className = 'plugin-menu';
-      menu.setAttribute('role', 'menu');
-      menu.hidden = true;
-      const uninstall = document.createElement('button');
-      uninstall.type = 'button';
-      uninstall.setAttribute('role', 'menuitem');
-      const trash = document.createElement('i');
-      trash.dataset.lucide = 'trash-2';
-      const uninstallLabel = document.createElement('span');
-      uninstallLabel.textContent = '卸载';
-      uninstall.append(trash, uninstallLabel);
-      uninstall.addEventListener('click', () => {
-        closeMenu();
-        void uninstallPlugin(plugin.id);
-      });
-      menu.appendChild(uninstall);
-      more.addEventListener('click', () => {
-        menuOpen = !menuOpen;
-        menu.hidden = !menuOpen;
-        more.setAttribute('aria-expanded', menuOpen ? 'true' : 'false');
-      });
-      moreWrap.append(more, menu);
-      actions.appendChild(moreWrap);
+      actions.appendChild(moreMenu([
+        {
+          label: '卸载',
+          icon: 'trash-2',
+          danger: true,
+          run: () => { void uninstallPlugin(plugin.id); },
+        },
+      ]));
     }
 
     const use = document.createElement('button');
@@ -289,12 +379,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       update.id = 'plugins-update';
       update.textContent = '更新';
       update.addEventListener('click', () => {
-        void runInstall(async () => {
-          setStatus('正在下载…');
-          const result = await window.dex.installCatalogPlugin(plugin.id);
-          await finishInstall(result);
-          await refreshCatalog();
-        });
+        void installFromCatalog(plugin.id, 'update');
       });
       actions.appendChild(update);
     }
@@ -348,7 +433,6 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       ? shell.plugins.find((item) => item.id === session.pluginsFocus)
       : null;
     if (plugin) {
-      installPane.hidden = true;
       marketPane.hidden = true;
       detail.hidden = false;
       renderDetail(plugin);
@@ -359,14 +443,31 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       return;
     }
     detail.hidden = true;
-    clearFolderTips();
     detail.replaceChildren();
-    installPane.hidden = showMarket;
-    marketPane.hidden = !showMarket;
-    if (showMarket) renderMarket();
+    marketPane.hidden = false;
+    renderMarket();
+  }
+
+  function groupByCategory(items) {
+    const groups = new Map();
+    for (const item of items) {
+      const category = item.category && item.category !== OTHER_CATEGORY ? item.category : OTHER_CATEGORY;
+      const listForCategory = groups.get(category);
+      if (listForCategory) listForCategory.push(item);
+      else groups.set(category, [item]);
+    }
+    for (const listForCategory of groups.values()) {
+      listForCategory.sort((left, right) => left.displayName.localeCompare(right.displayName, 'zh-CN'));
+    }
+    const names = Array.from(groups.keys()).filter((name) => name !== OTHER_CATEGORY);
+    names.sort((left, right) => left.localeCompare(right, 'zh-CN'));
+    if (groups.has(OTHER_CATEGORY)) names.push(OTHER_CATEGORY);
+    return names.map((category) => ({ category, plugins: groups.get(category) }));
   }
 
   function renderMarket() {
+    closeMenu();
+    clearFolderTips();
     marketList.replaceChildren();
     if (marketError) {
       const error = document.createElement('p');
@@ -375,7 +476,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       marketList.appendChild(error);
       return;
     }
-    const q = query();
+    const q = marketQuery();
     const items = catalogPlugins.filter((plugin) => !q || plugin.displayName.toLowerCase().includes(q));
     if (items.length === 0) {
       const empty = document.createElement('p');
@@ -384,60 +485,122 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       marketList.appendChild(empty);
       return;
     }
-    for (const plugin of items) {
-      const row = document.createElement('div');
-      row.className = 'market-row';
-      const copy = document.createElement('div');
-      copy.className = 'market-copy';
-      const name = document.createElement('div');
-      name.className = 'market-name';
-      name.textContent = plugin.displayName;
-      const meta = document.createElement('div');
-      meta.className = 'market-meta';
-      meta.textContent = plugin.description ? `${plugin.version} · ${plugin.description}` : plugin.version;
-      copy.append(name, meta);
-      row.append(copy, marketAction(plugin));
-      marketList.appendChild(row);
+    for (const group of groupByCategory(items)) {
+      const section = document.createElement('section');
+      section.className = 'market-section';
+      const heading = document.createElement('h2');
+      heading.className = 'market-section-title';
+      heading.textContent = group.category;
+      const grid = document.createElement('div');
+      grid.className = 'market-grid';
+      for (const plugin of group.plugins) grid.appendChild(marketCard(plugin));
+      section.append(heading, grid);
+      marketList.appendChild(section);
     }
+    mountIcons(marketList);
   }
 
-  function marketAction(plugin) {
+  function marketCard(plugin) {
+    const local = localPlugin(plugin.id);
+    const card = document.createElement('article');
+    card.className = 'market-card';
+    const installing = busy && busyId === plugin.id;
+    if (installing) card.classList.add('market-card-installing');
+    const iconSource = { iconUrl: plugin.iconUrl || (local && local.iconUrl), displayName: plugin.displayName };
+    card.appendChild(pluginMark(iconSource, 'market'));
+    const copy = document.createElement('div');
+    copy.className = 'market-copy';
+    const nameRow = document.createElement('div');
+    nameRow.className = 'market-name-row';
+    const name = document.createElement('span');
+    name.className = 'market-name';
+    name.textContent = plugin.displayName;
+    nameRow.appendChild(name);
+    nameRow.appendChild(folderButton({
+      path: local ? local.rootPath : plugin.installPath,
+      sourceLabel: local ? sourceLabel(local.source) : CATALOG_SOURCE,
+      openable: Boolean(local && local.rootPath),
+    }));
+    copy.appendChild(nameRow);
+    if (plugin.description) {
+      const description = document.createElement('p');
+      description.className = 'market-description';
+      description.textContent = plugin.description;
+      copy.appendChild(description);
+    }
+    card.append(copy, marketAction(plugin, local, installing));
+    return card;
+  }
+
+  function marketAction(plugin, local, installing) {
+    if (installing) {
+      const wrap = document.createElement('div');
+      wrap.className = 'market-installing-label';
+      const ring = document.createElement('span');
+      ring.className = 'market-spinner';
+      ring.setAttribute('aria-hidden', 'true');
+      const text = document.createElement('span');
+      text.textContent = '正在安装';
+      wrap.append(ring, text);
+      return wrap;
+    }
+    if (local) return installedMenu(local);
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'market-action';
-    const local = shell.plugins.find((item) => item.id === plugin.id);
-    const notice = updates.find((item) => item.id === plugin.id);
-    if (local && local.source !== 'installed') {
-      button.textContent = '不可覆盖';
-      button.disabled = true;
-      return button;
-    }
-    if (notice) {
-      button.textContent = '更新';
-      button.addEventListener('click', () => {
-        void installFromCatalog(plugin.id);
-      });
-      return button;
-    }
-    if (local) {
-      button.textContent = '已安装';
-      button.disabled = true;
-      return button;
-    }
-    button.textContent = '安装';
+    button.className = 'plugin-icon-btn';
+    button.setAttribute('aria-label', `安装${plugin.displayName}`);
+    button.disabled = busy;
+    const icon = document.createElement('i');
+    icon.dataset.lucide = 'plus';
+    button.appendChild(icon);
     button.addEventListener('click', () => {
-      void installFromCatalog(plugin.id);
+      void installFromCatalog(plugin.id, 'install');
     });
     return button;
   }
 
-  async function installFromCatalog(pluginId) {
-    await runInstall(async () => {
-      setStatus('正在下载…');
+  function installedMenu(local) {
+    const items = [
+      { label: '立即使用', icon: 'play', run: () => { void chrome.usePlugin(local.id); } },
+      { label: '详情', icon: 'info', run: () => { chrome.focusPlugin(local.id); } },
+    ];
+    if (local.source === 'installed' && updates.some((item) => item.id === local.id)) {
+      items.push({
+        label: '更新',
+        icon: 'refresh-cw',
+        run: () => { void installFromCatalog(local.id, 'update'); },
+      });
+    }
+    if (local.source === 'installed') {
+      items.push({
+        label: '卸载',
+        icon: 'trash-2',
+        danger: true,
+        run: () => { void uninstallPlugin(local.id); },
+      });
+    }
+    return moreMenu(items);
+  }
+
+  async function installFromCatalog(pluginId, kind) {
+    if (busy) return;
+    busy = true;
+    busyId = pluginId;
+    addBtn.disabled = true;
+    try {
+      chrome.enterPlugins();
       const result = await window.dex.installCatalogPlugin(pluginId);
-      await finishInstall(result);
+      await finishInstall(result, kind);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '安装失败', 'error');
+    } finally {
+      busy = false;
+      busyId = null;
+      addBtn.disabled = false;
+      const session = chrome.session();
+      if (session && session.surface === 'plugins') sync(session);
       await refreshCatalog();
-    });
+    }
   }
 
   async function refreshCatalog() {
@@ -462,36 +625,36 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   }
 
   async function uninstallPlugin(pluginId) {
+    const plugin = localPlugin(pluginId);
+    const name = plugin ? plugin.displayName : pluginId;
     const result = await window.dex.uninstall(pluginId);
     if (!result.ok) {
-      setStatus(result.message || '卸载失败', 'error');
+      showToast(result.message || '卸载失败', 'error');
       await plugins.refresh(result.plugins);
       return;
     }
     if (shell.activeId === pluginId) shell.activeId = null;
-    setStatus('插件已卸载', 'ok');
     await plugins.refresh(result.plugins);
+    showToast(`「${name}」已卸载`, 'ok');
     chrome.enterPlugins();
+    await refreshCatalog();
   }
 
-  async function finishInstall(result) {
+  async function finishInstall(result, kind) {
     if (result.cancelled) return;
     if (!result.ok) {
-      setStatus(result.message || '安装失败', 'error');
+      showToast(result.message || '安装失败', 'error');
       if (result.plugins) await plugins.refresh(result.plugins);
-      chrome.enterPlugins();
       return;
     }
     await plugins.refresh(result.plugins);
-    const installed = result.installedId
-      ? shell.plugins.find((plugin) => plugin.id === result.installedId)
-      : null;
+    const installed = result.installedId ? localPlugin(result.installedId) : null;
     if (installed && installed.runtimeError) {
-      setStatus(installed.runtimeError, 'error');
-    } else {
-      setStatus('插件已安装', 'ok');
+      showToast(installed.runtimeError, 'error');
+      return;
     }
-    if (installed) chrome.focusPlugin(result.installedId);
+    const name = installed ? installed.displayName : '插件';
+    showToast(kind === 'update' ? `「${name}」已更新` : `「${name}」已安装`, 'ok');
   }
 
   async function retryRuntime(pluginId) {
@@ -510,25 +673,23 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     }
   }
 
-  async function runInstall(task) {
-    if (installing) return;
-    installing = true;
-    addBtn.disabled = true;
-    try {
-      await task();
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : '安装失败', 'error');
-    } finally {
-      installing = false;
-      addBtn.disabled = false;
-    }
-  }
-
   search.addEventListener('input', () => {
     const session = chrome.session();
     if (!session || session.surface !== 'plugins') return;
     renderList(session);
-    if (showMarket && !session.pluginsFocus) renderMarket();
+  });
+
+  marketSearch.addEventListener('input', () => {
+    const session = chrome.session();
+    if (!session || session.surface !== 'plugins' || session.pluginsFocus) return;
+    renderMarket();
+  });
+
+  searchToggle.addEventListener('click', () => {
+    const willOpen = search.hidden;
+    search.hidden = !willOpen;
+    searchToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    if (willOpen) search.focus();
   });
 
   refreshBtn.addEventListener('click', () => {
@@ -542,85 +703,67 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     })();
   });
 
-  marketOpenBtn.addEventListener('click', () => {
-    showMarket = true;
-    void refreshCatalog();
-  });
-
-  marketBackBtn.addEventListener('click', () => {
-    showMarket = false;
-    const session = chrome.session();
-    if (session) sync(session);
-  });
-
-  marketRefreshBtn.addEventListener('click', () => {
-    void refreshCatalog();
+  marketEntry.addEventListener('click', () => {
+    chrome.enterPlugins();
   });
 
   if (window.dex.onRuntimeProgress) {
     window.dex.onRuntimeProgress((event) => {
+      if (busy) return;
       if (event && event.phase === 'preparing') setStatus('正在准备运行环境');
     });
   }
 
   addBtn.addEventListener('click', () => {
-    void runInstall(async () => {
-      const result = await window.dex.pickAndInstall();
-      await finishInstall(result);
-    });
+    void (async () => {
+      if (busy) return;
+      busy = true;
+      busyId = null;
+      addBtn.disabled = true;
+      const session = chrome.session();
+      if (session && !session.pluginsFocus) renderMarket();
+      try {
+        const result = await window.dex.pickAndInstall();
+        await finishInstall(result, 'install');
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : '安装失败', 'error');
+      } finally {
+        busy = false;
+        busyId = null;
+        addBtn.disabled = false;
+        const session = chrome.session();
+        if (session && session.surface === 'plugins') sync(session);
+        await refreshCatalog();
+      }
+    })();
   });
 
-  installPane.addEventListener('dragenter', (event) => {
-    event.preventDefault();
-    dragDepth += 1;
-    dropZone.classList.add('dragover');
-  });
-  installPane.addEventListener('dragover', (event) => {
-    event.preventDefault();
-  });
-  installPane.addEventListener('dragleave', () => {
-    dragDepth -= 1;
-    if (dragDepth <= 0) {
-      dragDepth = 0;
-      dropZone.classList.remove('dragover');
-    }
-  });
-  installPane.addEventListener('drop', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    dragDepth = 0;
-    dropZone.classList.remove('dragover');
-    if (installing) return;
-    const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
-    if (!file) return;
-    const zipPath = window.dex.pathForFile(file);
-    void runInstall(async () => {
-      if (!zipPath || !zipPath.toLowerCase().endsWith('.zip')) {
-        setStatus('请拖入 .zip 插件包', 'error');
-        return;
-      }
-      setStatus('正在安装…');
-      const result = await plugins.installZip(zipPath);
-      await finishInstall(result);
-    });
+  toastClose.addEventListener('click', () => {
+    hideToast();
   });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && menuOpen) closeMenu();
+    if (event.key === 'Escape' && menuHost) closeMenu();
+  });
+  marketList.addEventListener('scroll', () => {
+    if (menuHost) closeMenu();
+  });
+  detail.addEventListener('scroll', () => {
+    if (menuHost) closeMenu();
+  });
+  window.addEventListener('resize', () => {
+    if (menuHost) closeMenu();
   });
   document.addEventListener('pointerdown', (event) => {
-    if (!menuOpen) return;
+    if (!menuHost) return;
     const target = event.target;
     if (!(target instanceof Node)) return;
-    if (detail.contains(target) && target instanceof Element && target.closest('.plugin-more, .plugin-menu')) return;
+    if (menuHost.contains(target)) return;
     closeMenu();
   });
 
   return {
     sync,
-    showInstallStage() {
-      showMarket = false;
-    },
     refreshCatalog,
     clearStatus() {
       setStatus('');

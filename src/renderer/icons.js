@@ -23,6 +23,13 @@ const ICON_NAMES = [
   'ExternalLink',
   'Eye',
   'EyeOff',
+  'Search',
+  'LayoutGrid',
+  'Play',
+  'Info',
+  'CircleCheck',
+  'CircleX',
+  'X',
 ];
 
 export function mountIcons(root = document) {

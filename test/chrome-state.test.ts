@@ -112,7 +112,7 @@ test('entering settings clears a pending forward target', () => {
   assert.equal(enterSettings(returned).forward, null);
 });
 
-test('puzzle opens the install stage and a second click stays there', () => {
+test('puzzle opens the market and a second click stays there', () => {
   const install = enterPlugins(createChromeSession());
   assert.equal(install.surface, 'plugins');
   assert.equal(install.pluginsFocus, null);
@@ -184,7 +184,7 @@ test('settings opened from the plugins page goes back to the workspace', () => {
   assert.equal(workspace.pluginsFocus, null);
 });
 
-test('the plugins title and a second puzzle click return to the install stage', () => {
+test('the plugins market row and a second puzzle click return to the market', () => {
   const detail = selectPluginsFocus(enterPlugins(createChromeSession()), 'demo');
   const install = enterPlugins(detail);
   assert.equal(install.surface, 'plugins');

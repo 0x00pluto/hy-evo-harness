@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { readExtraPluginPaths, readForceUpdateIcon } from './dev-config.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
 import { isHttpUrl } from './manifest.ts';
+import { pluginInstallPath } from './plugin-catalog.ts';
 import { downloadVerifiedZip, fetchPluginCatalog, findRelease, installCatalogRelease } from './plugin-market.ts';
 import { deleteOrigin, marketUpdates, readOrigins, writeOrigin } from './plugin-origins.ts';
 import { PluginSettingsStore } from './plugin-settings.ts';
@@ -326,7 +327,11 @@ function registerIpc(): void {
           source: plugin.source,
         })),
       });
-      return { ok: true, generatedAt: catalog.generatedAt, plugins: catalog.plugins, updates };
+      const plugins = catalog.plugins.map((plugin) => ({
+        ...plugin,
+        installPath: pluginInstallPath(installedPluginsDir(), plugin.id),
+      }));
+      return { ok: true, generatedAt: catalog.generatedAt, plugins, updates };
     } catch (err) {
       return {
         ok: false,
