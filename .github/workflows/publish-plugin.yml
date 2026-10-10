@@ -38,7 +38,6 @@ jobs:
       tag: ${{ steps.plugin.outputs.tag }}
       has_pack: ${{ steps.declared.outputs.has_pack }}
       pack: ${{ steps.declared.outputs.pack }}
-      runners: ${{ steps.declared.outputs.runners }}
     env:
       RAW_REPOSITORY: ${{ inputs.repository }}
       RAW_TAG: ${{ inputs.tag }}
@@ -68,7 +67,7 @@ jobs:
           path: plugin-src
           token: ${{ secrets.PLUGIN_CHECKOUT_TOKEN || github.token }}
 
-      - name: Read dex-buddy.publish.json
+      - name: Read dex-buddy-plugin-pack.json
         id: declared
         working-directory: harness
         run: |
@@ -82,7 +81,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: ${{ fromJson(needs.detect.outputs.runners) }}
+        include:
+          - runner: macos-latest
+            os: darwin
+          - runner: windows-latest
+            os: win32
+          - runner: ubuntu-latest
+            os: linux
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Check out plugin
@@ -98,12 +103,13 @@ jobs:
         shell: bash
         env:
           PACK_SCRIPT: ${{ needs.detect.outputs.pack }}
+          DEX_BUDDY_OS: ${{ matrix.os }}
         run: bash "$PACK_SCRIPT"
 
       - name: Upload packed binaries
         uses: actions/upload-artifact@v4
         with:
-          name: plugin-bin-${{ matrix.runner }}
+          name: plugin-bin-${{ matrix.os }}
           path: plugin-src/bin
           if-no-files-found: error
 
@@ -147,18 +153,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/plugin-src/bin"
           found=0
-          while IFS= read -r -d '' file; do
-            base="$(basename "$file")"
-            dest="$GITHUB_WORKSPACE/plugin-src/bin/$base"
-            if [ -e "$dest" ]; then
-              echo "编译产物重名：$base" >&2
+          for os in darwin win32 linux; do
+            src="$GITHUB_WORKSPACE/plugin-bins/plugin-bin-$os"
+            if [ ! -d "$src" ]; then
+              echo "缺少 $os 的编译产物" >&2
               exit 1
             fi
-            cp "$file" "$dest"
-            found=1
-          done < <(find "$GITHUB_WORKSPACE/plugin-bins" -type f -print0)
+            dest="$GITHUB_WORKSPACE/plugin-src/bin/$os"
+            mkdir -p "$dest"
+            while IFS= read -r -d '' file; do
+              base="$(basename "$file")"
+              target="$dest/$base"
+              if [ -e "$target" ]; then
+                echo "编译产物重名：$os/$base" >&2
+                exit 1
+              fi
+              cp "$file" "$target"
+              found=1
+            done < <(find "$src" -type f -print0)
+          done
           if [ "$found" -ne 1 ]; then
             echo "没有编译产物" >&2
             exit 1

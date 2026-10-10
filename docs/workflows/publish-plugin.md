@@ -4,7 +4,7 @@
 
 插件作者要做的事见 [发到插件中心](../plugin-development/distribute.md)。本篇只说明维护者如何在本仓触发。七牛密钥只放在本仓的 Actions secrets 里。
 
-仓库根如果有 `dex-buddy.publish.json`，工作流会先按其中的 `runners` 在对应机器上执行 `pack` 脚本，把各平台放进 `bin/` 的文件合并，再打成一份 zip。没有这份文件时，直接打包检出的源码树。
+仓库根如果有 `dex-buddy-plugin-pack.json`，工作流会在 macOS、Windows x64、Linux x64 上各执行一次其中的 `pack` 脚本，再把 `bin/` 里的文件分别收进 `bin/darwin`、`bin/win32`、`bin/linux`，打成一份 zip。没有这份文件时，直接打包检出的源码树。
 
 ## 入口
 

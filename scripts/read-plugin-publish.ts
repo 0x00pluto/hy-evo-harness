@@ -9,12 +9,8 @@ const output = process.env.GITHUB_OUTPUT;
 if (!output) throw new Error('缺少 GITHUB_OUTPUT');
 
 const lines = publish
-  ? [
-      'has_pack=true',
-      `pack=${publish.pack}`,
-      `runners=${JSON.stringify(publish.runners)}`,
-    ]
-  : ['has_pack=false', 'pack=', 'runners=[]'];
+  ? ['has_pack=true', `pack=${publish.pack}`]
+  : ['has_pack=false', 'pack='];
 fs.appendFileSync(output, `${lines.join('\n')}\n`);
 
 function readArgs(argv: string[]): Map<string, string> {
