@@ -15,6 +15,7 @@ import {
   parseQetag,
   parseQshellStat,
   pickPythonAsset,
+  pythonInstallOnlyAsset,
   uvAssetName,
   uvDownloadCandidates,
 } from '../src/main/publish-runtimes.ts';
@@ -71,6 +72,18 @@ test('Python 取最新的 install_only，忽略 stripped 和其他架构', () =>
     `cpython-${PYTHON_VERSION}+20251014-aarch64-apple-darwin-install_only.tar.gz`,
   );
   assert.equal(pickPythonAsset(names, 'win32-x64'), null);
+});
+
+test('Python 下载地址用发布日期和钉住的版本', () => {
+  const asset = pythonInstallOnlyAsset('20260211', 'darwin-arm64');
+  assert.equal(
+    asset.name,
+    `cpython-${PYTHON_VERSION}+20260211-aarch64-apple-darwin-install_only.tar.gz`,
+  );
+  assert.equal(
+    asset.url,
+    `https://github.com/astral-sh/python-build-standalone/releases/download/20260211/${asset.name}`,
+  );
 });
 
 test('远端没有就上传，hash 相同就跳过，不同才覆盖', () => {

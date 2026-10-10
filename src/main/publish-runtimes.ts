@@ -200,31 +200,76 @@ async function materializeNode(arch: RuntimeArch, work: string): Promise<string>
 
 type PythonAsset = { name: string; url: string };
 
-/** 一次进程里只拉最新发布。五个架构共用，避免反复下载那份超大 JSON。 */
+/**
+ * 一次进程里只探测一次。最新发布往往已经换了补丁号，
+ * 发布 JSON 又大到 HTTP/2 会掐断，所以只拉 tag 名，再按钉住的版本探测下载地址。
+ */
 let pythonReleaseAssets: PythonAsset[] | null = null;
 
 async function findPythonAsset(arch: RuntimeArch): Promise<PythonAsset> {
   const assets = await loadPythonReleaseAssets();
-  const name = pickPythonAsset(assets.map((asset) => asset.name), arch);
-  const found = assets.find((asset) => asset.name === name);
+  const found = assets.find((asset) => asset.name === pickPythonAsset(assets.map((item) => item.name), arch));
   if (!found) {
     throw new Error(`python-build-standalone 没有 ${PYTHON_VERSION} ${pythonTriple(arch)} 的 install_only`);
   }
   return found;
 }
 
+export function pythonInstallOnlyAsset(date: string, arch: RuntimeArch): PythonAsset {
+  const name = `cpython-${PYTHON_VERSION}+${date}-${pythonTriple(arch)}-install_only.tar.gz`;
+  return {
+    name,
+    url: `https://github.com/astral-sh/python-build-standalone/releases/download/${date}/${name}`,
+  };
+}
+
 async function loadPythonReleaseAssets(): Promise<PythonAsset[]> {
   if (pythonReleaseAssets) return pythonReleaseAssets;
-  const release = await githubJson(
-    'https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest',
-  );
-  const list = (release as { assets?: { name?: string; browser_download_url?: string }[] }).assets ?? [];
-  pythonReleaseAssets = list.flatMap((asset) => (
-    asset.name && asset.browser_download_url
-      ? [{ name: asset.name, url: asset.browser_download_url }]
-      : []
-  ));
+  const date = newestPythonDate(pythonReleaseTags());
+  console.log(`Python ${PYTHON_VERSION} 使用发布 ${date}`);
+  pythonReleaseAssets = RUNTIME_ARCHES.map((arch) => pythonInstallOnlyAsset(date, arch));
   return pythonReleaseAssets;
+}
+
+function pythonReleaseTags(): string[] {
+  const tags: string[] = [];
+  for (let page = 1; page <= 3; page += 1) {
+    const body = githubJson(
+      `https://api.github.com/repos/astral-sh/python-build-standalone/tags?per_page=100&page=${page}`,
+    );
+    if (!Array.isArray(body) || body.length === 0) break;
+    for (const item of body) {
+      const name = (item as { name?: string }).name;
+      if (name && /^\d{8}$/.test(name)) tags.push(name);
+    }
+    if (body.length < 100) break;
+  }
+  return tags;
+}
+
+function newestPythonDate(tags: string[]): string {
+  const probe = 'darwin-arm64';
+  for (const date of tags) {
+    const status = httpStatus(pythonInstallOnlyAsset(date, probe).url);
+    if (status === '200') return date;
+    if (status === '404') continue;
+    throw new Error(`检查 Python ${date} 失败，HTTP ${status}`);
+  }
+  throw new Error(`python-build-standalone 没有 ${PYTHON_VERSION} 的 install_only`);
+}
+
+function httpStatus(url: string): string {
+  const result = capture('curl', [
+    '-sI',
+    '-o', '/dev/null',
+    '-w', '%{http_code}',
+    '-L',
+    '--http1.1',
+    '--retry', '5',
+    '--retry-delay', '2',
+    url,
+  ]);
+  return result.stdout.trim() || '000';
 }
 
 function githubJson(url: string): unknown {
