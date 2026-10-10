@@ -73,6 +73,13 @@ export function pluginZipObjectKey(id: string, version: string): string {
   return `dex-buddy/plugins/${id}/${version}.zip`;
 }
 
+/** 令牌放进 URL。git clone 不会把命令行上的 http.extraheader 传给实际的 fetch。 */
+export function githubRemoteUrl(repository: string, token?: string): string {
+  assertRepositoryName(repository);
+  if (!token) return `https://github.com/${repository}.git`;
+  return `https://x-access-token:${encodeURIComponent(token)}@github.com/${repository}.git`;
+}
+
 export function assertRepositoryName(repository: string): void {
   const [owner, name] = repository.split('/');
   if (!REPOSITORY_NAME.test(repository) || owner === '.' || owner === '..' || name === '.' || name === '..') {

@@ -13,6 +13,7 @@ import {
 } from '../src/main/plugin-catalog.ts';
 import { assertNoBinaryPack } from '../src/main/plugin-publish.ts';
 import {
+  githubRemoteUrl,
   parsePluginRepos,
   pluginZipObjectKey,
   syncPluginCatalog,
@@ -55,10 +56,10 @@ for (const failure of report.failures) {
 if (report.failures.length > 0) process.exitCode = 1;
 
 async function listTags(repository: string): Promise<string[]> {
-  const remote = `https://github.com/${repository}.git`;
-  const listed = git(['ls-remote', '--tags', remote]);
+  const listed = git(['ls-remote', '--tags', githubRemoteUrl(repository, token)]);
   if (listed.code !== 0) {
-    throw new Error(`读取 tag 失败 ${repository}\n${listed.stderr || listed.stdout}`);
+    const hint = token ? '' : '\n私有仓库需要在本仓设置 PLUGIN_CHECKOUT_TOKEN';
+    throw new Error(`读取 tag 失败 ${repository}\n${redact(listed.stderr || listed.stdout)}${hint}`);
   }
   return tagsFromLsRemote(listed.stdout);
 }
@@ -66,11 +67,11 @@ async function listTags(repository: string): Promise<string[]> {
 async function prepare(repository: string, tag: string): Promise<PreparedPlugin> {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-plugin-sync-'));
   const sourceDir = path.join(work, 'source');
-  const remote = `https://github.com/${repository}.git`;
-  const cloned = git(['clone', '--depth', '1', '--branch', tag, remote, sourceDir]);
+  const cloned = git(['clone', '--depth', '1', '--branch', tag, githubRemoteUrl(repository, token), sourceDir]);
   if (cloned.code !== 0) {
     fs.rmSync(work, { recursive: true, force: true });
-    throw new Error(`检出 ${repository} ${tag} 失败\n${cloned.stderr || cloned.stdout}`);
+    const hint = token ? '' : '\n私有仓库需要在本仓设置 PLUGIN_CHECKOUT_TOKEN';
+    throw new Error(`检出 ${repository} ${tag} 失败\n${redact(cloned.stderr || cloned.stdout)}${hint}`);
   }
   try {
     assertNoBinaryPack(sourceDir);
@@ -160,12 +161,19 @@ function put(key: string, filePath: string): void {
 }
 
 function git(args: string[]): { code: number; stdout: string; stderr: string } {
-  const command = token ? ['-c', `http.extraheader=AUTHORIZATION: bearer ${token}`, ...args] : args;
-  return capture('git', command, 8 * 1024 * 1024);
+  // actions/checkout 会把本仓 GITHUB_TOKEN 写成 github.com 的 extraheader。
+  // 那个令牌不能用来检出别的仓库，带上它时公开仓库也会要求输入用户名。
+  const command = ['-c', 'credential.helper=', '-c', 'http.https://github.com/.extraheader=', ...args];
+  return capture('git', command, 8 * 1024 * 1024, { ...process.env, GIT_TERMINAL_PROMPT: '0' });
 }
 
-function capture(command: string, args: string[], maxBuffer = 1024 * 1024): { code: number; stdout: string; stderr: string } {
-  const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer });
+function capture(
+  command: string,
+  args: string[],
+  maxBuffer = 1024 * 1024,
+  env?: NodeJS.ProcessEnv,
+): { code: number; stdout: string; stderr: string } {
+  const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer, env });
   return {
     code: result.status ?? 1,
     stdout: result.stdout ?? '',
@@ -175,9 +183,12 @@ function capture(command: string, args: string[], maxBuffer = 1024 * 1024): { co
 
 function checkoutToken(): string | undefined {
   const dedicated = process.env.PLUGIN_CHECKOUT_TOKEN?.trim();
-  if (dedicated) return dedicated;
-  const github = process.env.GITHUB_TOKEN?.trim();
-  return github || undefined;
+  return dedicated || undefined;
+}
+
+function redact(text: string): string {
+  if (!token) return text;
+  return text.split(token).join('***').split(encodeURIComponent(token)).join('***');
 }
 
 function requiredEnv(name: string): string {

@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  githubRemoteUrl,
   highestSemverTag,
   parsePluginRepos,
   pluginZipObjectKey,
@@ -36,6 +37,11 @@ test('只发布最高的 vX.Y.Z，忽略剥引用和不合格 tag', () => {
   assert.equal(highestSemverTag(['v0.2.0', 'v0.9.0']), 'v0.9.0');
   assert.equal(highestSemverTag(['latest']), null);
   assert.equal(pluginZipObjectKey('manju-studio', '0.2.0'), 'dex-buddy/plugins/manju-studio/0.2.0.zip');
+  assert.equal(githubRemoteUrl('octo/demo'), 'https://github.com/octo/demo.git');
+  assert.equal(
+    githubRemoteUrl('octo/demo', 'a b'),
+    'https://x-access-token:a%20b@github.com/octo/demo.git',
+  );
 });
 
 test('一个仓库失败时仍发布另一个，并在全部处理完后合成目录', async () => {
