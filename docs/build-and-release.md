@@ -92,9 +92,15 @@ Release Assets 中的 `latest*.yml`、`.dmg` / `.exe` 与 `*.blockmap` 会同时
 
 uv、Python、Node 不打进安装包。同事第一次准备插件环境时，从 `https://oss.ai.66plat.com/dex-buddy/runtimes/` 下载。版本只认 [src/main/plugin-runtime.ts](../src/main/plugin-runtime.ts) 里的 `UV_VERSION`、`PYTHON_VERSION`、`NODE_VERSION`。
 
-`publish-runtimes` job 和三端安装包并行。打 `v*` tag 和手动跑这条工作流都会执行，用同一套七牛密钥，把上游安装包传到 `dex-buddy/runtimes/`。对象已经在、且内容和上游相同，就跳过上传，也不刷新这条 CDN。没有，或内容和上游不同，才上传，并只刷新这一条。比较本身失败、分不清「没有」和「网络出错」时，退回覆盖上传，日志里写明是退回，不让发版卡死。旧版本的对象留在桶里。
+`publish-runtimes` 不跟安装包一起跑。解释器版本变了，再单独传一次：
 
-改解释器版本要改那三个常量再发一版 Dex Buddy。上传路径和客户端下载路径一起变。
+```bash
+gh workflow run publish-runtimes.yml --ref main
+```
+
+它用同一套七牛密钥，把上游安装包传到 `dex-buddy/runtimes/`。对象已经在、且内容和上游相同，就跳过上传，也不刷新这条 CDN。没有，或内容和上游不同，才上传，并只刷新这一条。比较本身失败、分不清「没有」和「网络出错」时，退回覆盖上传，日志里写明是退回。旧版本的对象留在桶里。这次运行不创建 GitHub Release，也不覆盖 `latest.yml`。
+
+改解释器版本要改那三个常量。上传路径和客户端下载路径一起变，同事要下到新文件，还要再发一版 Dex Buddy。
 
 ## electron-builder 关键配置
 

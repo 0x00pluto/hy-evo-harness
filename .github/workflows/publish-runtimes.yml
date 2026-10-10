@@ -1,0 +1,36 @@
+name: Publish runtimes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish-runtimes:
+    name: Publish runtimes to Qiniu
+    runs-on: ubuntu-latest
+    env:
+      QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+      QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+      QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install qshell
+        run: |
+          curl -fsSL -o /tmp/qshell.tar.gz \
+            https://github.com/qiniu/qshell/releases/download/v2.19.9/qshell-v2.19.9-linux-amd64.tar.gz
+          tar -xzf /tmp/qshell.tar.gz -C /tmp
+          install -m 755 /tmp/qshell /usr/local/bin/qshell
+          qshell -v
+
+      - name: Upload uv, Python and Node
+        run: node --experimental-strip-types scripts/publish-runtimes.ts

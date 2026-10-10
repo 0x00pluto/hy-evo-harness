@@ -219,32 +219,23 @@ async function findPythonAsset(arch: RuntimeArch): Promise<{ name: string; url: 
   throw new Error(`python-build-standalone 没有 ${PYTHON_VERSION} ${pythonTriple(arch)} 的 install_only`);
 }
 
-async function githubJson(url: string): Promise<unknown> {
-  const headers: Record<string, string> = {
-    Accept: 'application/vnd.github+json',
-    'User-Agent': 'dex-buddy-publish-runtimes',
-  };
+function githubJson(url: string): unknown {
+  const args = [
+    '-fL',
+    '--retry', '5',
+    '--retry-delay', '2',
+    '-sS',
+    '-H', 'Accept: application/vnd.github+json',
+    '-H', 'User-Agent: dex-buddy-publish-runtimes',
+  ];
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  if (token) headers.Authorization = `Bearer ${token}`;
-  let lastError = '';
-  for (let attempt = 1; attempt <= 4; attempt += 1) {
-    try {
-      const response = await fetch(url, { headers });
-      if (response.status === 429 || response.status >= 500) {
-        lastError = `GitHub ${response.status} ${url}`;
-        await delay(attempt);
-        continue;
-      }
-      if (!response.ok) throw new Error(`GitHub ${response.status} ${url}`);
-      return response.json();
-    } catch (err) {
-      if (err instanceof Error && err.message.startsWith('GitHub ')) throw err;
-      lastError = err instanceof Error ? err.message : String(err);
-      if (attempt === 4) break;
-      await delay(attempt);
-    }
+  if (token) args.push('-H', `Authorization: Bearer ${token}`);
+  args.push(url);
+  const result = capture('curl', args, 32 * 1024 * 1024);
+  if (result.code !== 0) {
+    throw new Error(`GitHub 请求失败 ${url}\n${result.stderr || result.stdout}`);
   }
-  throw new Error(`GitHub 请求失败 ${url}\n${lastError}`);
+  return JSON.parse(result.stdout);
 }
 
 function downloadFirst(urls: string[], dest: string): void {
@@ -271,12 +262,6 @@ function downloadFirst(urls: string[], dest: string): void {
     throw new Error(`下载失败 ${url}\n${result.stderr || result.stdout}`);
   }
   throw new Error(`上游没有这个文件，最后尝试 ${last}`);
-}
-
-function delay(attempt: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, attempt * 2000);
-  });
 }
 
 function extractArchive(archive: string, dest: string): void {
@@ -308,8 +293,8 @@ function run(command: string, args: string[]): void {
   }
 }
 
-function capture(command: string, args: string[]): { code: number; stdout: string; stderr: string } {
-  const result = spawnSync(command, args, { encoding: 'utf8' });
+function capture(command: string, args: string[], maxBuffer = 1024 * 1024): { code: number; stdout: string; stderr: string } {
+  const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer });
   return {
     code: result.status ?? 1,
     stdout: result.stdout ?? '',
