@@ -198,31 +198,41 @@ async function materializeNode(arch: RuntimeArch, work: string): Promise<string>
   return packed;
 }
 
-async function findPythonAsset(arch: RuntimeArch): Promise<{ name: string; url: string }> {
-  for (let page = 1; page <= 5; page += 1) {
-    const releases = await githubJson(
-      `https://api.github.com/repos/astral-sh/python-build-standalone/releases?per_page=20&page=${page}`,
-    );
-    if (!Array.isArray(releases) || releases.length === 0) break;
-    const assets = releases.flatMap((release) => {
-      const list = (release as { assets?: { name?: string; browser_download_url?: string }[] }).assets ?? [];
-      return list.flatMap((asset) => (
-        asset.name && asset.browser_download_url
-          ? [{ name: asset.name, url: asset.browser_download_url }]
-          : []
-      ));
-    });
-    const name = pickPythonAsset(assets.map((asset) => asset.name), arch);
-    const found = assets.find((asset) => asset.name === name);
-    if (found) return found;
+type PythonAsset = { name: string; url: string };
+
+/** 一次进程里只拉最新发布。五个架构共用，避免反复下载那份超大 JSON。 */
+let pythonReleaseAssets: PythonAsset[] | null = null;
+
+async function findPythonAsset(arch: RuntimeArch): Promise<PythonAsset> {
+  const assets = await loadPythonReleaseAssets();
+  const name = pickPythonAsset(assets.map((asset) => asset.name), arch);
+  const found = assets.find((asset) => asset.name === name);
+  if (!found) {
+    throw new Error(`python-build-standalone 没有 ${PYTHON_VERSION} ${pythonTriple(arch)} 的 install_only`);
   }
-  throw new Error(`python-build-standalone 没有 ${PYTHON_VERSION} ${pythonTriple(arch)} 的 install_only`);
+  return found;
+}
+
+async function loadPythonReleaseAssets(): Promise<PythonAsset[]> {
+  if (pythonReleaseAssets) return pythonReleaseAssets;
+  const release = await githubJson(
+    'https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest',
+  );
+  const list = (release as { assets?: { name?: string; browser_download_url?: string }[] }).assets ?? [];
+  pythonReleaseAssets = list.flatMap((asset) => (
+    asset.name && asset.browser_download_url
+      ? [{ name: asset.name, url: asset.browser_download_url }]
+      : []
+  ));
+  return pythonReleaseAssets;
 }
 
 function githubJson(url: string): unknown {
   const args = [
     '-fL',
+    '--http1.1',
     '--retry', '5',
+    '--retry-all-errors',
     '--retry-delay', '2',
     '-sS',
     '-H', 'Accept: application/vnd.github+json',
@@ -245,6 +255,7 @@ function downloadFirst(urls: string[], dest: string): void {
     fs.rmSync(dest, { force: true });
     const result = capture('curl', [
       '-fL',
+      '--http1.1',
       '--retry', '5',
       '--retry-delay', '2',
       '-sS',
