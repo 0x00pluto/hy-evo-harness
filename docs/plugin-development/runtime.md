@@ -82,6 +82,8 @@ module.exports = {
 - `getPluginConfig()`：当前插件的配置。只含本插件声明过的键，不接收插件 id。声明方式见 [设置](settings.md)。
 - `pluginEnv()`：给子进程用的环境变量。先复制 Dex Buddy 的环境，再盖上本插件的配置。数字变成十进制字符串，布尔变成 `true` 或 `false`。不会改 Dex Buddy 自己的 `process.env`。
 
+开发时缓存、导出和数据库写在插件仓库里。装进 Dex Buddy 之后的落盘见 [数据](data.md)。
+
 卸载时 Dex Buddy 会调用 `dispose`，并摘掉这个插件注册的服务和 `on` 监听。不要把清理工作只留在 `dispose` 外面。
 
 服务方法的参数和返回值必须是普通数据：对象、数组、字符串、数字、布尔值、`null`。不要返回函数、类实例、`Map`、`Set` 或带循环引用的对象。
