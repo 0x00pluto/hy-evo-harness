@@ -8,7 +8,7 @@
 
 逻辑本来就是 Node 函数时，在服务方法里直接调用。这用的是 Electron 自带的 Node，没有 npm。逻辑是 Python，或插件自己带 `package.json` 的 Node 服务时，在服务方法里用 `ctx.runtime` 拉起进程，把输出收成返回值。页面继续只调 `window.dex.call`，不要把 Next.js 或 FastAPI 的页面嵌进工作台。
 
-清单里声明了 `runtime` 之后，Dex Buddy 才准备解释器。没有声明的插件不下载。解释器版本写在宿主里，清单不写 `3.12` 或 `22`。Python 全机一份。官方 Node 也是全机一份，只用来跑插件自己的服务；`index.js` 仍跑在 Electron 里。
+清单里声明了 `runtime` 之后，Dex Buddy 才准备解释器。没有声明的插件不下载。清单不写解释器版本。现在宿主钉死的是 Python 3.12.12、Node 22.21.0、uv 0.9.2，事实源是 `src/main/plugin-runtime.ts`。改这三个常量要发一版 Dex Buddy，已安装插件的 `plugin-runtime/<id>/env` 会按新版本重建。有安装包的架构是 `darwin-arm64`、`darwin-x64`、`win32-x64`、`linux-x64`、`linux-arm64`。没有 `win32-arm64`。这种机器上，已安装且声明了 `runtime` 的插件会在准备环境时失败。Python 全机一份。官方 Node 也是全机一份，只用来跑插件自己的服务；`index.js` 仍跑在 Electron 里。
 
 ```json
 {
@@ -19,7 +19,11 @@
 }
 ```
 
-Python 有 `uv.lock` 时按锁文件装，否则用 `requirements.txt`。Node 需要同目录的 `package-lock.json`。同事第一次打开会下载解释器并安装依赖，插件页显示「正在准备运行环境」。失败时详情里留下日志，可以重试。
+Python 的 `requirements.txt` 必须存在。插件根上没有 `uv.lock` 时，用这份文件走 `uv pip install -r`，缺锁不会失败。根上有 `uv.lock` 时走 `uv sync --frozen --no-dev --no-install-project`，装的是锁，不是 `requirements.txt`。锁只认插件根，不认 requirements 旁边。`uv sync` 需要根上的 uv 工程，通常还有 `pyproject.toml`。只放一把锁，或锁和 requirements 不一致，都按锁装。工程文件缺失时这次准备会失败。
+
+Node 必须有 `package-lock.json`，并且和清单里的 `package.json` 在同一目录。缺了会抛「Node 插件需要 package-lock.json」。
+
+同事第一次打开已安装的插件会下载解释器并安装依赖，插件页显示「正在准备运行环境」。失败时宿主不执行 `apply`，服务不存在。详情里留下日志，按钮是「重试」。这时页面调用会失败。重试成功后才挂上服务。开发目录缺 `.venv` 或 `node_modules` 时也是这样，重试不会替你建环境，见 [数据](data.md)。
 
 ```javascript
 const { spawn } = require('child_process');
@@ -65,7 +69,9 @@ FastAPI 或 Next.js 同样在 `apply` 里启动，在 `dispose` 里关掉。宿�
 const result = await window.dex.call('myToolService', 'run', [{ lesson: '6-upper' }]);
 ```
 
-`window.dex.call` 是一次请求、一次返回。命令还在跑的时候，页面收不到中途进度。等命令结束，再返回 `{ success: true, outputPath: '/path/to/result.mp4' }` 这样的普通对象。
+`window.dex.call` 是一次请求、一次返回，没有单独的超时。命令还在跑的时候，页面收不到中途进度。不要在一次调用里把整段合成或下载耗完。长任务的方法先返回任务 id，页面再轮询另一个方法。等命令结束，再返回 `{ success: true, outputPath: '/path/to/result.mp4' }` 这样的普通对象。
+
+一行一个 JSON 的协议，拉起 Python 时加上 `PYTHONUNBUFFERED=1`，否则子进程会把输出攒住，调用方一直等。
 
 改布局时可以先用浏览器打开 HTML。放进 Dex Buddy 之后，按钮必须走 `window.dex.call`。
 
@@ -99,7 +105,7 @@ module.exports = {
 - `emit(event, ...args)`：向所有插件广播。
 - `on(event, handler)`：收广播。
 - `getPluginConfig()`：当前插件的配置。只含本插件声明过的键，不接收插件 id。声明方式见 [设置](settings.md)。
-- `pluginEnv()`：给子进程用的环境变量。先复制 Dex Buddy 的环境，再盖上本插件的配置。数字变成十进制字符串，布尔变成 `true` 或 `false`。不会改 Dex Buddy 自己的 `process.env`。
+- `pluginEnv()`：没有声明运行时，拉起子进程时用它。先复制 Dex Buddy 的环境，再盖上本插件的配置。数字变成十进制字符串，布尔变成 `true` 或 `false`。不会改 Dex Buddy 自己的 `process.env`。声明了 `runtime` 时不要用它拉起 Python 或 Node。虚拟环境和 `PATH` 在 `ctx.runtime.env` 里。用 `ctx.runtime.python` 或 `ctx.runtime.node`，环境传 `ctx.runtime.env`。
 
 开发时缓存、导出和数据库写在插件仓库里。装进 Dex Buddy 之后的落盘见 [数据](data.md)。`ctx.dirs.cache` 是可重建缓存，`ctx.dirs.data` 是卸载后仍保留的导出和数据库。
 
@@ -107,7 +113,7 @@ module.exports = {
 
 服务方法的参数和返回值必须是普通数据：对象、数组、字符串、数字、布尔值、`null`。不要返回函数、类实例、`Map`、`Set` 或带循环引用的对象。
 
-拉起声明过的 Python 或 Node 服务时，用 `ctx.runtime.env`。它在 `pluginEnv()` 上补了虚拟环境和 `PATH`。脚本里继续用 `os.getenv`：
+声明了 `runtime` 时，用 `ctx.runtime.python` 或 `ctx.runtime.node`，环境传 `ctx.runtime.env`。没有声明运行时，才用 `pluginEnv()`。`ctx.runtime.env` 在 `pluginEnv()` 上补了虚拟环境和 `PATH`。脚本里继续用 `os.getenv`：
 
 ```javascript
 const { execFile } = require('node:child_process');

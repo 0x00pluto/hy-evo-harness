@@ -40,7 +40,10 @@ zip -r my-tool-v1.0.0.zip my-tool \
   -x '*/node_modules/*' \
   -x '*/cache/*' \
   -x '*/output/*' \
-  -x '*/.cursor/*'
+  -x '*/temp/*' \
+  -x '*/.cursor/*' \
+  -x '*/bin/*' \
+  -x '*/.next/*'
 ```
 
 压缩包要满足其中一种：
@@ -48,7 +51,7 @@ zip -r my-tool-v1.0.0.zip my-tool \
 - 解压后根上就是 `plugin.manifest.json`
 - 解压后只有一层目录，这个目录里有 `plugin.manifest.json`
 
-不要打进 `.git`、`.env`、`.venv`、`node_modules`、`bin/`、`.next/`、`cache/`、`output/`。包里不要出现绝对路径或 `..`。安装之后不要把缓存、导出和数据库写回安装目录，见 [数据](data.md)。
+不要打进 `.git`、`.env`、`.venv`、`node_modules`、`cache/`、`output/`、`temp/`、`.cursor/`、`bin/`、`.next/`。`.env.example` 可以留。`.env.local` 这类文件也不要打进。排除项之外的文件都会进包，包括 `tests/`、`docs/` 和大资源。包里不要出现绝对路径或 `..`。安装之后不要把缓存、导出和数据库写回安装目录，见 [数据](data.md)。
 
 对方打开 Dex Buddy，把 zip 拖进欢迎页，或从图标轨的拼图进入插件页，点「添加」选这个文件。列表会马上出现，不用重启。同一个已安装插件再次安装会覆盖。如果这个 `id` 已经来自 Dex Buddy 内置目录或开发路径，安装会被拒绝，需要换一个 `id`。
 

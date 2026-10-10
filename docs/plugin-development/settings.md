@@ -8,7 +8,7 @@
 
 工作台不读 `.env`，也不替你写 `.env`。脚本本身只认环境变量，不引用 Dex Buddy：
 
-- 在工作台里跑：`index.js` 拉起子进程时传入 `{ env: ctx.pluginEnv() }`。设置页里的值这时已经在环境里。
+- 在工作台里跑：声明了 `runtime` 时，用 `ctx.runtime.python` 或 `ctx.runtime.node`，环境传 `{ env: ctx.runtime.env }`。没有声明运行时，才传 `{ env: ctx.pluginEnv() }`。设置页里的值在这两种环境里都有。虚拟环境和 `PATH` 只在 `ctx.runtime.env` 里。
 - 离开工作台单独跑：脚本自己加载项目里的 `.env`。已有的环境变量优先，这样工作台注入的值不会被 `.env` 盖掉。
 
 `.env` 可以留在你自己的仓库里做本地调试，不要打进 zip。
@@ -78,8 +78,8 @@ tts_engine = os.getenv("TTS_ENGINE", "edge-tts")
 
 1. 在 `plugin.manifest.json` 写 `configSchema`。键名必须和脚本里 `os.getenv` 或 `process.env` 的名字一致。
 2. 改了 manifest 要重启 Dex Buddy。重启后，从图标轨齿轮弹出层进入「设置」，就会看到这个插件。
-3. 在设置页填完，点「保存」。之后再调用 `pluginEnv()` 就是新值，不用为了改一项再重启。
-4. `index.js` 里 `execFile` 或 `spawn` 必须传入 `{ env: ctx.pluginEnv() }`。漏传时，脚本只能看到 Dex Buddy 进程自己的环境，看不到设置页里的值。写法见 [运行](runtime.md)。
+3. 在设置页填完，点「保存」。之后新拉起的进程会拿到新值，不用为了改一项再重启 Dex Buddy。`apply` 里一直活着的子进程还拿着启动时的环境，要自己把它停掉再拉起。
+4. 声明了 `runtime` 时，`execFile` 或 `spawn` 用 `ctx.runtime.python` 或 `ctx.runtime.node`，并传入 `{ env: ctx.runtime.env }`。没有声明运行时，才传入 `{ env: ctx.pluginEnv() }`。漏传时，脚本只能看到 Dex Buddy 进程自己的环境，看不到设置页里的值，也找不到装进去的包。写法见 [运行](runtime.md)。
 5. 日志里不要打印密钥。
 
 `settingsEntry` 指向插件目录里的 HTML。有合法声明时，设置页上面是生成的表单，下面是这个页面。只有自带页面、没有合法声明时，设置页只显示这个页面。页面没有 Node，读写的是同一块配置，而且读不到其他插件，也读不到已保存的密钥明文。明文只在工作台设置页点眼睛时取出：

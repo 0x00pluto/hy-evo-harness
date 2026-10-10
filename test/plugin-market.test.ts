@@ -88,6 +88,7 @@ test('打包跳过密钥和依赖目录，保留示例环境文件', () => {
   assert.equal(shouldPackRelative('.venv/bin/python'), false);
   assert.equal(shouldPackRelative('bin/darwin/worker'), false);
   assert.equal(shouldPackRelative('.next/server/app.js'), false);
+  assert.equal(shouldPackRelative('temp/job.json'), false);
   assert.equal(shouldPackRelative('src/app.py'), true);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-pack-'));
   fs.writeFileSync(path.join(root, 'plugin.manifest.json'), '{}');

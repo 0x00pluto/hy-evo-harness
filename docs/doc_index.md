@@ -13,7 +13,7 @@
 - `docs/plugin-development/data.md`: 开发时缓存和导出写在插件仓库；装进 installed_plugins 之后，ctx.dirs.cache 在 plugin-runtime，ctx.dirs.data 在 plugin-data，卸载只删运行环境和缓存
 - `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node，页面仍用 dex.call
 - `docs/plugin-development/ship.md`: 开发挂载、zip 拖进工作台安装，以及会加载失败的情况
-- `docs/plugin-development/distribute.md`: 插件作者发到插件中心：只推 tag 和源码；runtime 在清单里声明，不再用 dex-buddy-plugin-pack.json 打三端二进制
+- `docs/plugin-development/distribute.md`: 插件作者发到插件中心：只推 tag；zip 含 tag 检出里排除项之外的全部文件；runtime 在清单里声明，不再用 dex-buddy-plugin-pack.json 打三端二进制
 - `docs/plugin-development/color.md`: 插件页面配色建议：中性色可粘贴，也可自选颜色；壳不检查
 - `AGENTS.md`: 本仓工作约定、目录语义与能力声明；代码检索先走 Codebase MCP；scaffold_version 2.4.0
 - `docs/builtin-workflows/post-task-reflect.md`: 任务后反思（白痴指数 → 删 → 程序化 → 鲁棒 → 加速）；用户明确要求时触发，不自动跑

@@ -23,9 +23,9 @@ git push origin vX.Y.Z
 
 只有页面和 `index.js`、不需要额外解释器的插件，做到这里就结束。
 
-需要 Python 或自己的 Node 依赖时，在 `plugin.manifest.json` 写 `runtime`，并提交锁文件。见 [运行](runtime.md)。不要再放 `dex-buddy-plugin-pack.json`。发布时如果仓库根上还有这份文件，这次发布会失败。
+需要 Python 或自己的 Node 依赖时，在 `plugin.manifest.json` 写 `runtime`。Python 提交 `requirements.txt`。有 uv 工程时再在仓库根提交 `uv.lock`，没有锁也能发布。Node 必须提交和 `package.json` 同目录的 `package-lock.json`。装依赖的规则见 [运行](runtime.md)。不要再放 `dex-buddy-plugin-pack.json`。发布时如果仓库根上还有这份文件，这次发布会失败。
 
-zip 里是源码。`.venv`、`node_modules`、`bin/` 和 `.next/` 不会打进去。同事安装之后，Dex Buddy 在那台机器上准备环境。
+发布 zip 是这次 tag 检出里、排除项之外的全部文件，不只是源码。`tests/`、`docs/` 和大资源会进同事的包。排除 `.git`、`.venv`、`node_modules`、`cache/`、`output/`、`temp/`、`.cursor/`、`bin/`、`.next/`，以及 `.env`（保留 `.env.example`）。不要把密钥和大文件提交进 tag。同事安装之后，Dex Buddy 在那台机器上准备环境。
 
 密钥继续放在 Dex Buddy 的设置页，不要写进仓库，不要打进包。
 
