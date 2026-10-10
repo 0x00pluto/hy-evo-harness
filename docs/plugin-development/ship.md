@@ -59,7 +59,7 @@ zip -r my-tool-v1.0.0.zip my-tool \
 
 同事不收下载地址。作者改版本、推 tag。需要 Python 或 Node 依赖时在清单里声明 `runtime`，不要再交打包脚本。步骤见 [发到插件中心](distribute.md)。
 
-维护者在 Dex Buddy 仓库里手动跑「Publish Plugin」。密钥和触发方式见 [发布插件](../workflows/publish-plugin.md)。
+维护者把仓库写进授权名单后，由 Dex Buddy 仓库的同步工作流发布。密钥和触发方式见 [发布插件](../workflows/publish-plugin.md)。
 
 核心是 Python 或自带依赖的 Node 服务时，在 `plugin.manifest.json` 里声明 `runtime`。开发阶段可以继续用仓库里的 `.venv` 或 `node_modules`。装到别人机器上之后，Dex Buddy 用自己准备的解释器安装依赖，页面仍然只调用 `window.dex.call`。见 [运行](runtime.md)。
 

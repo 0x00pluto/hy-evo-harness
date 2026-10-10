@@ -21,7 +21,7 @@
 - `docs/builtin-workflows/consolidate-memory.md`: 记忆巩固与遗忘（冲突消解 → 情景提纯 → 剪枝）；仅用户显式触发；与反思 / 提取经验互不串联
 - `docs/builtin-workflows/cut-release-tag.md`: 日常发版唯一入口；汇总变更 → upgrades → 对齐 package.json version → tag → 推送；Release 页由 Actions 创建，不要本地 gh release create；major 须人指定
 - `docs/workflows/_TEMPLATE.md`: 业务 workflow 六段骨架；新建业务工作流时复制并改名，写完后删掉本行或改成真实条目
-- `docs/workflows/publish-plugin.md`: 维护者把插件仓库写入授权名单后，同步工作流拉取最高 vX.Y.Z 上传七牛；也可手动补发某一个 tag；仓库里若还有 dex-buddy-plugin-pack.json 则失败
+- `docs/workflows/publish-plugin.md`: 维护者把插件仓库写入授权名单后，同步工作流拉取最高 vX.Y.Z 上传七牛；仓库里若还有 dex-buddy-plugin-pack.json 则失败
 - `specs/prds/prd-wiki-index.md`: PRD 索引；正文为 `specs/prds/prd-{五位序号}-{feature-slug}.md`，本索引不计入序号
 - `.cursor/commands/team/`: 团队命令（产品经理、工程验收官、前端工程师、测试工程师、自主交付工程师）；母版在 Obsidian，不在此复制全文
 - `docs/renderer-layout.md`: 设置页和插件页共用一份 #split-layout；以后在第四个分栏表面把间距改散，或单页拼 DOM 超过约 800 行时，再引入 Lit 具名插槽，本次不安装

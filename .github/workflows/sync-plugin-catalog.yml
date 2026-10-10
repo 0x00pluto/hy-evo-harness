@@ -6,7 +6,7 @@ on:
     # 每小时看一遍授权名单。推 tag 后最多等这一小时，也可以手动立刻跑。
     - cron: '17 * * * *'
 
-# 和 Publish Plugin 共用同一组，避免两趟同时改 index.json。
+# 合成目录必须串行，避免两趟同时改 index.json。
 concurrency:
   group: plugin-catalog
   cancel-in-progress: false
