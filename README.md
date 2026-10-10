@@ -1,8 +1,6 @@
 # Dex Buddy
 
-Huyuan AI 的统一工作台。宿主用 Electron 扫描插件、注册服务，并用 `app-plugin://` 打开插件界面。插件后端是普通 CommonJS，不需要自己监听端口。
-
-在线插件市场不在当前版本里。
+Huyuan AI 的统一工作台。宿主用 Electron 扫描插件、注册服务，并用 `app-plugin://` 打开插件界面。插件后端是普通 CommonJS，不需要自己监听端口。插件中心从七牛目录安装，发布见 [docs/workflows/publish-plugin.md](docs/workflows/publish-plugin.md)。
 
 ## 安装依赖
 

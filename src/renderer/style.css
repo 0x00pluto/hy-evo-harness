@@ -673,8 +673,13 @@ body[data-pin="off"][data-surface="workspace"] #sidebar.is-open {
 #settings-search:focus-visible,
 #plugins-search:focus-visible,
 #plugins-refresh:focus-visible,
+#plugins-market-refresh:focus-visible,
 #plugins-add:focus-visible,
+#plugins-market-open:focus-visible,
+#plugins-market-back:focus-visible,
 #plugins-use:focus-visible,
+#plugins-update:focus-visible,
+.market-action:focus-visible,
 .plugin-icon-btn:focus-visible,
 .plugin-link:focus-visible,
 .plugin-folder:focus-visible,
@@ -859,6 +864,7 @@ h1 {
 #plugins-status[data-kind="ok"] { color: var(--ok); }
 
 #plugins-install:not([hidden]),
+#plugins-market:not([hidden]),
 #plugins-detail:not([hidden]) {
   flex: 1;
   min-height: 0;
@@ -882,6 +888,7 @@ h1 {
 }
 
 #plugins-refresh,
+#plugins-market-refresh,
 .plugin-icon-btn {
   width: 32px;
   height: 32px;
@@ -896,10 +903,15 @@ h1 {
 }
 
 #plugins-refresh:hover,
+#plugins-market-refresh:hover,
 .plugin-icon-btn:hover { background: var(--hover); }
 
 #plugins-add,
-#plugins-use {
+#plugins-market-open,
+#plugins-market-back,
+#plugins-use,
+#plugins-update,
+.market-action {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -914,9 +926,14 @@ h1 {
 }
 
 #plugins-add:hover:not(:disabled),
-#plugins-use:hover { background: #e8e8e8; }
+#plugins-market-open:hover,
+#plugins-market-back:hover,
+#plugins-use:hover,
+#plugins-update:hover,
+.market-action:hover:not(:disabled) { background: #e8e8e8; }
 
-#plugins-add:disabled {
+#plugins-add:disabled,
+.market-action:disabled {
   color: var(--muted);
   cursor: default;
 }
@@ -956,6 +973,42 @@ h1 {
 }
 
 #plugins-drop.dragover .plugins-drop-hint { color: var(--ink); }
+
+#plugins-market-list {
+  overflow: auto;
+  min-height: 0;
+}
+
+.market-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.market-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.market-name {
+  font-size: var(--text-body);
+  color: var(--ink);
+}
+
+.market-meta {
+  margin-top: 4px;
+  font-size: var(--text-meta);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-action {
+  flex: none;
+}
 
 .plugin-detail-head {
   display: flex;

@@ -100,5 +100,5 @@ pnpm start
 | 字段 | 值 |
 |---|---|
 | lifecycle | active |
-| owns | 插件扫描与服务注册；app-plugin:// 打开插件界面；zip 安装与卸载；插件 manifest 与 dex.call 契约 |
-| not | 在线插件市场；插件产品本体（仓内示例不在本仓演进）；数据库与 HTTP API；把外部项目源码复制进 plugins/ |
+| owns | 插件扫描与服务注册；app-plugin:// 打开插件界面；zip 安装与卸载；从七牛插件目录安装和更新；插件 manifest 与 dex.call 契约 |
+| not | 与技能中心合并发布；用 Git 克隆安装插件；插件产品本体（仓内示例不在本仓演进）；数据库与 HTTP API；把外部项目源码复制进 plugins/ |

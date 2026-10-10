@@ -140,13 +140,18 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
 
   async function openPlugins() {
     const from = session.surface;
+    pluginsPage.showInstallStage();
     const next = enterPlugins(session);
-    if (next === session) return;
+    if (next === session) {
+      apply();
+      return;
+    }
     if (from === 'settings' && !(await settings.confirmDiscard())) return;
     session = next;
     if (from === 'settings') settings.leaveSettings({ resume: false });
     if (from === 'workspace') plugins.suspend();
     if (from !== 'plugins') pluginsPage.clearStatus();
+    pluginsPage.showInstallStage();
     apply();
   }
 

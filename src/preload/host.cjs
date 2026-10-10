@@ -22,6 +22,12 @@ contextBridge.exposeInMainWorld('dex', {
   uninstall(id) {
     return ipcRenderer.invoke('dex:uninstall', id);
   },
+  pluginCatalog() {
+    return ipcRenderer.invoke('dex:plugin-catalog');
+  },
+  installCatalogPlugin(id) {
+    return ipcRenderer.invoke('dex:plugin-install-catalog', id);
+  },
   settingsCatalog() {
     return ipcRenderer.invoke('dex:settings-catalog');
   },

@@ -157,6 +157,7 @@
                 <button id="plugins-refresh" type="button" aria-label="刷新">
                   <i data-lucide="refresh-cw"></i>
                 </button>
+                <button id="plugins-market-open" type="button">插件中心</button>
                 <button id="plugins-add" type="button">
                   <i data-lucide="plus"></i>
                   <span>添加</span>
@@ -168,6 +169,18 @@
               <p>把插件压缩包拖到这里</p>
               <p class="plugins-drop-hint">或点右上角的添加，选择 .zip</p>
             </div>
+          </div>
+          <div id="plugins-market" hidden>
+            <div class="split-main-bar plugins-stage-bar">
+              <h1>插件中心</h1>
+              <div class="plugins-stage-actions">
+                <button id="plugins-market-back" type="button">安装台</button>
+                <button id="plugins-market-refresh" type="button" aria-label="刷新插件中心">
+                  <i data-lucide="refresh-cw"></i>
+                </button>
+              </div>
+            </div>
+            <div id="plugins-market-list"></div>
           </div>
           <div id="plugins-detail" hidden></div>
         </section>

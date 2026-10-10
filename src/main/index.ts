@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { readExtraPluginPaths, readForceUpdateIcon } from './dev-config.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
 import { isHttpUrl } from './manifest.ts';
+import { downloadVerifiedZip, fetchPluginCatalog, findRelease, installCatalogRelease } from './plugin-market.ts';
+import { deleteOrigin, marketUpdates, readOrigins, writeOrigin } from './plugin-origins.ts';
 import { PluginSettingsStore } from './plugin-settings.ts';
 import { ensurePluginProtocol, pluginPartition, registerPluginScheme } from './protocol.ts';
 import { ServiceRegistry } from './registry.ts';
@@ -26,6 +28,20 @@ function installedPluginsDir(): string {
 
 function pluginSettingsFile(): string {
   return path.join(app.getPath('userData'), 'plugin-settings.json');
+}
+
+function pluginOriginsFile(): string {
+  return path.join(app.getPath('userData'), 'plugin-origins.json');
+}
+
+function recordFileOrigin(id: string): void {
+  const plugin = registry.getPlugin(id);
+  if (!plugin) return;
+  writeOrigin(pluginOriginsFile(), id, {
+    channel: 'file',
+    version: plugin.manifest.version,
+    installedAt: new Date().toISOString(),
+  });
 }
 
 function pluginIdFromSender(event: IpcMainInvokeEvent): string {
@@ -170,6 +186,7 @@ async function installFromZip(zipFilePath: string): Promise<DexResult> {
       zipFilePath,
       userPluginsDir: installedPluginsDir(),
     });
+    recordFileOrigin(installed.installedId);
     return { ok: true, plugins: installed.plugins, installedId: installed.installedId };
   } catch (err) {
     return {
@@ -297,6 +314,62 @@ function registerIpc(): void {
     }
   });
 
+  ipcMain.handle('dex:plugin-catalog', async () => {
+    try {
+      const catalog = await fetchPluginCatalog();
+      const updates = marketUpdates({
+        catalog: catalog.plugins,
+        origins: readOrigins(pluginOriginsFile()),
+        installed: registry.getPluginList().map((plugin) => ({
+          id: plugin.id,
+          version: plugin.version,
+          source: plugin.source,
+        })),
+      });
+      return { ok: true, generatedAt: catalog.generatedAt, plugins: catalog.plugins, updates };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        plugins: [],
+        updates: [],
+      };
+    }
+  });
+
+  ipcMain.handle('dex:plugin-install-catalog', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
+    }
+    const zipFilePath = path.join(os.tmpdir(), `dex-buddy-catalog-${process.pid}.zip`);
+    try {
+      const catalog = await fetchPluginCatalog();
+      const release = findRelease(catalog, id);
+      await downloadVerifiedZip(release, zipFilePath);
+      const installed = await installCatalogRelease({
+        registry,
+        release,
+        zipFilePath,
+        userPluginsDir: installedPluginsDir(),
+      });
+      writeOrigin(pluginOriginsFile(), installed.installedId, {
+        channel: 'market',
+        version: release.version,
+        sha256: release.sha256,
+        installedAt: new Date().toISOString(),
+      });
+      return { ok: true, plugins: installed.plugins, installedId: installed.installedId };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        plugins: registry.getPluginList(),
+      };
+    } finally {
+      fs.rmSync(zipFilePath, { force: true });
+    }
+  });
+
   ipcMain.handle('dex:uninstall', async (_event, id: unknown) => {
     if (typeof id !== 'string') {
       return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
@@ -307,6 +380,7 @@ function registerIpc(): void {
         id,
         userPluginsDir: installedPluginsDir(),
       });
+      deleteOrigin(pluginOriginsFile(), id);
       return { ok: true, plugins };
     } catch (err) {
       return {
