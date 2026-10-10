@@ -3,9 +3,16 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { Module } from 'node:module';
 import { readManifestFile } from './manifest.ts';
+import {
+  pluginRuntimeDir,
+  preparePluginRuntime,
+  runtimeEnv,
+  type CommandRunner,
+  type RuntimeTools,
+} from './plugin-runtime.ts';
 import { PluginSettingsStore, isSettingsCandidate, type SettingsPluginView, type SettingsSaveResult } from './plugin-settings.ts';
 import { resolvePluginFile } from './protocol.ts';
-import type { AppContext, AppPlugin, Logger, PluginSource, PluginSummary } from './types.ts';
+import type { AppContext, AppPlugin, Logger, PluginManifest, PluginSource, PluginSummary } from './types.ts';
 
 interface CommonJsModule {
   filename: string;
@@ -45,12 +52,31 @@ const defaultLogger: Logger = {
   error: (msg) => console.error(`[Dex Buddy ERROR] ${msg}`),
 };
 
+interface RuntimeProblem {
+  manifest: PluginManifest;
+  absPath: string;
+  source: PluginSource;
+  message: string;
+}
+
+export interface RuntimeHost {
+  userData: string;
+  run?: CommandRunner;
+  tools?: RuntimeTools;
+  onProgress?: (event: { id: string; phase: 'preparing' }) => void;
+}
+
 export class ServiceRegistry {
   private readonly services = new Map<string, unknown>();
   private readonly plugins = new Map<string, AppPlugin>();
+  private readonly problems = new Map<string, RuntimeProblem>();
   private readonly ownership = new Map<string, Owned>();
   private readonly bus = new EventEmitter();
   private settings: PluginSettingsStore;
+  private userData: string | null = null;
+  private commandRun: CommandRunner | undefined;
+  private runtimeTools: RuntimeTools | undefined;
+  private onRuntimeProgress: RuntimeHost['onProgress'];
   readonly logger: Logger;
 
   constructor(logger: Logger = defaultLogger, settings?: PluginSettingsStore) {
@@ -61,6 +87,28 @@ export class ServiceRegistry {
 
   setSettings(settings: PluginSettingsStore): void {
     this.settings = settings;
+  }
+
+  setRuntimeHost(host: RuntimeHost): void {
+    this.userData = host.userData;
+    this.commandRun = host.run;
+    this.runtimeTools = host.tools;
+    this.onRuntimeProgress = host.onProgress;
+  }
+
+  /** 卸载时丢掉这个插件的依赖和缓存。用户数据目录留给下次安装。 */
+  discardRuntime(id: string): void {
+    this.problems.delete(id);
+    if (!this.userData) return;
+    fs.rmSync(pluginRuntimeDir(this.userData, id), { recursive: true, force: true });
+  }
+
+  async retryRuntime(id: string): Promise<string | null> {
+    const problem = this.problems.get(id);
+    if (!problem) return '插件没有待重试的运行环境';
+    this.problems.delete(id);
+    await this.loadPluginFromDirectory(problem.absPath, problem.source);
+    return this.problems.get(id)?.message ?? null;
   }
 
   registerService<T = unknown>(name: string, service: T): void {
@@ -110,7 +158,11 @@ export class ServiceRegistry {
   }
 
   getPluginList(): PluginSummary[] {
-    return Array.from(this.plugins.values()).map((plugin) => summarizePlugin(plugin));
+    const loaded = Array.from(this.plugins.values()).map((plugin) => summarizePlugin(plugin));
+    const failed = Array.from(this.problems.values())
+      .filter((problem) => !this.plugins.has(problem.manifest.id))
+      .map((problem) => summarizeProblem(problem));
+    return loaded.concat(failed);
   }
 
   async callService(serviceName: string, method: string, args: unknown[]): Promise<unknown> {
@@ -160,6 +212,30 @@ export class ServiceRegistry {
 
   async loadPluginFromDirectory(pluginDir: string, source: PluginSource): Promise<void> {
     const manifest = readManifestFile(pluginDir);
+    if (this.plugins.has(manifest.id)) {
+      throw new DuplicatePluginError(manifest.id);
+    }
+    const prepared = await preparePluginRuntime({
+      userData: this.userData,
+      pluginDir,
+      source,
+      spec: manifest.runtime,
+      run: this.commandRun,
+      tools: this.runtimeTools,
+      onProgress: manifest.runtime
+        ? () => this.onRuntimeProgress?.({ id: manifest.id, phase: 'preparing' })
+        : undefined,
+    });
+    if (!prepared.ok) {
+      this.problems.set(manifest.id, {
+        manifest,
+        absPath: path.resolve(pluginDir),
+        source,
+        message: prepared.message,
+      });
+      this.logger.error(`插件 ${manifest.id} 的运行环境未就绪: ${prepared.message}`);
+      return;
+    }
     const pluginModule = this.loadModule(pluginDir, manifest.main);
     const plugin: AppPlugin = {
       manifest,
@@ -167,6 +243,8 @@ export class ServiceRegistry {
       source,
       apply: pluginModule.apply,
       dispose: pluginModule.dispose,
+      dirs: prepared.dirs,
+      runtimeBins: prepared.bins,
     };
     await this.loadPlugin(plugin);
   }
@@ -254,6 +332,11 @@ export class ServiceRegistry {
       },
       getPluginConfig: () => this.settings.getPluginConfig(plugin.manifest),
       pluginEnv: () => this.settings.pluginEnv(plugin.manifest, process.env),
+      dirs: plugin.dirs ?? {
+        data: plugin.absPath,
+        cache: path.join(plugin.absPath, 'cache'),
+      },
+      ...runtimeBinding(plugin, () => this.settings.pluginEnv(plugin.manifest, process.env)),
     };
   }
 
@@ -297,6 +380,34 @@ export class ServiceRegistry {
     owned.listeners.length = 0;
   }
 
+}
+
+function runtimeBinding(
+  plugin: AppPlugin,
+  pluginEnv: () => NodeJS.ProcessEnv,
+): { runtime: AppContext['runtime'] } | Record<string, never> {
+  if (!plugin.runtimeBins) return {};
+  const bins = plugin.runtimeBins;
+  return {
+    runtime: {
+      ...bins,
+      get env() {
+        return runtimeEnv(pluginEnv(), bins);
+      },
+    },
+  };
+}
+
+function summarizeProblem(problem: RuntimeProblem): PluginSummary {
+  return {
+    ...summarizePlugin({
+      manifest: problem.manifest,
+      absPath: problem.absPath,
+      source: problem.source,
+      apply: () => {},
+    }),
+    runtimeError: problem.message,
+  };
 }
 
 function summarizePlugin(plugin: AppPlugin): PluginSummary {

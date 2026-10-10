@@ -370,6 +370,25 @@ function registerIpc(): void {
     }
   });
 
+  ipcMain.handle('dex:retry-plugin-runtime', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
+    }
+    try {
+      const message = await registry.retryRuntime(id);
+      if (message) {
+        return { ok: false, message, plugins: registry.getPluginList() };
+      }
+      return { ok: true, plugins: registry.getPluginList() };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        plugins: registry.getPluginList(),
+      };
+    }
+  });
+
   ipcMain.handle('dex:uninstall', async (_event, id: unknown) => {
     if (typeof id !== 'string') {
       return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
@@ -394,6 +413,14 @@ function registerIpc(): void {
 
 app.whenReady().then(async () => {
   registry.setSettings(new PluginSettingsStore(pluginSettingsFile(), registry.logger));
+  registry.setRuntimeHost({
+    userData: app.getPath('userData'),
+    onProgress: (event) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('dex:runtime-progress', event);
+      }
+    },
+  });
   const icon = loadAppIcon();
   applyDockIcon(icon);
   attachWebviewGuard();

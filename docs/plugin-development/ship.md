@@ -48,19 +48,17 @@ zip -r my-tool-v1.0.0.zip my-tool \
 - 解压后根上就是 `plugin.manifest.json`
 - 解压后只有一层目录，这个目录里有 `plugin.manifest.json`
 
-不要打进 `.git`、`.env`、`.venv`、`node_modules`、`cache/`、`output/`。包里不要出现绝对路径或 `..`。安装之后不要把缓存、导出和数据库写回安装目录，见 [数据](data.md)。
+不要打进 `.git`、`.env`、`.venv`、`node_modules`、`bin/`、`.next/`、`cache/`、`output/`。包里不要出现绝对路径或 `..`。安装之后不要把缓存、导出和数据库写回安装目录，见 [数据](data.md)。
 
 对方打开 Dex Buddy，把 zip 拖进欢迎页，或从图标轨的拼图进入插件页，点「添加」选这个文件。列表会马上出现，不用重启。同一个已安装插件再次安装会覆盖。如果这个 `id` 已经来自 Dex Buddy 内置目录或开发路径，安装会被拒绝，需要换一个 `id`。
 
 ## 发到插件中心
 
-同事不收下载地址。作者改版本、推 tag；需要编译时在仓库里声明打包脚本。步骤见 [发到插件中心](distribute.md)。
+同事不收下载地址。作者改版本、推 tag。需要 Python 或 Node 依赖时在清单里声明 `runtime`，不要再交打包脚本。步骤见 [发到插件中心](distribute.md)。
 
 维护者在 Dex Buddy 仓库里手动跑「Publish Plugin」。密钥和触发方式见 [发布插件](../workflows/publish-plugin.md)。
 
-核心是 Python 时，[运行](runtime.md) 里示例的 `python3` 只适合你自己的开发机。开发阶段可以让 `index.js` 调用本机虚拟环境里的解释器，命令行脚本保持原样。
-
-发给别人时，把脚本打成可执行文件，放进插件目录，`index.js` 用相对路径调用它。依赖跟着这个可执行文件走。`.venv` 不打进 zip。页面不用改，仍然只调用 `window.dex.call`。
+核心是 Python 或自带依赖的 Node 服务时，在 `plugin.manifest.json` 里声明 `runtime`。开发阶段可以继续用仓库里的 `.venv` 或 `node_modules`。装到别人机器上之后，Dex Buddy 用自己准备的解释器安装依赖，页面仍然只调用 `window.dex.call`。见 [运行](runtime.md)。
 
 ## 这样会加载失败
 

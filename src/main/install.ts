@@ -62,6 +62,7 @@ export async function uninstallInstalledPlugin(options: {
   }
   const dest = resolveChildDir(options.userPluginsDir, options.id);
   await options.registry.unloadPlugin(options.id);
+  options.registry.discardRuntime(options.id);
   fs.rmSync(dest, { recursive: true, force: true });
   // 目录已经删掉才动配置。删除失败时上面的 rmSync 会抛出，配置块留着。
   options.registry.deletePluginSettings(options.id);

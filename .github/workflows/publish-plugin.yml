@@ -36,8 +36,6 @@ jobs:
     outputs:
       repository: ${{ steps.plugin.outputs.repository }}
       tag: ${{ steps.plugin.outputs.tag }}
-      has_pack: ${{ steps.declared.outputs.has_pack }}
-      pack: ${{ steps.declared.outputs.pack }}
     env:
       RAW_REPOSITORY: ${{ inputs.repository }}
       RAW_TAG: ${{ inputs.tag }}
@@ -67,55 +65,16 @@ jobs:
           path: plugin-src
           token: ${{ secrets.PLUGIN_CHECKOUT_TOKEN || github.token }}
 
-      - name: Read dex-buddy-plugin-pack.json
-        id: declared
+      - name: Reject binary pack file
         working-directory: harness
         run: |
           set -euo pipefail
           node --experimental-strip-types scripts/read-plugin-publish.ts \
             --dir "$GITHUB_WORKSPACE/plugin-src"
 
-  build:
-    needs: detect
-    if: needs.detect.outputs.has_pack == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-latest
-            os: darwin
-          - runner: windows-latest
-            os: win32
-          - runner: ubuntu-latest
-            os: linux
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - name: Check out plugin
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ needs.detect.outputs.repository }}
-          ref: ${{ needs.detect.outputs.tag }}
-          path: plugin-src
-          token: ${{ secrets.PLUGIN_CHECKOUT_TOKEN || github.token }}
-
-      - name: Run pack script
-        working-directory: plugin-src
-        shell: bash
-        env:
-          PACK_SCRIPT: ${{ needs.detect.outputs.pack }}
-          DEX_BUDDY_OS: ${{ matrix.os }}
-        run: bash "$PACK_SCRIPT"
-
-      - name: Upload packed binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: plugin-bin-${{ matrix.os }}
-          path: plugin-src/bin
-          if-no-files-found: error
-
   publish:
-    needs: [detect, build]
-    if: always() && needs.detect.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    needs: detect
+    if: needs.detect.result == 'success'
     runs-on: ubuntu-latest
     env:
       QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
@@ -140,43 +99,6 @@ jobs:
           ref: ${{ needs.detect.outputs.tag }}
           path: plugin-src
           token: ${{ secrets.PLUGIN_CHECKOUT_TOKEN || github.token }}
-
-      - name: Download packed binaries
-        if: needs.detect.outputs.has_pack == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          pattern: plugin-bin-*
-          path: plugin-bins
-
-      - name: Place binaries into the plugin tree
-        if: needs.detect.outputs.has_pack == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          found=0
-          for os in darwin win32 linux; do
-            src="$GITHUB_WORKSPACE/plugin-bins/plugin-bin-$os"
-            if [ ! -d "$src" ]; then
-              echo "缺少 $os 的编译产物" >&2
-              exit 1
-            fi
-            dest="$GITHUB_WORKSPACE/plugin-src/bin/$os"
-            mkdir -p "$dest"
-            while IFS= read -r -d '' file; do
-              base="$(basename "$file")"
-              target="$dest/$base"
-              if [ -e "$target" ]; then
-                echo "编译产物重名：$os/$base" >&2
-                exit 1
-              fi
-              cp "$file" "$target"
-              found=1
-            done < <(find "$src" -type f -print0)
-          done
-          if [ "$found" -ne 1 ]; then
-            echo "没有编译产物" >&2
-            exit 1
-          fi
 
       - name: Pack plugin
         working-directory: harness

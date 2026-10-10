@@ -547,7 +547,7 @@ mklink /D "C:\绝对路径\hub-app\plugins\0007-新AI工具" "C:\绝对路径\00
 包含内容：
 
 - `plugin.manifest.json`
-- `index.js`（或 PyInstaller 编译好的二进制，例如 `bin/listener_cli`）
+- `index.js`（现行约定不再把插件打成二进制，运行时见 `docs/plugin-development/runtime.md`）
 - `ui/` 静态界面
 - 必须的静态资源（`assets/`、`prompts/` 等）
 

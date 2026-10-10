@@ -5,7 +5,7 @@ import path from 'node:path';
 import { readManifestFile } from './manifest.ts';
 import { pluginZipUrl, versionFromTag, type PluginRelease } from './plugin-catalog.ts';
 
-const SKIP_DIRS = new Set(['.git', '.venv', 'node_modules', 'cache', 'output', '.cursor']);
+const SKIP_DIRS = new Set(['.git', '.venv', 'node_modules', 'cache', 'output', '.cursor', 'bin', '.next']);
 
 /** 与 docs/plugin-development/ship.md 的打包排除一致，并额外丢掉 .env.* 里的本地密钥。保留 .env.example。 */
 export function shouldPackRelative(relativePosix: string): boolean {

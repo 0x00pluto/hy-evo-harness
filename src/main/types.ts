@@ -40,6 +40,29 @@ export interface AppContext {
    * 不修改宿主 process.env。
    */
   pluginEnv: () => NodeJS.ProcessEnv;
+  /** 用户数据与可重建缓存。已安装插件分别在 plugin-data 与 plugin-runtime。 */
+  dirs: PluginDirs;
+  /**
+   * 仅当清单声明了 runtime。python / node 只包含已声明的那一项。
+   * env 每次读取都会重新合并插件配置。
+   */
+  runtime?: PluginRuntimeBindings;
+}
+
+export interface PluginDirs {
+  data: string;
+  cache: string;
+}
+
+export interface PluginRuntimeSpec {
+  python?: { requirements: string };
+  node?: { package: string };
+}
+
+export interface PluginRuntimeBindings {
+  python?: string;
+  node?: string;
+  readonly env: NodeJS.ProcessEnv;
 }
 
 export interface PluginManifest {
@@ -64,6 +87,8 @@ export interface PluginManifest {
   termsOfService?: string;
   /** 目录字段写了但不合法。插件仍然加载，非法字段不展示。 */
   catalogError?: string;
+  /** 清单声明了运行时。没有版本号，解释器版本由宿主钉死。 */
+  runtime?: PluginRuntimeSpec;
 }
 
 export interface AppPlugin {
@@ -72,6 +97,9 @@ export interface AppPlugin {
   source: PluginSource;
   apply: (ctx: AppContext) => void | Promise<void>;
   dispose?: () => void | Promise<void>;
+  dirs?: PluginDirs;
+  /** 已准备好的解释器。env 由上下文在读取时生成。 */
+  runtimeBins?: { python?: string; node?: string };
 }
 
 export interface PluginSummary {
@@ -93,6 +121,8 @@ export interface PluginSummary {
   privacyPolicy?: string;
   termsOfService?: string;
   catalogError?: string;
+  /** 运行环境没准备好。插件未执行 apply。 */
+  runtimeError?: string;
 }
 
 export interface DexResult {

@@ -83,7 +83,11 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       copy.appendChild(title);
       const meta = document.createElement('span');
       meta.className = 'nav-meta';
-      meta.textContent = updates.some((item) => item.id === plugin.id) ? '可更新' : sourceLabel(plugin.source);
+      meta.textContent = plugin.runtimeError
+        ? '环境未就绪'
+        : updates.some((item) => item.id === plugin.id)
+          ? '可更新'
+          : sourceLabel(plugin.source);
       button.append(copy, meta);
       button.addEventListener('click', () => {
         chrome.focusPlugin(plugin.id);
@@ -271,8 +275,12 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     const use = document.createElement('button');
     use.type = 'button';
     use.id = 'plugins-use';
-    use.textContent = '立即使用';
+    use.textContent = plugin.runtimeError ? '重试' : '立即使用';
     use.addEventListener('click', () => {
+      if (plugin.runtimeError) {
+        void retryRuntime(plugin.id);
+        return;
+      }
       void chrome.usePlugin(plugin.id);
     });
     if (updates.some((item) => item.id === plugin.id)) {
@@ -295,10 +303,10 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     head.appendChild(titleRow);
     detail.appendChild(head);
 
-    if (plugin.catalogError) {
+    if (plugin.runtimeError || plugin.catalogError) {
       const error = document.createElement('p');
       error.className = 'settings-error';
-      error.textContent = plugin.catalogError;
+      error.textContent = plugin.runtimeError || plugin.catalogError;
       detail.appendChild(error);
     }
 
@@ -474,10 +482,31 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       chrome.enterPlugins();
       return;
     }
-    setStatus('插件已安装', 'ok');
     await plugins.refresh(result.plugins);
-    if (result.installedId && shell.plugins.some((plugin) => plugin.id === result.installedId)) {
-      chrome.focusPlugin(result.installedId);
+    const installed = result.installedId
+      ? shell.plugins.find((plugin) => plugin.id === result.installedId)
+      : null;
+    if (installed && installed.runtimeError) {
+      setStatus(installed.runtimeError, 'error');
+    } else {
+      setStatus('插件已安装', 'ok');
+    }
+    if (installed) chrome.focusPlugin(result.installedId);
+  }
+
+  async function retryRuntime(pluginId) {
+    setStatus('正在准备运行环境');
+    try {
+      const result = await window.dex.retryPluginRuntime(pluginId);
+      if (!result.ok) {
+        setStatus(result.message || '运行环境未就绪', 'error');
+        if (result.plugins) await plugins.refresh(result.plugins);
+        return;
+      }
+      setStatus('运行环境已就绪', 'ok');
+      await plugins.refresh(result.plugins);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : '运行环境未就绪', 'error');
     }
   }
 
@@ -527,6 +556,12 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   marketRefreshBtn.addEventListener('click', () => {
     void refreshCatalog();
   });
+
+  if (window.dex.onRuntimeProgress) {
+    window.dex.onRuntimeProgress((event) => {
+      if (event && event.phase === 'preparing') setStatus('正在准备运行环境');
+    });
+  }
 
   addBtn.addEventListener('click', () => {
     void runInstall(async () => {

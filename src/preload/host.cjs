@@ -22,6 +22,14 @@ contextBridge.exposeInMainWorld('dex', {
   uninstall(id) {
     return ipcRenderer.invoke('dex:uninstall', id);
   },
+  retryPluginRuntime(id) {
+    return ipcRenderer.invoke('dex:retry-plugin-runtime', id);
+  },
+  onRuntimeProgress(callback) {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('dex:runtime-progress', listener);
+    return () => ipcRenderer.removeListener('dex:runtime-progress', listener);
+  },
   pluginCatalog() {
     return ipcRenderer.invoke('dex:plugin-catalog');
   },

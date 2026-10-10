@@ -73,13 +73,13 @@ module.exports = {
 };
 ```
 
-`ctx` 提供 `registerService`、`getService`、`logger`、`emit`、`on`、`getPluginConfig`、`pluginEnv`。卸载时宿主会调用 `dispose`，并移除该插件注册的服务和事件。
+`ctx` 提供 `registerService`、`getService`、`logger`、`emit`、`on`、`getPluginConfig`、`pluginEnv`、`dirs`。清单声明了 `runtime` 时还有 `runtime`。卸载时宿主会调用 `dispose`，并移除该插件注册的服务和事件。已安装插件的 `dirs.data` 在 `plugin-data/<id>/`，卸载后保留；`dirs.cache` 在 `plugin-runtime/<id>/cache`，卸载时连同依赖环境一起删除。
 
 `getPluginConfig()` 只返回当前插件已声明的配置。拉起子进程时显式传入环境，不要改宿主的 `process.env`：
 
 ```javascript
 const { execFile } = require('node:child_process');
-execFile(binPath, args, { env: ctx.pluginEnv() }, callback);
+execFile(ctx.runtime.python, args, { env: ctx.runtime.env }, callback);
 ```
 
 配置保存在用户数据目录的 `plugin-settings.json`，不放进插件目录，也不要靠插件目录里的 `.env`。声明非法时插件仍会加载，但这两个方法不会注入该声明。自带设置页通过 `window.dex.readSettings()` / `window.dex.saveSettings(draft)` 读写同一块配置，读到的结果不含已保存的密钥明文。
@@ -114,7 +114,7 @@ ln -s "/绝对路径/你的项目" "/绝对路径/0001-HyHarness/plugins/你的�
 
 ## 打包给别人安装
 
-打成 zip，包含 `plugin.manifest.json`、`index.js`、`ui/` 和需要的静态资源。排除 `.git`、`.venv`、`node_modules`、缓存和生成产物。
+打成 zip，包含 `plugin.manifest.json`、`index.js`、`ui/` 和需要的静态资源。排除 `.git`、`.venv`、`node_modules`、`bin/`、缓存和生成产物。解释器不打进这个 zip，也不打进 Dex Buddy 安装包。
 
 ```bash
 cd plugins

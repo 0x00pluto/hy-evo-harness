@@ -17,7 +17,7 @@ import {
 } from '../src/main/plugin-catalog.ts';
 import { marketUpdates, readOrigins, writeOrigin, deleteOrigin } from '../src/main/plugin-origins.ts';
 import { listPackPaths, packPluginRelease, shouldPackRelative } from '../src/main/plugin-pack.ts';
-import { loadPluginPublish, parsePluginPublish, PLUGIN_PACK_TARGETS } from '../src/main/plugin-publish.ts';
+import { assertNoBinaryPack } from '../src/main/plugin-publish.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -86,6 +86,8 @@ test('打包跳过密钥和依赖目录，保留示例环境文件', () => {
   assert.equal(shouldPackRelative('.env.local'), false);
   assert.equal(shouldPackRelative('.git/config'), false);
   assert.equal(shouldPackRelative('.venv/bin/python'), false);
+  assert.equal(shouldPackRelative('bin/darwin/worker'), false);
+  assert.equal(shouldPackRelative('.next/server/app.js'), false);
   assert.equal(shouldPackRelative('src/app.py'), true);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-pack-'));
   fs.writeFileSync(path.join(root, 'plugin.manifest.json'), '{}');
@@ -163,33 +165,9 @@ test('只有从插件中心安装的才会提示更新', () => {
   assert.deepEqual(readOrigins(file), {});
 });
 
-test('发布声明只认打包脚本，平台由本仓固定', () => {
+test('发布遇到二进制打包声明时拒绝', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-publish-'));
-  assert.equal(loadPluginPublish(root), null);
-  fs.writeFileSync(path.join(root, 'dex-buddy.publish.json'), JSON.stringify({
-    pack: 'scripts/dex-buddy-pack.sh',
-    runners: ['macos-14', 'windows-latest'],
-  }));
-  assert.equal(loadPluginPublish(root), null);
-  fs.mkdirSync(path.join(root, 'scripts'));
-  fs.writeFileSync(path.join(root, 'scripts', 'dex-buddy-plugin-pack.sh'), '#!/bin/sh\n');
-  fs.writeFileSync(path.join(root, 'dex-buddy-plugin-pack.json'), JSON.stringify({
-    pack: 'scripts/dex-buddy-plugin-pack.sh',
-    runners: ['macos-14'],
-  }));
-  assert.deepEqual(loadPluginPublish(root), { pack: 'scripts/dex-buddy-plugin-pack.sh' });
-  assert.deepEqual(parsePluginPublish({ pack: 'scripts/dex-buddy-plugin-pack.sh' }), {
-    pack: 'scripts/dex-buddy-plugin-pack.sh',
-  });
-  assert.throws(() => parsePluginPublish({ pack: '../pack.sh' }), /\.\./);
-  assert.throws(() => parsePluginPublish({ pack: '/tmp/pack.sh' }), /相对路径/);
-  assert.throws(() => parsePluginPublish({
-    pack: 'scripts/pack.sh',
-    zip: true,
-  }), /未知字段/);
-  fs.writeFileSync(path.join(root, 'dex-buddy-plugin-pack.json'), JSON.stringify({
-    pack: 'scripts/missing.sh',
-  }));
-  assert.throws(() => loadPluginPublish(root), /找不到打包脚本/);
-  assert.deepEqual(PLUGIN_PACK_TARGETS.map((target) => target.os), ['darwin', 'win32', 'linux']);
+  assert.doesNotThrow(() => assertNoBinaryPack(root));
+  fs.writeFileSync(path.join(root, 'dex-buddy-plugin-pack.json'), '{}\n');
+  assert.throws(() => assertNoBinaryPack(root), /已不再编译二进制/);
 });

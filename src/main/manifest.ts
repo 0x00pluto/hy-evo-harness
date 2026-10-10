@@ -1,6 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ConfigField, ConfigFieldType, ConfigSchema, PluginConfigValue, PluginManifest } from './types.ts';
+import type {
+  ConfigField,
+  ConfigFieldType,
+  ConfigSchema,
+  PluginConfigValue,
+  PluginManifest,
+  PluginRuntimeSpec,
+} from './types.ts';
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const ENV_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/;
@@ -64,6 +71,7 @@ export function parseManifest(value: unknown): PluginManifest {
     throw new Error('ui 插件必须提供 uiEntry');
   }
   const parsedSchema = parseConfigSchema(raw.configSchema);
+  const runtime = parseRuntime(raw.runtime);
   const catalog = parseCatalog(raw);
   const manifest: PluginManifest = {
     id: raw.id,
@@ -77,6 +85,7 @@ export function parseManifest(value: unknown): PluginManifest {
   if (settingsEntry) manifest.settingsEntry = settingsEntry;
   if (parsedSchema.schema) manifest.configSchema = parsedSchema.schema;
   if (parsedSchema.error) manifest.configSchemaError = parsedSchema.error;
+  if (runtime) manifest.runtime = runtime;
   if (catalog.error) manifest.catalogError = catalog.error;
   return manifest;
 }
@@ -150,6 +159,46 @@ function parseCatalogUrl(key: string, value: unknown, errors: string[]): string 
     return undefined;
   }
   return trimmed;
+}
+
+function parseRuntime(value: unknown): PluginRuntimeSpec | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('manifest.runtime 必须是对象');
+  }
+  const raw = value as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (key !== 'python' && key !== 'node') {
+      throw new Error(`manifest.runtime 含未知字段 ${key}`);
+    }
+  }
+  const spec: PluginRuntimeSpec = {};
+  if (raw.python !== undefined) spec.python = { requirements: parseRuntimePath(raw.python, 'python', 'requirements') };
+  if (raw.node !== undefined) spec.node = { package: parseRuntimePath(raw.node, 'node', 'package') };
+  if (!spec.python && !spec.node) throw new Error('manifest.runtime 至少声明 python 或 node');
+  return spec;
+}
+
+function parseRuntimePath(
+  value: unknown,
+  group: 'python' | 'node',
+  field: 'requirements' | 'package',
+): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`manifest.runtime.${group} 必须是对象`);
+  }
+  const raw = value as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (key !== field) throw new Error(`manifest.runtime.${group} 含未知字段 ${key}`);
+  }
+  const file = raw[field];
+  if (typeof file !== 'string' || file.trim() === '') {
+    throw new Error(`manifest.runtime.${group}.${field} 必须是相对路径`);
+  }
+  if (path.isAbsolute(file) || file.split(/[/\\]/).includes('..')) {
+    throw new Error(`manifest.runtime.${group}.${field} 必须是插件目录内的相对路径`);
+  }
+  return file;
 }
 
 function parseConfigSchema(value: unknown): { schema?: ConfigSchema; error?: string } {

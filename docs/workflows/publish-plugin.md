@@ -1,10 +1,10 @@
 # 发布插件到插件中心
 
-把一个插件仓库的某个 tag 打成 zip，上传到七牛，并合成 Dex Buddy 读取的插件目录。同事在插件页的「插件中心」里安装和更新，不收下载地址。技能中心不参与。
+把一个插件仓库的某个 tag 打成源码 zip，上传到七牛，并合成 Dex Buddy 读取的插件目录。同事在插件页的「插件中心」里安装和更新，不收下载地址。技能中心不参与。
 
 插件作者要做的事见 [发到插件中心](../plugin-development/distribute.md)。本篇只说明维护者如何在本仓触发。七牛密钥只放在本仓的 Actions secrets 里。
 
-仓库根如果有 `dex-buddy-plugin-pack.json`，工作流会在 macOS、Windows x64、Linux x64 上各执行一次其中的 `pack` 脚本，再把 `bin/` 里的文件分别收进 `bin/darwin`、`bin/win32`、`bin/linux`，打成一份 zip。没有这份文件时，直接打包检出的源码树。
+仓库根如果还有 `dex-buddy-plugin-pack.json`，工作流会直接失败。插件不再在三端编译二进制。需要解释器的插件在清单里声明 `runtime`，由同事机器上的 Dex Buddy 安装依赖。
 
 ## 入口
 
