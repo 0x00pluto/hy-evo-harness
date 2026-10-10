@@ -2,8 +2,6 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pipeline } from 'node:stream/promises';
-import { Readable } from 'node:stream';
 import {
   NODE_VERSION,
   PYTHON_VERSION,
@@ -228,30 +226,57 @@ async function githubJson(url: string): Promise<unknown> {
   };
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(url, { headers });
-  if (!response.ok) throw new Error(`GitHub ${response.status} ${url}`);
-  return response.json();
+  let lastError = '';
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      const response = await fetch(url, { headers });
+      if (response.status === 429 || response.status >= 500) {
+        lastError = `GitHub ${response.status} ${url}`;
+        await delay(attempt);
+        continue;
+      }
+      if (!response.ok) throw new Error(`GitHub ${response.status} ${url}`);
+      return response.json();
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('GitHub ')) throw err;
+      lastError = err instanceof Error ? err.message : String(err);
+      if (attempt === 4) break;
+      await delay(attempt);
+    }
+  }
+  throw new Error(`GitHub 请求失败 ${url}\n${lastError}`);
 }
 
-async function downloadFirst(urls: string[], dest: string): Promise<void> {
+function downloadFirst(urls: string[], dest: string): void {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
   let last = '';
   for (const url of urls) {
-    const response = await fetch(url);
-    if (response.status === 404) {
+    fs.rmSync(dest, { force: true });
+    const result = capture('curl', [
+      '-fL',
+      '--retry', '5',
+      '--retry-delay', '2',
+      '-sS',
+      '-o', dest,
+      '-w', '%{http_code}',
+      url,
+    ]);
+    const status = result.stdout.trim();
+    if (result.code === 0) return;
+    fs.rmSync(dest, { force: true });
+    if (status === '404') {
       last = url;
       continue;
     }
-    if (!response.ok || !response.body) {
-      throw new Error(`下载失败 ${response.status} ${url}`);
-    }
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    await pipeline(
-      Readable.fromWeb(response.body as import('node:stream/web').ReadableStream),
-      fs.createWriteStream(dest),
-    );
-    return;
+    throw new Error(`下载失败 ${url}\n${result.stderr || result.stdout}`);
   }
   throw new Error(`上游没有这个文件，最后尝试 ${last}`);
+}
+
+function delay(attempt: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, attempt * 2000);
+  });
 }
 
 function extractArchive(archive: string, dest: string): void {
