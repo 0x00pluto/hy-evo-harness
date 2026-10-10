@@ -17,6 +17,7 @@ import {
 } from '../src/main/plugin-catalog.ts';
 import { marketUpdates, readOrigins, writeOrigin, deleteOrigin } from '../src/main/plugin-origins.ts';
 import { listPackPaths, packPluginRelease, shouldPackRelative } from '../src/main/plugin-pack.ts';
+import { loadPluginPublish, parsePluginPublish } from '../src/main/plugin-publish.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -160,4 +161,37 @@ test('只有从插件中心安装的才会提示更新', () => {
   assert.equal(readOrigins(file)['sample-tool'], undefined);
   fs.writeFileSync(file, '{');
   assert.deepEqual(readOrigins(file), {});
+});
+
+test('发布声明只接受仓库内脚本和允许的 runner', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-publish-'));
+  assert.equal(loadPluginPublish(root), null);
+  fs.mkdirSync(path.join(root, 'scripts'));
+  fs.writeFileSync(path.join(root, 'scripts', 'dex-buddy-pack.sh'), '#!/bin/sh\n');
+  fs.writeFileSync(path.join(root, 'dex-buddy.publish.json'), JSON.stringify({
+    pack: 'scripts/dex-buddy-pack.sh',
+    runners: ['macos-14', 'windows-latest'],
+  }));
+  assert.deepEqual(loadPluginPublish(root), {
+    pack: 'scripts/dex-buddy-pack.sh',
+    runners: ['macos-14', 'windows-latest'],
+  });
+  assert.throws(() => parsePluginPublish({ pack: '../pack.sh', runners: ['ubuntu-latest'] }), /\.\./);
+  assert.throws(() => parsePluginPublish({ pack: '/tmp/pack.sh', runners: ['ubuntu-latest'] }), /相对路径/);
+  assert.throws(() => parsePluginPublish({ pack: 'scripts/pack.sh', runners: ['macos-13'] }), /runners/);
+  assert.throws(() => parsePluginPublish({ pack: 'scripts/pack.sh', runners: [] }), /不能为空/);
+  assert.throws(() => parsePluginPublish({
+    pack: 'scripts/pack.sh',
+    runners: ['ubuntu-latest', 'ubuntu-latest'],
+  }), /重复/);
+  assert.throws(() => parsePluginPublish({
+    pack: 'scripts/pack.sh',
+    runners: ['ubuntu-latest'],
+    zip: true,
+  }), /未知字段/);
+  fs.writeFileSync(path.join(root, 'dex-buddy.publish.json'), JSON.stringify({
+    pack: 'scripts/missing.sh',
+    runners: ['ubuntu-latest'],
+  }));
+  assert.throws(() => loadPluginPublish(root), /找不到打包脚本/);
 });

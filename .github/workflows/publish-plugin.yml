@@ -31,12 +31,15 @@ permissions:
   contents: read
 
 jobs:
-  publish:
+  detect:
     runs-on: ubuntu-latest
+    outputs:
+      repository: ${{ steps.plugin.outputs.repository }}
+      tag: ${{ steps.plugin.outputs.tag }}
+      has_pack: ${{ steps.declared.outputs.has_pack }}
+      pack: ${{ steps.declared.outputs.pack }}
+      runners: ${{ steps.declared.outputs.runners }}
     env:
-      QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
-      QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
-      QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
       RAW_REPOSITORY: ${{ inputs.repository }}
       RAW_TAG: ${{ inputs.tag }}
     steps:
@@ -65,8 +68,103 @@ jobs:
           path: plugin-src
           token: ${{ secrets.PLUGIN_CHECKOUT_TOKEN || github.token }}
 
+      - name: Read dex-buddy.publish.json
+        id: declared
+        working-directory: harness
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types scripts/read-plugin-publish.ts \
+            --dir "$GITHUB_WORKSPACE/plugin-src"
+
+  build:
+    needs: detect
+    if: needs.detect.outputs.has_pack == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJson(needs.detect.outputs.runners) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.detect.outputs.repository }}
+          ref: ${{ needs.detect.outputs.tag }}
+          path: plugin-src
+          token: ${{ secrets.PLUGIN_CHECKOUT_TOKEN || github.token }}
+
+      - name: Run pack script
+        working-directory: plugin-src
+        shell: bash
+        env:
+          PACK_SCRIPT: ${{ needs.detect.outputs.pack }}
+        run: bash "$PACK_SCRIPT"
+
+      - name: Upload packed binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-bin-${{ matrix.runner }}
+          path: plugin-src/bin
+          if-no-files-found: error
+
+  publish:
+    needs: [detect, build]
+    if: always() && needs.detect.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    env:
+      QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+      QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+      QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
+      RAW_TAG: ${{ needs.detect.outputs.tag }}
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check out Dex Buddy
+        uses: actions/checkout@v4
+        with:
+          path: harness
+
+      - name: Check out plugin
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.detect.outputs.repository }}
+          ref: ${{ needs.detect.outputs.tag }}
+          path: plugin-src
+          token: ${{ secrets.PLUGIN_CHECKOUT_TOKEN || github.token }}
+
+      - name: Download packed binaries
+        if: needs.detect.outputs.has_pack == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: plugin-bin-*
+          path: plugin-bins
+
+      - name: Place binaries into the plugin tree
+        if: needs.detect.outputs.has_pack == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/plugin-src/bin"
+          found=0
+          while IFS= read -r -d '' file; do
+            base="$(basename "$file")"
+            dest="$GITHUB_WORKSPACE/plugin-src/bin/$base"
+            if [ -e "$dest" ]; then
+              echo "编译产物重名：$base" >&2
+              exit 1
+            fi
+            cp "$file" "$dest"
+            found=1
+          done < <(find "$GITHUB_WORKSPACE/plugin-bins" -type f -print0)
+          if [ "$found" -ne 1 ]; then
+            echo "没有编译产物" >&2
+            exit 1
+          fi
+
       - name: Pack plugin
-        id: pack
         working-directory: harness
         run: |
           set -euo pipefail

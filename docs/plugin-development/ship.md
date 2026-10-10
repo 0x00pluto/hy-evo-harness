@@ -54,11 +54,9 @@ zip -r my-tool-v1.0.0.zip my-tool \
 
 ## 发到插件中心
 
-同事不收下载地址。发版在 Dex Buddy 仓库里手动跑一次「Publish Plugin」：填这个插件仓库的 `owner/name`，以及 tag `vX.Y.Z`。tag 去掉 `v` 之后必须等于清单里的 `version`。流程会打包、上传到七牛，并重新合成插件目录。同事在插件页打开「插件中心」，点安装。
+同事不收下载地址。作者改版本、推 tag；需要编译时在仓库里声明打包脚本。步骤见 [发到插件中心](distribute.md)。
 
-打包排除与上面的 zip 相同，另外不带 `.env.local` 这类 `.env.*` 文件。`.env.example` 可以留在包里。密钥让同事在设置页自己填。
-
-步骤、密钥和以后如何改成推 tag 自动发布，见 [发布插件](../workflows/publish-plugin.md)。
+维护者在 Dex Buddy 仓库里手动跑「Publish Plugin」。密钥和触发方式见 [发布插件](../workflows/publish-plugin.md)。
 
 核心是 Python 时，[运行](runtime.md) 里示例的 `python3` 只适合你自己的开发机。开发阶段可以让 `index.js` 调用本机虚拟环境里的解释器，命令行脚本保持原样。
 

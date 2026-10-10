@@ -2,7 +2,9 @@
 
 把一个插件仓库的某个 tag 打成 zip，上传到七牛，并合成 Dex Buddy 读取的插件目录。同事在插件页的「插件中心」里安装和更新，不收下载地址。技能中心不参与。
 
-第一期由 Dex Buddy 仓库手动触发。插件仓库先不用改。七牛密钥只放在本仓的 Actions secrets 里。
+插件作者要做的事见 [发到插件中心](../plugin-development/distribute.md)。本篇只说明维护者如何在本仓触发。七牛密钥只放在本仓的 Actions secrets 里。
+
+仓库根如果有 `dex-buddy.publish.json`，工作流会先按其中的 `runners` 在对应机器上执行 `pack` 脚本，把各平台放进 `bin/` 的文件合并，再打成一份 zip。没有这份文件时，直接打包检出的源码树。
 
 ## 入口
 
