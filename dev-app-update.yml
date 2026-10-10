@@ -1,4 +1,3 @@
-provider: github
-owner: 0x00pluto
-repo: hy-evo-harness
+provider: generic
+url: https://oss.ai.66plat.com/dex-buddy/
 updaterCacheDirName: dex-buddy-updater

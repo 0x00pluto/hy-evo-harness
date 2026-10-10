@@ -1,6 +1,6 @@
 export const UPDATE_APP_SLUG = 'dex-buddy';
-export const UPDATE_GITHUB_OWNER = '0x00pluto';
-export const UPDATE_GITHUB_REPO = 'hy-evo-harness';
+// 末尾不要加斜杠。electron-builder 的 publish.url 必须带斜杠，两边指向同一目录。
+export const UPDATE_FEED_BASE_URL = 'https://oss.ai.66plat.com/dex-buddy';
 
 export interface UpdateFileRef {
   url: string;
@@ -11,12 +11,12 @@ export function macDmgFileName(version: string): string {
   return `${UPDATE_APP_SLUG}-${version}.dmg`;
 }
 
-export function resolveMacDmgUrl(version: string, fileUrl: string): string {
+export function resolveMacDmgUrl(_version: string, fileUrl: string): string {
   if (/^https?:\/\//i.test(fileUrl)) {
     return fileUrl;
   }
   const name = fileUrl.split('/').pop() || fileUrl;
-  return `https://github.com/${UPDATE_GITHUB_OWNER}/${UPDATE_GITHUB_REPO}/releases/download/v${version}/${name}`;
+  return `${UPDATE_FEED_BASE_URL}/${name}`;
 }
 
 export function extractMacDmgInfo(info: {

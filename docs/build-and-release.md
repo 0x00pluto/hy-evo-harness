@@ -54,7 +54,7 @@ Linux CI 产出 AppImage + deb（不含 snap，避免 snapcraft 依赖导致失�
 
 ## 自动更新
 
-应用内自动更新基于 electron-updater，更新源为本仓库的 GitHub Releases（`electron-builder.yml` 的 `publish: provider: github`，仓库 `0x00pluto/hy-evo-harness`）。不使用系统通知。入口在图标轨齿轮弹出层的更新行。仅可安装时，齿轮上出现蓝点。
+应用内自动更新基于 electron-updater，更新源为七牛空间 `storage-ai` 上的 `https://oss.ai.66plat.com/dex-buddy/`（`electron-builder.yml` 的 `publish: provider: generic`）。GitHub Release 仍会创建，供已经装上旧版、更新源还指向 GitHub 的客户端过渡，以及人工下载。不使用系统通知。入口在图标轨齿轮弹出层的更新行。仅可安装时，齿轮上出现蓝点。
 
 `appId` 固定为 **`com.huyuan.dexbuddy`**。这次改名之后不要再改，否则已安装客户端对不上更新身份。
 
@@ -74,7 +74,7 @@ Linux CI 产出 AppImage + deb（不含 snap，避免 snapcraft 依赖导致失�
 ### macOS（下载 dmg 手动安装）
 
 - 当前未配置 Apple 签名/公证（`identity: null`），不走 electron-updater 静默安装。
-- 检测到新版本即在齿轮上显示蓝点；用户从弹出层确认后，主进程从 GitHub Release 下载 `dex-buddy-${version}.dmg` 到系统「下载」目录，完成后自动打开。
+- 检测到新版本即在齿轮上显示蓝点；用户从弹出层确认后，主进程从七牛下载 `dex-buddy-${version}.dmg` 到系统「下载」目录，完成后自动打开。
 - 用户需手动将应用拖入「应用程序」。未签名包首次打开可能需要在系统设置里放行。
 - 同版本 dmg 已存在且大小匹配时不重复下载，直接打开本地文件。
 
@@ -84,7 +84,7 @@ CI 会上传 Linux 安装包。应用内不检查、不安装更新。
 
 ### Release 资产要求
 
-Release Assets 中的 `latest*.yml`、`.dmg` / `.exe` 与 `*.blockmap` 是更新元数据与安装包：不要删除这些 Assets，否则已装客户端无法检测或完成更新。
+Release Assets 中的 `latest*.yml`、`.dmg` / `.exe` 与 `*.blockmap` 会同时上传到 GitHub Release 和七牛 `dex-buddy/`。不要删除这些文件，否则已装客户端无法检测或完成更新。`latest.yml` 与 `latest-mac.yml` 每次发版覆盖并刷新 CDN；带版本号的安装包保留。
 
 本地开发调试更新流程用根目录 `dev-app-update.yml`。这个文件不会打进安装包。
 
@@ -100,4 +100,4 @@ Release Assets 中的 `latest*.yml`、`.dmg` / `.exe` 与 `*.blockmap` 是更新
 | `mac` | 本地与 CI 都产出 dmg 与 zip；签名默认 `identity: null`，`notarize: false` |
 | `win` / `nsis` | 可执行名 `DexBuddy`，安装包名 `dex-buddy-${version}-setup.exe`；`build/installer.nsh` 让更新后直接启动 exe |
 | `linux` | 本地默认含 AppImage / snap / deb；CI 仅打 AppImage + deb |
-| `publish` | GitHub Releases（`0x00pluto/hy-evo-harness`）；构建仍用 `--publish never` |
+| `publish` | 七牛 `https://oss.ai.66plat.com/dex-buddy/`（generic）；构建仍用 `--publish never`，由 release job 用 qshell 上传 |

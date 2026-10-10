@@ -10,10 +10,10 @@ test('mac dmg 文件名与安装包模板一致', () => {
   assert.equal(macDmgFileName('0.2.0'), 'dex-buddy-0.2.0.dmg');
 });
 
-test('相对路径补成 GitHub Release 下载地址', () => {
+test('相对路径补成七牛下载地址', () => {
   assert.equal(
     resolveMacDmgUrl('0.2.0', 'dex-buddy-0.2.0.dmg'),
-    'https://github.com/0x00pluto/hy-evo-harness/releases/download/v0.2.0/dex-buddy-0.2.0.dmg',
+    'https://oss.ai.66plat.com/dex-buddy/dex-buddy-0.2.0.dmg',
   );
 });
 
@@ -32,7 +32,7 @@ test('从更新元数据里挑出 dmg', () => {
   });
   assert.equal(
     info.url,
-    'https://github.com/0x00pluto/hy-evo-harness/releases/download/v0.2.0/dex-buddy-0.2.0.dmg',
+    'https://oss.ai.66plat.com/dex-buddy/dex-buddy-0.2.0.dmg',
   );
   assert.equal(info.size, 20);
 });

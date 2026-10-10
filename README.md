@@ -135,4 +135,4 @@ pnpm build:win
 pnpm build:linux
 ```
 
-产物在 `release/`。推送 `v*` 标签后，GitHub Actions 打包三端并创建 Release 页，说明由提交记录自动生成。已安装的 Windows 客户端可静默更新；macOS 在未签名时下载 dmg 后手动安装。细节见 [docs/build-and-release.md](docs/build-and-release.md)。
+产物在 `release/`。推送 `v*` 标签后，GitHub Actions 打包三端并创建 Release 页，说明由提交记录自动生成，同时把 Windows 与 macOS 的更新文件上传到七牛。已安装的 Windows 客户端可静默更新；macOS 在未签名时从七牛下载 dmg 后手动安装。细节见 [docs/build-and-release.md](docs/build-and-release.md)。

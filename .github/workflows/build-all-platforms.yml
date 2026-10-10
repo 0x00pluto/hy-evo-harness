@@ -171,6 +171,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+      QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+      QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
     steps:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -192,3 +196,30 @@ jobs:
             release-assets/**/*-mac.zip
             release-assets/**/latest*.yml
             release-assets/**/*.blockmap
+
+      - name: Install qshell
+        run: |
+          curl -fsSL -o /tmp/qshell.tar.gz \
+            https://github.com/qiniu/qshell/releases/download/v2.19.9/qshell-v2.19.9-linux-amd64.tar.gz
+          tar -xzf /tmp/qshell.tar.gz -C /tmp
+          install -m 755 /tmp/qshell /usr/local/bin/qshell
+          qshell -v
+
+      - name: Upload update files to Qiniu
+        run: |
+          set -euo pipefail
+          win="release-assets/dex-buddy-windows-x64"
+          mac="release-assets/dex-buddy-macos-universal"
+          mkdir -p qiniu-upload
+          cp "$win/latest.yml" "$win"/*.exe "$win"/*.blockmap qiniu-upload/
+          cp "$mac/latest-mac.yml" "$mac"/*.dmg "$mac"/*-mac.zip "$mac"/*.blockmap qiniu-upload/
+          qshell account --overwrite -- "$QINIU_ACCESS_KEY" "$QINIU_SECRET_KEY" dex-buddy
+          for file in qiniu-upload/*; do
+            name="$(basename "$file")"
+            qshell rput --overwrite "$QINIU_BUCKET" "dex-buddy/$name" "$file"
+          done
+          printf '%s\n' \
+            'https://oss.ai.66plat.com/dex-buddy/latest.yml' \
+            'https://oss.ai.66plat.com/dex-buddy/latest-mac.yml' \
+            > /tmp/qiniu-refresh.txt
+          qshell cdnrefresh -i /tmp/qiniu-refresh.txt
