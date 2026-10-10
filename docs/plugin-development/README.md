@@ -32,3 +32,4 @@ my-tool/
 - [设置](settings.md)：`configSchema`、分组、密钥和 `pluginEnv()`。
 - [运行](runtime.md)：`index.js`、页面里的 `dex.call`，以及带界面、无界面两个例子。
 - [发布](ship.md)：开发时挂到 Dex Buddy、打成 zip、什么情况会加载失败。
+- [配色](color.md)：页面建议色。可以用，也可以自定。

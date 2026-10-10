@@ -110,6 +110,8 @@ const result = await window.dex.call('myToolService', 'run', [{ text: '你好' }
 
 ## 示例：带界面
 
+页面配色见 [配色](color.md)。可以用那里的建议色，也可以自定。
+
 目录：
 
 ```text
