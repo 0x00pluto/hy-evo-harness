@@ -13,7 +13,7 @@
 - `docs/plugin-development/data.md`: 开发时缓存和导出写在插件仓库；装进 installed_plugins 之后，ctx.dirs.cache 在 plugin-runtime，ctx.dirs.data 在 plugin-data，卸载只删运行环境和缓存
 - `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node，页面仍用 dex.call
 - `docs/plugin-development/ship.md`: 开发挂载、zip 拖进工作台安装，以及会加载失败的情况
-- `docs/plugin-development/distribute.md`: 插件作者发到插件中心：只推 tag；zip 含 tag 检出里排除项之外的全部文件；runtime 在清单里声明，不再用 dex-buddy-plugin-pack.json 打三端二进制
+- `docs/plugin-development/distribute.md`: 插件作者发到插件中心：仓库进授权名单后只推 tag；zip 含 tag 检出里排除项之外的全部文件；runtime 在清单里声明，不再用 dex-buddy-plugin-pack.json 打三端二进制
 - `docs/plugin-development/color.md`: 插件页面配色建议：中性色可粘贴，也可自选颜色；壳不检查
 - `AGENTS.md`: 本仓工作约定、目录语义与能力声明；代码检索先走 Codebase MCP；scaffold_version 2.4.0
 - `docs/builtin-workflows/post-task-reflect.md`: 任务后反思（白痴指数 → 删 → 程序化 → 鲁棒 → 加速）；用户明确要求时触发，不自动跑
@@ -21,7 +21,7 @@
 - `docs/builtin-workflows/consolidate-memory.md`: 记忆巩固与遗忘（冲突消解 → 情景提纯 → 剪枝）；仅用户显式触发；与反思 / 提取经验互不串联
 - `docs/builtin-workflows/cut-release-tag.md`: 日常发版唯一入口；汇总变更 → upgrades → 对齐 package.json version → tag → 推送；Release 页由 Actions 创建，不要本地 gh release create；major 须人指定
 - `docs/workflows/_TEMPLATE.md`: 业务 workflow 六段骨架；新建业务工作流时复制并改名，写完后删掉本行或改成真实条目
-- `docs/workflows/publish-plugin.md`: 维护者在本仓手动触发：把源码打成 zip 上传七牛并合成目录；仓库里若还有 dex-buddy-plugin-pack.json 则失败
+- `docs/workflows/publish-plugin.md`: 维护者把插件仓库写入授权名单后，同步工作流拉取最高 vX.Y.Z 上传七牛；也可手动补发某一个 tag；仓库里若还有 dex-buddy-plugin-pack.json 则失败
 - `specs/prds/prd-wiki-index.md`: PRD 索引；正文为 `specs/prds/prd-{五位序号}-{feature-slug}.md`，本索引不计入序号
 - `.cursor/commands/team/`: 团队命令（产品经理、工程验收官、前端工程师、测试工程师、自主交付工程师）；母版在 Obsidian，不在此复制全文
 - `docs/renderer-layout.md`: 设置页和插件页共用一份 #split-layout；以后在第四个分栏表面把间距改散，或单页拼 DOM 超过约 800 行时，再引入 Lit 具名插槽，本次不安装

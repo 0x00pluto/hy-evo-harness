@@ -1,0 +1,47 @@
+name: Sync plugin catalog
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 每小时看一遍授权名单。推 tag 后最多等这一小时，也可以手动立刻跑。
+    - cron: '17 * * * *'
+
+# 和 Publish Plugin 共用同一组，避免两趟同时改 index.json。
+concurrency:
+  group: plugin-catalog
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync authorized plugin tags
+    runs-on: ubuntu-latest
+    env:
+      QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+      QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+      QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
+      PLUGIN_CHECKOUT_TOKEN: ${{ secrets.PLUGIN_CHECKOUT_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install zip and qshell
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip
+          curl -fsSL -o /tmp/qshell.tar.gz \
+            https://github.com/qiniu/qshell/releases/download/v2.19.9/qshell-v2.19.9-linux-amd64.tar.gz
+          tar -xzf /tmp/qshell.tar.gz -C /tmp
+          install -m 755 /tmp/qshell /usr/local/bin/qshell
+          qshell -v
+
+      - name: Publish highest tag from each authorized repository
+        run: node --experimental-strip-types scripts/sync-plugin-catalog.ts

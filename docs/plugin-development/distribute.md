@@ -19,7 +19,7 @@ git push origin vX.Y.Z
 
 `v` 后面的数字必须和清单里的 `version` 相同。
 
-4. 把仓库名（`owner/name`）和这个 tag 告诉 Dex Buddy 维护者。维护者在 Dex Buddy 仓库的 Actions 里运行 Publish Plugin。
+4. 仓库第一次发布时，把仓库名（`owner/name`）告诉 Dex Buddy 维护者，由维护者写进授权名单。之后每次只推 tag，不用再通知。同步大约每小时一次；维护者也可以立刻同步。
 
 只有页面和 `index.js`、不需要额外解释器的插件，做到这里就结束。
 

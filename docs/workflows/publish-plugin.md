@@ -6,11 +6,27 @@
 
 仓库根如果还有 `dex-buddy-plugin-pack.json`，工作流会直接失败。插件不再在三端编译二进制。需要解释器的插件在清单里声明 `runtime`，由同事机器上的 Dex Buddy 安装依赖。
 
-## 入口
+## 日常：授权名单
+
+把插件仓库的 `owner/name` 写进 [`.github/plugin-repos.json`](../../.github/plugin-repos.json)，推到 `main`。不在名单里的仓库不会被拉。七牛密钥仍然只在本仓的 Actions secrets 里。插件仓库不保存密钥，也不要添加调用本仓的工作流。
+
+作者推送 `vX.Y.Z` 之后，同步工作流会看到它。推完不会立刻出现在插件中心，要等这一小时，或手动跑一次。
+
+工作流文件：[`.github/workflows/sync-plugin-catalog.yml`](../../.github/workflows/sync-plugin-catalog.yml)。每小时第 17 分跑一次，也可以手动触发：
+
+```bash
+gh workflow run sync-plugin-catalog.yml --ref main
+```
+
+一次同步对名单里的每个仓库只取最高的 `vX.Y.Z`。更低的 tag 不补传。七牛上已有这个版本的 zip 就跳过。清单版本和 tag 不一致，或仓库根上还有 `dex-buddy-plugin-pack.json`，这个仓库记失败，继续处理后面的仓库。只要这次有新包，就按桶里全部版本说明重写 `index.json` 并刷新 CDN。有失败时工作流标红。
+
+私有插件仓库读不到时，在本仓添加 secret `PLUGIN_CHECKOUT_TOKEN`（能读该仓库的令牌）。公开仓库不用。
+
+## 补发某一个 tag
 
 GitHub 仓库 `0x00pluto/hy-evo-harness` → Actions → Publish Plugin → Run workflow。
 
-工作流文件：[`.github/workflows/publish-plugin.yml`](../../.github/workflows/publish-plugin.yml)。
+工作流文件：[`.github/workflows/publish-plugin.yml`](../../.github/workflows/publish-plugin.yml)。日常用上面的同步。这个入口用来指定仓库和 tag，补发不是最高版本的那一次。
 
 ## 参数
 
@@ -19,17 +35,17 @@ GitHub 仓库 `0x00pluto/hy-evo-harness` → Actions → Publish Plugin → Run 
 | repository | 插件仓库，`owner/name`。也可以填 `https://github.com/owner/name` |
 | tag | `vX.Y.Z`。去掉 `v` 之后必须等于该仓库 `plugin.manifest.json` 的 `version` |
 
-私有插件仓库读不到时，在本仓添加 secret `PLUGIN_CHECKOUT_TOKEN`（能读该仓库的令牌）。公开仓库不用。
+七牛沿用应用发版的 `QINIU_ACCESS_KEY`、`QINIU_SECRET_KEY`、`QINIU_BUCKET`。私有仓库的 `PLUGIN_CHECKOUT_TOKEN` 与同步工作流共用。
 
-七牛沿用应用发版的 `QINIU_ACCESS_KEY`、`QINIU_SECRET_KEY`、`QINIU_BUCKET`。
-
-## 日常步骤
+## 作者那边
 
 1. 在插件仓库把 `plugin.manifest.json` 的 `version` 改成新的 `X.Y.Z` 并推送。
-2. 打上 tag `vX.Y.Z` 并推送。
-3. 在本仓手动运行 Publish Plugin，填入仓库和这个 tag。
-4. 工作流只上传 `dex-buddy/plugins/<id>/<version>.zip` 和同名的 `.json`，再根据桶里全部版本说明合成 `dex-buddy/plugins/index.json`。每个 id 只保留最高的 `X.Y.Z`。合成任务串行，避免两次发布互相漏记。
-5. 同事打开 Dex Buddy 插件页，点「插件中心」，再点安装。已从插件中心安装过的插件，目录里有更高版本时，列表显示「可更新」，详情里点「更新」。
+2. 打上 tag `vX.Y.Z` 并推送。`v` 后面的数字必须等于清单里的 `version`。
+3. 仓库已经在授权名单里时，不用再把这一次 tag 告诉维护者。同步工作流会发布该仓库当前最高的 tag。
+
+工作流只上传 `dex-buddy/plugins/<id>/<version>.zip` 和同名的 `.json`，再根据桶里全部版本说明合成 `dex-buddy/plugins/index.json`。每个 id 只保留最高的 `X.Y.Z`。同步和补发共用同一条队列，避免两次发布互相漏记。
+
+同事打开 Dex Buddy 插件页，点「插件中心」，再点安装。已从插件中心安装过的插件，目录里有更高版本时，列表显示「可更新」，详情里点「更新」。
 
 本地拖进工作台的 zip 会记成「文件」来源，不参与这项更新。内置和开发路径里的同 id 不能被插件中心覆盖。
 
@@ -48,7 +64,8 @@ GitHub 仓库 `0x00pluto/hy-evo-harness` → Actions → Publish Plugin → Run 
 | 清单版本与 tag 不一致 | 改清单或改 tag，使 `v` 后面的数字与 `version` 相同 |
 | 检出插件仓库失败 | 仓库不是 `owner/name`，或私有仓库未设置 `PLUGIN_CHECKOUT_TOKEN` |
 | 插件包校验不一致 | 不要手改已上传的 zip。重新跑工作流，让目录里的 sha256 与包一致 |
-| 同事看不到新版本 | 看工作流是否把 `index.json` 刷到 CDN。插件页点插件中心的刷新 |
+| 同事看不到新版本 | 看同步工作流是否跑完，以及是否把 `index.json` 刷到 CDN。推 tag 后最多等一小时，或手动跑同步。插件页点插件中心的刷新 |
+| 仓库没有出现在同步里 | 把 `owner/name` 写进 `.github/plugin-repos.json` 并推到 `main` |
 
 ## 测试
 
@@ -56,27 +73,6 @@ GitHub 仓库 `0x00pluto/hy-evo-harness` → Actions → Publish Plugin → Run 
 pnpm test
 ```
 
-覆盖版本比较、目录地址、打包排除、来源记录和「只有插件中心安装过的才提示更新」。
+覆盖版本比较、授权名单、最高 tag、一个仓库失败时其余仓库仍发布、打包排除、来源记录和「只有插件中心安装过的才提示更新」。
 
-## 以后改成推 tag 自动发布
-
-GitHub 的 reusable workflow 允许插件仓库用 `uses` 调用本仓这份工作流。被调用时拿不到本仓的仓库密钥，个人账号 `0x00pluto` 也还没有组织密钥。因此现在不要把下面这段放进插件仓库，也不要把七牛密钥抄进去。
-
-组织密钥就绪、并允许这些插件仓库使用之后，插件仓库再加 `.github/workflows/publish-plugin.yml`：
-
-```yaml
-name: Publish plugin
-on:
-  push:
-    tags:
-      - "v*"
-jobs:
-  publish:
-    uses: 0x00pluto/hy-evo-harness/.github/workflows/publish-plugin.yml@main
-    with:
-      repository: ${{ github.repository }}
-      tag: ${{ github.ref_name }}
-    secrets: inherit
-```
-
-`secrets: inherit` 传的是插件仓库当时能用的密钥。七牛密钥必须是组织密钥，不能只存在本仓。
+不要让插件仓库用 `uses` 调用本仓这份工作流。被调用时拿不到本仓的七牛密钥。密钥只放在本仓。
