@@ -7,7 +7,15 @@ import { pluginZipUrl, versionFromTag, type PluginRelease } from './plugin-catal
 
 const SKIP_DIRS = new Set(['.git', '.venv', 'node_modules', 'cache', 'output', 'temp', '.cursor', 'bin', '.next']);
 
-/** 与 docs/plugin-development/ship.md 的打包排除一致，并额外丢掉 .env.* 里的本地密钥。保留 .env.example。 */
+export const PLUGIN_PACK_FILE = 'dex-buddy-plugin.pack';
+export const PLUGIN_PACK_IGNORE_FILE = 'dex-buddy-plugin.ignore';
+
+export interface PackPattern {
+  directory: boolean;
+  segments: string[];
+}
+
+/** 与 docs/plugin-development/pack.md 的宿主排除一致。插件清单不能把这些路径加回来。 */
 export function shouldPackRelative(relativePosix: string): boolean {
   const parts = relativePosix.split('/').filter((part) => part.length > 0);
   if (parts.length === 0) return false;
@@ -18,7 +26,29 @@ export function shouldPackRelative(relativePosix: string): boolean {
   return true;
 }
 
+export function parsePackPatterns(text: string, fileName: string): PackPattern[] {
+  const patterns: PackPattern[] = [];
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const pattern = parsePackLine(lines[index] ?? '', index + 1, fileName);
+    if (pattern) patterns.push(pattern);
+  }
+  return patterns;
+}
+
+export function matchesPackPattern(relativePosix: string, pattern: PackPattern): boolean {
+  const parts = relativePosix.split('/').filter((part) => part.length > 0);
+  if (pattern.directory) {
+    if (parts.length < pattern.segments.length) return false;
+  } else if (parts.length !== pattern.segments.length) {
+    return false;
+  }
+  return pattern.segments.every((segment, index) => segmentMatches(parts[index] ?? '', segment));
+}
+
 export function listPackPaths(root: string): string[] {
+  const pack = readPackPatterns(root, PLUGIN_PACK_FILE);
+  const ignore = readPackPatterns(root, PLUGIN_PACK_IGNORE_FILE) ?? [];
   const files: string[] = [];
   const stack = [''];
   while (stack.length > 0) {
@@ -27,14 +57,14 @@ export function listPackPaths(root: string): string[] {
     const stat = fs.lstatSync(current);
     if (stat.isSymbolicLink()) continue;
     if (stat.isDirectory()) {
-      if (relative !== '' && !shouldPackRelative(relative)) continue;
+      if (!shouldDescend(relative, pack, ignore)) continue;
       for (const name of fs.readdirSync(current)) {
         const next = relative === '' ? name : `${relative}/${name}`;
         stack.push(next);
       }
       continue;
     }
-    if (stat.isFile() && shouldPackRelative(relative)) files.push(relative);
+    if (stat.isFile() && shouldIncludeFile(relative, pack, ignore)) files.push(relative);
   }
   files.sort();
   return files;
@@ -76,6 +106,71 @@ export function sha256File(filePath: string): string {
   const hash = createHash('sha256');
   hash.update(fs.readFileSync(filePath));
   return hash.digest('hex');
+}
+
+function readPackPatterns(root: string, fileName: string): PackPattern[] | null {
+  const filePath = path.join(root, fileName);
+  if (!fs.existsSync(filePath)) return null;
+  const stat = fs.lstatSync(filePath);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error(`${fileName} 必须是文件`);
+  }
+  return parsePackPatterns(fs.readFileSync(filePath, 'utf8'), fileName);
+}
+
+function parsePackLine(line: string, lineNumber: number, fileName: string): PackPattern | null {
+  const trimmed = line.trim();
+  if (trimmed === '' || trimmed.startsWith('#')) return null;
+  if (
+    trimmed.startsWith('!')
+    || trimmed.startsWith('/')
+    || trimmed.includes('\\')
+    || trimmed.includes('**')
+  ) {
+    throw new Error(`${fileName} 第 ${lineNumber} 行无效`);
+  }
+  const directory = trimmed.endsWith('/');
+  const body = directory ? trimmed.slice(0, -1) : trimmed;
+  if (body === '') throw new Error(`${fileName} 第 ${lineNumber} 行无效`);
+  const segments = body.split('/');
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    throw new Error(`${fileName} 第 ${lineNumber} 行无效`);
+  }
+  return { directory, segments };
+}
+
+function shouldIncludeFile(relative: string, pack: PackPattern[] | null, ignore: readonly PackPattern[]): boolean {
+  if (!shouldPackRelative(relative)) return false;
+  if (pack && !pack.some((pattern) => matchesPackPattern(relative, pattern))) return false;
+  return !ignore.some((pattern) => matchesPackPattern(relative, pattern));
+}
+
+function shouldDescend(relative: string, pack: PackPattern[] | null, ignore: readonly PackPattern[]): boolean {
+  if (relative === '') return true;
+  if (!shouldPackRelative(relative)) return false;
+  if (ignore.some((pattern) => pattern.directory && matchesPackPattern(relative, pattern))) return false;
+  if (!pack) return true;
+  return pack.some((pattern) => patternCouldInclude(relative, pattern));
+}
+
+function patternCouldInclude(relative: string, pattern: PackPattern): boolean {
+  const parts = relative.split('/').filter((part) => part.length > 0);
+  const limit = Math.min(parts.length, pattern.segments.length);
+  for (let index = 0; index < limit; index += 1) {
+    if (!segmentMatches(parts[index] ?? '', pattern.segments[index] ?? '')) return false;
+  }
+  if (parts.length <= pattern.segments.length) return true;
+  return pattern.directory;
+}
+
+function segmentMatches(name: string, pattern: string): boolean {
+  if (!pattern.includes('*')) return name === pattern;
+  const expression = `^${pattern.split('*').map(escapeRegExp).join('[^/]*')}$`;
+  return new RegExp(expression).test(name);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function runZip(cwd: string, zipPath: string, files: string[]): Promise<void> {

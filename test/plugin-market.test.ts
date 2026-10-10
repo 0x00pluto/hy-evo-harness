@@ -16,7 +16,7 @@ import {
   versionFromTag,
 } from '../src/main/plugin-catalog.ts';
 import { marketUpdates, readOrigins, writeOrigin, deleteOrigin } from '../src/main/plugin-origins.ts';
-import { listPackPaths, packPluginRelease, shouldPackRelative } from '../src/main/plugin-pack.ts';
+import { listPackPaths, packPluginRelease, parsePackPatterns, shouldPackRelative } from '../src/main/plugin-pack.ts';
 import { assertNoBinaryPack } from '../src/main/plugin-publish.ts';
 
 const execFileAsync = promisify(execFile);
@@ -100,6 +100,45 @@ test('打包跳过密钥和依赖目录，保留示例环境文件', () => {
   fs.writeFileSync(path.join(root, 'src', 'app.py'), 'print(1)');
   assert.deepEqual(listPackPaths(root), ['.env.example', 'plugin.manifest.json', 'src/app.py']);
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('pack 决定包含范围，ignore 再挖掉，宿主排除仍然生效', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-pack-'));
+  fs.writeFileSync(path.join(root, 'plugin.manifest.json'), '{}');
+  fs.writeFileSync(path.join(root, 'index.js'), 'module.exports = {};');
+  fs.writeFileSync(path.join(root, '.env'), 'SECRET=1');
+  fs.writeFileSync(path.join(root, 'README.md'), '# readme');
+  fs.mkdirSync(path.join(root, 'src', 'drafts'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'src', 'nested'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'tests'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'app.py'), 'print(1)');
+  fs.writeFileSync(path.join(root, 'src', 'notes.local.json'), '{}');
+  fs.writeFileSync(path.join(root, 'src', 'nested', 'notes.local.json'), '{}');
+  fs.writeFileSync(path.join(root, 'src', 'drafts', 'note.txt'), 'draft');
+  fs.writeFileSync(path.join(root, 'tests', 'test.py'), 'def test(): pass');
+  fs.writeFileSync(path.join(root, 'dex-buddy-plugin.pack'), [
+    'plugin.manifest.json',
+    'index.js',
+    '.env',
+    'src/',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(root, 'dex-buddy-plugin.ignore'), [
+    'src/drafts/',
+    'src/*.local.json',
+    '',
+  ].join('\n'));
+  assert.deepEqual(listPackPaths(root), [
+    'index.js',
+    'plugin.manifest.json',
+    'src/app.py',
+    'src/nested/notes.local.json',
+  ]);
+  fs.rmSync(root, { recursive: true, force: true });
+  assert.throws(() => parsePackPatterns('!src/\n', 'dex-buddy-plugin.pack'), /第 1 行无效/);
+  assert.throws(() => parsePackPatterns('../secret\n', 'dex-buddy-plugin.ignore'), /第 1 行无效/);
+  assert.throws(() => parsePackPatterns('/tmp/a\n', 'dex-buddy-plugin.pack'), /第 1 行无效/);
+  assert.throws(() => parsePackPatterns('**/*.md\n', 'dex-buddy-plugin.ignore'), /第 1 行无效/);
 });
 
 test('按 tag 打包后校验值写进版本说明', async () => {

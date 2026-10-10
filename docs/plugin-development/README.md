@@ -32,6 +32,7 @@ my-tool/
 - [设置](settings.md)：`configSchema`、分组、密钥和 `pluginEnv()`。
 - [数据](data.md)：缓存、导出和数据库放在用户数据目录，不要写进安装目录。
 - [运行](runtime.md)：`index.js`、页面里的 `dex.call`，以及 Python / Node 运行时。
+- [打包](pack.md)：宿主默认丢掉什么，以及 `dex-buddy-plugin.pack` 和 `dex-buddy-plugin.ignore` 怎么配合。
 - [发布](ship.md)：开发时挂到 Dex Buddy、打成 zip 拖进工作台、什么情况会加载失败。
 - [发到插件中心](distribute.md)：推 tag；需要解释器时在清单里声明 `runtime`。
 - [配色](color.md)：页面建议色。可以用，也可以自定。
