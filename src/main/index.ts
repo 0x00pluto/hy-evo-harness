@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readExtraPluginPaths, readForceUpdateIcon } from './dev-config.ts';
+import { INSTALLED_PLUGINS_DIR_NAME, resolveHostDataPath } from './host-data.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
 import { isHttpUrl } from './manifest.ts';
 import { pluginInstallPath } from './plugin-catalog.ts';
@@ -24,7 +25,7 @@ function bundledPluginsDir(): string {
 }
 
 function installedPluginsDir(): string {
-  return path.join(app.getPath('userData'), 'installed_plugins');
+  return path.join(app.getPath('userData'), INSTALLED_PLUGINS_DIR_NAME);
 }
 
 function pluginSettingsFile(): string {
@@ -299,6 +300,28 @@ function registerIpc(): void {
       return { ok: true };
     } catch {
       return { ok: false };
+    }
+  });
+
+  ipcMain.handle('dex:general-settings', () => {
+    const userData = app.getPath('userData');
+    return {
+      version: app.getVersion(),
+      userData: resolveHostDataPath('userData', userData),
+      installedPlugins: resolveHostDataPath('installedPlugins', userData),
+    };
+  });
+
+  ipcMain.handle('dex:open-host-data', async (_event, kind: unknown) => {
+    const target = resolveHostDataPath(kind, app.getPath('userData'));
+    if (!target) return { ok: false, message: '不能打开这个目录' };
+    try {
+      const error = await shell.openPath(target);
+      if (error) return { ok: false, message: error };
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '无法打开目录';
+      return { ok: false, message };
     }
   });
 

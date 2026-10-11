@@ -464,6 +464,20 @@ body[data-pin="off"][data-surface="workspace"] #sidebar.is-open {
   line-height: 16px;
 }
 
+/* 设置页有两个分区标题，放进列表。这条共用槽只有一行，留着会空出 16px。 */
+body[data-surface="settings"] .split-section {
+  display: none;
+}
+
+#settings-list .settings-nav-section {
+  padding: 8px 8px 2px;
+  line-height: 16px;
+}
+
+#settings-list .settings-nav-section:first-child {
+  padding-top: 0;
+}
+
 .split-list {
   flex: 1;
   min-height: 0;
@@ -1448,6 +1462,50 @@ h1 {
   white-space: nowrap;
   color: var(--muted);
   font-size: var(--text-ui);
+}
+
+.settings-host-row {
+  align-items: flex-start;
+}
+
+.settings-host-row .settings-control {
+  flex: 1 1 12rem;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.settings-host-value {
+  color: var(--ink);
+  font-size: var(--text-ui);
+  line-height: 1.5;
+}
+
+.settings-host-path {
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-ui);
+  line-height: 1.5;
+  text-align: right;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-inline-note {
+  color: var(--muted);
+  font-size: var(--text-ui);
+  line-height: 1.5;
+}
+
+.settings-inline-note.is-error,
+.settings-host-error {
+  color: var(--danger);
+}
+
+.settings-host-error {
+  margin: 4px 0 0;
+  font-size: var(--text-ui);
+  line-height: 1.5;
 }
 
 .settings-text-btn.path-change {

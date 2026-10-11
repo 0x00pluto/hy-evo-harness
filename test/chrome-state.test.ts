@@ -198,7 +198,7 @@ test('settings and plugins keep separate split width keys', () => {
 });
 
 test('the update dot appears only when an update is ready to install', () => {
-  const quiet = ['idle', 'checking', 'downloading', 'installing', 'upToDate', 'error'];
+  const quiet = ['idle', 'checking', 'downloading', 'installing', 'upToDate', 'error', 'unsupported'];
   for (const status of quiet) {
     assert.equal(showUpdateDot(status), false, status);
   }
@@ -208,7 +208,7 @@ test('the update dot appears only when an update is ready to install', () => {
 test('the popover update row is install, retry, or hidden', () => {
   assert.equal(updateRowMode('readyToInstall'), 'install');
   assert.equal(updateRowMode('error'), 'retry');
-  for (const status of ['idle', 'checking', 'downloading', 'installing', 'upToDate']) {
+  for (const status of ['idle', 'checking', 'downloading', 'installing', 'upToDate', 'unsupported']) {
     assert.equal(updateRowMode(status), 'hidden', status);
   }
 });

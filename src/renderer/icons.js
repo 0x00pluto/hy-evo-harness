@@ -10,6 +10,7 @@ const ICON_NAMES = [
   'Ellipsis',
   'CircleUser',
   'Settings',
+  'SlidersHorizontal',
   'CircleHelp',
   'ChevronRight',
   'Download',

@@ -18,6 +18,7 @@ export function mountUpdater({ setStatus }) {
   let previewDialog = false;
   let previewTimer = null;
   let updaterOwnsStatus = false;
+  const statusListeners = new Set();
 
   function versionLabel(version) {
     return version ? `v${version}` : '新版本';
@@ -167,13 +168,21 @@ export function mountUpdater({ setStatus }) {
       updaterOwnsStatus = false;
     }
 
-    if (previewDialog && updateDialog.open && !ready) return;
+    const keepPreview = previewDialog && updateDialog.open && !ready;
+    const closeDialog = !keepPreview && updateDialog.open && (failed || (previous && previous.status === 'installing' && ready));
+    if (closeDialog) updateDialog.close();
+    else if (!keepPreview && updateDialog.open) fillUpdateDialog(payload);
+    for (const listener of statusListeners) listener(payload);
+  }
 
-    if (updateDialog.open && (failed || (previous && previous.status === 'installing' && ready))) {
-      updateDialog.close();
-      return;
-    }
-    if (updateDialog.open) fillUpdateDialog(payload);
+  function openInstallDialog() {
+    if (!updateState) return;
+    const status = updateState.status;
+    if (status !== 'readyToInstall' && status !== 'downloading' && status !== 'installing') return;
+    previewDialog = false;
+    stopPreviewProgress();
+    fillUpdateDialog(updateState);
+    if (!updateDialog.open) updateDialog.showModal();
   }
 
   function openUpdateDialog() {
@@ -232,4 +241,16 @@ export function mountUpdater({ setStatus }) {
     forceUpdateIcon = Boolean(flags && flags.forceUpdateIcon);
     syncUpdateChrome();
   }).catch(() => {});
+
+  return {
+    status() {
+      return updateState;
+    },
+    onStatus(listener) {
+      statusListeners.add(listener);
+      if (updateState) listener(updateState);
+      return () => statusListeners.delete(listener);
+    },
+    openInstallDialog,
+  };
 }

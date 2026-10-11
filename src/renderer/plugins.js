@@ -216,6 +216,7 @@ export function mountPlugins({
   }
 
   async function openPlugin(plugin) {
+    pluginPane.hidden = false;
     shell.activeId = plugin.id;
     setStatus('');
     settings.dismissSurface();

@@ -19,7 +19,8 @@ export type UpdateStatus =
   | 'downloading'
   | 'readyToInstall'
   | 'installing'
-  | 'error';
+  | 'error'
+  | 'unsupported';
 
 export type PlatformFlow = 'win-auto' | 'mac-dmg';
 
@@ -138,9 +139,20 @@ function scheduleSilentRetry(reason: string): void {
   }, SILENT_RETRY_DELAY_MS);
 }
 
+function updatesUnsupported(): boolean {
+  return !app.isPackaged || (!isWin && !isMac);
+}
+
 async function runCheck(): Promise<void> {
-  if (!app.isPackaged) return;
-  if (!isWin && !isMac) return;
+  // 与 idle 分开，设置页才能显示「当前环境不检查更新」。
+  if (updatesUnsupported()) {
+    setPayload({
+      status: 'unsupported',
+      availableVersion: undefined,
+      errorMessage: undefined,
+    });
+    return;
+  }
   if (shouldSkipScheduledCheck()) return;
 
   resetErrorState();
@@ -394,7 +406,8 @@ export function initUpdater(): void {
   registerIpcHandlers();
   publishStatusWhenWindowLoads();
 
-  if (!app.isPackaged || (!isWin && !isMac)) {
+  if (updatesUnsupported()) {
+    setPayload({ status: 'unsupported', errorMessage: undefined });
     return;
   }
 

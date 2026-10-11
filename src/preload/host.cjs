@@ -57,6 +57,12 @@ contextBridge.exposeInMainWorld('dex', {
   openPluginFolder(rootPath) {
     return ipcRenderer.invoke('dex:open-plugin-folder', rootPath);
   },
+  generalSettings() {
+    return ipcRenderer.invoke('dex:general-settings');
+  },
+  openHostData(kind) {
+    return ipcRenderer.invoke('dex:open-host-data', kind);
+  },
   getUpdateStatus() {
     return ipcRenderer.invoke('updater:get-status');
   },

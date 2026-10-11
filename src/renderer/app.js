@@ -63,7 +63,17 @@ const pluginsPage = mountPluginsPage({ shell, plugins, chrome: chromeBridge });
 pluginsPageBridge.sync = pluginsPage.sync;
 pluginsPageBridge.clearStatus = pluginsPage.clearStatus;
 
-const settings = mountSettings({ shell, setStatus, plugins });
+const updaterBridge = {
+  status() {
+    return null;
+  },
+  onStatus() {
+    return () => {};
+  },
+  openInstallDialog() {},
+};
+
+const settings = mountSettings({ shell, setStatus, plugins, updater: updaterBridge });
 settingsBridge.onPluginsChanged = settings.onPluginsChanged;
 settingsBridge.dismissSurface = settings.dismissSurface;
 
@@ -77,7 +87,7 @@ const chrome = mountChrome({
 });
 Object.assign(chromeBridge, chrome);
 
-mountUpdater({ setStatus });
+Object.assign(updaterBridge, mountUpdater({ setStatus }));
 
 function dismissBoot() {
   const boot = document.getElementById('boot');

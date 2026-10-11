@@ -1,8 +1,17 @@
+import {
+  GENERAL_NAV_ID,
+  PRODUCT_NAME,
+  generalNavMatches,
+  localUserLabel,
+  preferredSettingsId,
+  updateCheckNote,
+  updateDialogInsteadOfCheck,
+} from './general-settings.js';
 import { mountIcons } from './icons.js';
 
 const GENERAL_GROUP = '通用配置';
 
-export function mountSettings({ shell, setStatus, plugins }) {
+export function mountSettings({ shell, setStatus, plugins, updater = {} }) {
   const settingsSearch = document.getElementById('settings-search');
   const settingsList = document.getElementById('settings-list');
   const settingsScreen = document.getElementById('settings-screen');
@@ -24,6 +33,9 @@ export function mountSettings({ shell, setStatus, plugins }) {
   let returnPluginId = null;
   let savingSettings = false;
   let discardResolver = null;
+  let generalNodes = null;
+  let checkRequested = false;
+  let stopUpdateWatch = null;
 
   function settingsQueryText() {
     return settingsSearch.value.trim().toLowerCase();
@@ -133,34 +145,77 @@ export function mountSettings({ shell, setStatus, plugins }) {
 
   function renderSettingsNav() {
     settingsList.replaceChildren();
+    const query = settingsQueryText();
+    const showGeneral = generalNavMatches(query);
     const visible = visibleSettings();
-    if (settingsCatalog.length === 0 || visible.length === 0) {
+    if (!showGeneral && visible.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-nav';
-      empty.textContent = settingsCatalog.length === 0 ? '没有可配置的插件' : '没有结果';
+      empty.textContent = '没有结果';
       settingsList.appendChild(empty);
       return;
     }
-    for (const plugin of visible) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'nav-item plugin-row';
-      if (plugin.id === activeSettingsId) button.classList.add('active');
-      button.setAttribute('aria-current', plugin.id === activeSettingsId ? 'true' : 'false');
-      const copy = document.createElement('span');
-      copy.className = 'plugin-row-copy';
-      copy.appendChild(pluginMark(plugin));
-      const title = document.createElement('span');
-      title.className = 'nav-title';
-      title.textContent = plugin.displayName;
-      copy.appendChild(title);
-      button.appendChild(copy);
-      button.addEventListener('click', () => {
-        void selectSettings(plugin.id);
-      });
-      settingsList.appendChild(button);
+    if (showGeneral) {
+      settingsList.appendChild(navSectionTitle('个人设置'));
+      settingsList.appendChild(generalNavButton());
+    }
+    if (visible.length > 0) {
+      settingsList.appendChild(navSectionTitle('插件'));
+      for (const plugin of visible) settingsList.appendChild(pluginNavButton(plugin));
     }
     mountIcons(settingsList);
+  }
+
+  function navSectionTitle(text) {
+    const title = document.createElement('div');
+    title.className = 'section-title settings-nav-section';
+    title.textContent = text;
+    return title;
+  }
+
+  function generalNavButton() {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'nav-item plugin-row';
+    const selected = activeSettingsId === GENERAL_NAV_ID;
+    if (selected) button.classList.add('active');
+    button.setAttribute('aria-current', selected ? 'true' : 'false');
+    const copy = document.createElement('span');
+    copy.className = 'plugin-row-copy';
+    const mark = document.createElement('span');
+    mark.className = 'plugin-mark plugin-mark-nav';
+    const icon = document.createElement('i');
+    icon.dataset.lucide = 'sliders-horizontal';
+    mark.appendChild(icon);
+    const title = document.createElement('span');
+    title.className = 'nav-title';
+    title.textContent = '通用设置';
+    copy.append(mark, title);
+    button.appendChild(copy);
+    button.addEventListener('click', () => {
+      void selectSettings(GENERAL_NAV_ID);
+    });
+    return button;
+  }
+
+  function pluginNavButton(plugin) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'nav-item plugin-row';
+    if (plugin.id === activeSettingsId) button.classList.add('active');
+    button.setAttribute('aria-current', plugin.id === activeSettingsId ? 'true' : 'false');
+    const copy = document.createElement('span');
+    copy.className = 'plugin-row-copy';
+    copy.appendChild(pluginMark(plugin));
+    const title = document.createElement('span');
+    title.className = 'nav-title';
+    title.textContent = plugin.displayName;
+    copy.appendChild(title);
+    button.appendChild(copy);
+    button.addEventListener('click', () => {
+      void selectSettings(plugin.id);
+    });
+    return button;
   }
 
   function defaultGlyph() {
@@ -187,16 +242,213 @@ export function mountSettings({ shell, setStatus, plugins }) {
     return mark;
   }
 
-  function clearSettingsMain() {
-    settingsTitle.textContent = '';
+  function hidePluginSettingsChrome() {
     settingsSchemaError.hidden = true;
     settingsSchemaError.textContent = '';
-    settingsForm.replaceChildren();
     settingsActions.hidden = true;
-    settingsEmpty.hidden = false;
-    settingsEmpty.textContent = settingsCatalog.length === 0 ? '没有可配置的插件' : '没有结果';
+    settingsEmpty.hidden = true;
+    settingsEmpty.textContent = '';
     settingsEntryHost.hidden = true;
     settingsEntryHost.replaceChildren();
+  }
+
+  function settingsGroup(name) {
+    const section = document.createElement('section');
+    section.className = 'settings-group';
+    const heading = document.createElement('h2');
+    heading.className = 'settings-group-title';
+    heading.textContent = name;
+    const body = document.createElement('div');
+    body.className = 'settings-group-body';
+    section.append(heading, body);
+    return { section, body };
+  }
+
+  function hostValue(text) {
+    const value = document.createElement('span');
+    value.className = 'settings-host-value';
+    value.textContent = text;
+    return value;
+  }
+
+  function secondaryButton(label) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'settings-text-btn path-change';
+    button.textContent = label;
+    return button;
+  }
+
+  function watchUpdates() {
+    if (stopUpdateWatch || typeof updater.onStatus !== 'function') return;
+    stopUpdateWatch = updater.onStatus(onUpdaterStatus);
+  }
+
+  function syncGeneralUpdate(payload) {
+    if (!generalNodes || activeSettingsId !== GENERAL_NAV_ID) return;
+    const status = payload && payload.status;
+    const noteText = updateCheckNote(status, payload && payload.errorMessage);
+    generalNodes.note.hidden = noteText === '';
+    generalNodes.note.textContent = noteText;
+    generalNodes.note.classList.toggle('is-error', status === 'error');
+    generalNodes.checkBtn.disabled = status === 'checking';
+  }
+
+  function onUpdaterStatus(payload) {
+    syncGeneralUpdate(payload);
+    if (!checkRequested || !payload) return;
+    const status = payload.status;
+    if (status === 'downloading' || status === 'readyToInstall') {
+      checkRequested = false;
+      if (typeof updater.openInstallDialog === 'function') updater.openInstallDialog();
+      return;
+    }
+    if (status === 'upToDate' || status === 'error' || status === 'unsupported') {
+      checkRequested = false;
+    }
+  }
+
+  async function onCheckUpdate() {
+    const payload = typeof updater.status === 'function' ? updater.status() : null;
+    const status = payload && payload.status;
+    if (updateDialogInsteadOfCheck(status)) {
+      if (typeof updater.openInstallDialog === 'function') updater.openInstallDialog();
+      return;
+    }
+    watchUpdates();
+    if (generalNodes) generalNodes.checkBtn.disabled = true;
+    checkRequested = true;
+    try {
+      await window.dex.retryUpdateCheck();
+    } catch (err) {
+      checkRequested = false;
+      if (!generalNodes || activeSettingsId !== GENERAL_NAV_ID) return;
+      generalNodes.note.textContent = err instanceof Error ? err.message : '检查更新失败';
+      generalNodes.note.hidden = false;
+      generalNodes.note.classList.add('is-error');
+      generalNodes.checkBtn.disabled = false;
+    }
+  }
+
+  function showHostError(errorEl, message) {
+    errorEl.hidden = !message;
+    errorEl.textContent = message || '';
+  }
+
+  async function openHostData(kind, errorEl) {
+    showHostError(errorEl, '');
+    try {
+      const result = await window.dex.openHostData(kind);
+      if (activeSettingsId !== GENERAL_NAV_ID) return;
+      if (result && result.ok) return;
+      showHostError(errorEl, (result && result.message) || '无法打开目录');
+    } catch (err) {
+      if (activeSettingsId !== GENERAL_NAV_ID) return;
+      showHostError(errorEl, err instanceof Error ? err.message : '无法打开目录');
+    }
+  }
+
+  function hostPathRow(title, kind) {
+    const row = document.createElement('div');
+    row.className = 'settings-row settings-host-row';
+    const copy = document.createElement('div');
+    copy.className = 'settings-card-copy';
+    const heading = document.createElement('h3');
+    heading.textContent = title;
+    const error = document.createElement('p');
+    error.className = 'settings-host-error';
+    error.hidden = true;
+    copy.append(heading, error);
+    const control = document.createElement('div');
+    control.className = 'settings-control settings-row-cluster';
+    const value = document.createElement('span');
+    value.className = 'settings-host-path';
+    const open = secondaryButton('打开');
+    open.addEventListener('click', () => {
+      void openHostData(kind, error);
+    });
+    control.append(value, open);
+    row.append(copy, control);
+    return { row, value, error };
+  }
+
+  async function renderGeneralSettings() {
+    settingsTitle.textContent = '通用设置';
+    hidePluginSettingsChrome();
+    settingsForm.replaceChildren();
+    const about = settingsGroup('关于');
+    const data = settingsGroup('本机数据');
+
+    const nameRow = document.createElement('div');
+    nameRow.className = 'settings-row';
+    const nameCopy = document.createElement('div');
+    nameCopy.className = 'settings-card-copy';
+    const nameHeading = document.createElement('h3');
+    nameHeading.textContent = '产品名称';
+    nameCopy.appendChild(nameHeading);
+    const nameControl = document.createElement('div');
+    nameControl.className = 'settings-control';
+    nameControl.appendChild(hostValue(PRODUCT_NAME));
+    nameRow.append(nameCopy, nameControl);
+
+    const versionRow = document.createElement('div');
+    versionRow.className = 'settings-row settings-host-row';
+    const versionCopy = document.createElement('div');
+    versionCopy.className = 'settings-card-copy';
+    const versionHeading = document.createElement('h3');
+    versionHeading.textContent = '版本';
+    versionCopy.appendChild(versionHeading);
+    const versionControl = document.createElement('div');
+    versionControl.className = 'settings-control settings-row-cluster';
+    const versionValue = hostValue('');
+    const checkBtn = secondaryButton('检查更新');
+    const note = document.createElement('span');
+    note.className = 'settings-inline-note';
+    checkBtn.addEventListener('click', () => {
+      void onCheckUpdate();
+    });
+    versionControl.append(versionValue, checkBtn, note);
+    versionRow.append(versionCopy, versionControl);
+
+    const userRow = document.createElement('div');
+    userRow.className = 'settings-row';
+    const userCopy = document.createElement('div');
+    userCopy.className = 'settings-card-copy';
+    const userHeading = document.createElement('h3');
+    userHeading.textContent = '当前用户';
+    const userHint = document.createElement('p');
+    userHint.textContent = '本机操作系统账户';
+    userCopy.append(userHeading, userHint);
+    const userControl = document.createElement('div');
+    userControl.className = 'settings-control';
+    const userValue = hostValue('');
+    userControl.appendChild(userValue);
+    userRow.append(userCopy, userControl);
+
+    const userData = hostPathRow('用户数据目录', 'userData');
+    const installed = hostPathRow('已安装插件目录', 'installedPlugins');
+    about.body.append(nameRow, versionRow, userRow);
+    data.body.append(userData.row, installed.row);
+    settingsForm.append(about.section, data.section);
+
+    generalNodes = { note, checkBtn };
+    watchUpdates();
+    syncGeneralUpdate(typeof updater.status === 'function' ? updater.status() : null);
+
+    try {
+      const [info, name] = await Promise.all([
+        window.dex.generalSettings(),
+        window.dex.localUsername().catch(() => ''),
+      ]);
+      if (activeSettingsId !== GENERAL_NAV_ID) return;
+      versionValue.textContent = info && typeof info.version === 'string' ? info.version : '';
+      userValue.textContent = localUserLabel(name);
+      userData.value.textContent = info && typeof info.userData === 'string' ? info.userData : '';
+      installed.value.textContent = info && typeof info.installedPlugins === 'string' ? info.installedPlugins : '';
+    } catch (err) {
+      if (activeSettingsId !== GENERAL_NAV_ID) return;
+      setStatus(err instanceof Error ? err.message : '无法读取通用设置', 'error');
+    }
   }
 
   function appendReset(parent, field, plugin) {
@@ -504,11 +756,28 @@ export function mountSettings({ shell, setStatus, plugins }) {
     renderSettingsNav();
   }
 
+  function catalogIds() {
+    return settingsCatalog.map((item) => item.id);
+  }
+
   async function selectSettings(id) {
     if (id === activeSettingsId) return;
+    const plugin = id === GENERAL_NAV_ID ? null : settingsCatalog.find((item) => item.id === id);
+    if (id !== GENERAL_NAV_ID && !plugin) return;
     if (activeSettingsId && !(await confirmDiscard())) return;
-    const plugin = settingsCatalog.find((item) => item.id === id);
-    if (!plugin) return;
+    if (id === GENERAL_NAV_ID) {
+      activeSettingsId = GENERAL_NAV_ID;
+      settingsDraft = null;
+      settingsBaseline = '';
+      renderSettingsNav();
+      try {
+        await renderGeneralSettings();
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : '打开设置页失败', 'error');
+      }
+      return;
+    }
+    generalNodes = null;
     activeSettingsId = id;
     settingsDraft = draftFromPlugin(plugin);
     rememberBaseline();
@@ -522,7 +791,7 @@ export function mountSettings({ shell, setStatus, plugins }) {
 
   async function enterSettings(pluginId) {
     if (shell.settingsMode) {
-      if (typeof pluginId === 'string') await selectSettings(pluginId);
+      if (typeof pluginId === 'string') await selectSettings(preferredSettingsId(pluginId, catalogIds()));
       return;
     }
     returnPluginId = shell.activeId;
@@ -533,18 +802,14 @@ export function mountSettings({ shell, setStatus, plugins }) {
     setStatus('');
     await reloadSettingsCatalog();
     if (!shell.settingsMode) return;
-    const preferred = typeof pluginId === 'string' && settingsCatalog.some((item) => item.id === pluginId)
-      ? pluginId
-      : null;
-    const first = preferred || visibleSettings()[0]?.id;
-    if (first) await selectSettings(first);
-    else clearSettingsMain();
+    await selectSettings(preferredSettingsId(pluginId, catalogIds()));
   }
 
   function leaveSettings(options = {}) {
     const backTo = returnPluginId;
     shell.settingsMode = false;
     activeSettingsId = null;
+    generalNodes = null;
     settingsDraft = null;
     settingsBaseline = '';
     settingsScreen.hidden = true;
@@ -591,13 +856,12 @@ export function mountSettings({ shell, setStatus, plugins }) {
 
   async function onPluginsChanged() {
     await reloadSettingsCatalog();
-    if (activeSettingsId && !settingsCatalog.some((plugin) => plugin.id === activeSettingsId)) {
-      activeSettingsId = null;
-      settingsDraft = null;
-      const first = visibleSettings()[0];
-      if (first) await selectSettings(first.id);
-      else clearSettingsMain();
-    }
+    if (!activeSettingsId || activeSettingsId === GENERAL_NAV_ID) return;
+    if (settingsCatalog.some((plugin) => plugin.id === activeSettingsId)) return;
+    activeSettingsId = null;
+    settingsDraft = null;
+    settingsBaseline = '';
+    await selectSettings(GENERAL_NAV_ID);
   }
 
   settingsSearch.addEventListener('input', () => {
