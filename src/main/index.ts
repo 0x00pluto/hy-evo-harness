@@ -13,6 +13,7 @@ import { deleteOrigin, marketUpdates, readOrigins, writeOrigin } from './plugin-
 import { PluginSettingsStore } from './plugin-settings.ts';
 import { ensurePluginProtocol, pluginPartition, registerPluginScheme } from './protocol.ts';
 import { ServiceRegistry } from './registry.ts';
+import { applyUserSearchPath } from './shell-path.ts';
 import type { DexResult } from './types.ts';
 import { initUpdater } from './updater.ts';
 
@@ -440,6 +441,8 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(async () => {
+  // 从 Dock 打开时 PATH 里没有登录 shell 配好的 Homebrew 等命令。先补上，再让插件子进程继承。
+  await applyUserSearchPath(process.env);
   registry.setSettings(new PluginSettingsStore(pluginSettingsFile(), registry.logger));
   registry.setRuntimeHost({
     userData: app.getPath('userData'),
