@@ -70,10 +70,10 @@ export function mountUpdater({ setStatus }) {
         updateDialogBody.textContent = percent === null ? '正在下载' : `${percent}%`;
       } else if (opening) {
         updateDialogTitle.textContent = '下载新版本？';
-        updateDialogBody.textContent = `正在打开 ${version} 的安装包。请将应用拖入「应用程序」完成更新。`;
+        updateDialogBody.textContent = `正在打开 ${version} 的安装包，随后应用会退出。`;
       } else {
         updateDialogTitle.textContent = '下载新版本？';
-        updateDialogBody.textContent = `将下载 ${version} 的安装包（dmg），完成后会自动打开，需手动将应用拖入「应用程序」完成更新。`;
+        updateDialogBody.textContent = `将下载 ${version} 的安装包（dmg）。打开后应用会退出，请将应用拖入「应用程序」完成更新。`;
       }
       updateConfirm.textContent = '下载新版本';
     } else if (downloading) {

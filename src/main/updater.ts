@@ -3,6 +3,7 @@ import { createWriteStream, existsSync, statSync, unlinkSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { UpdateInfo } from 'electron-updater';
+import { canStartMacDmgInstall, shouldQuitAfterOpeningMacDmg } from './mac-dmg-install.ts';
 import { extractMacDmgInfo, macDmgFileName } from './update-assets.ts';
 
 // electron-updater 是 CommonJS，autoUpdater 用 getter 挂上，ESM 命名导入会在启动时失败。
@@ -253,6 +254,17 @@ async function openMacDmg(version: string): Promise<void> {
   setPayload({ status: 'readyToInstall', availableVersion: version, errorMessage: undefined });
 }
 
+async function openMacDmgThenQuitIfIdle(version: string): Promise<InstallUpdateResult> {
+  await openMacDmg(version);
+  // darwin 上关窗口不会退出，.app 仍被占用，打开成功后必须退进程。
+  if (!shouldQuitAfterOpeningMacDmg('', hasRunningTask())) {
+    setPayload({ status: 'readyToInstall', availableVersion: version, errorMessage: undefined });
+    return { ok: false, blockedByTask: true };
+  }
+  app.quit();
+  return { ok: true };
+}
+
 async function installMacUpdate(): Promise<InstallUpdateResult> {
   const version = currentPayload.availableVersion ?? pendingUpdateInfo?.version;
   if (!version) {
@@ -260,10 +272,13 @@ async function installMacUpdate(): Promise<InstallUpdateResult> {
     return { ok: false };
   }
 
+  if (!canStartMacDmgInstall(hasRunningTask())) {
+    return { ok: false, blockedByTask: true };
+  }
+
   if (isMacDmgReady(version)) {
     try {
-      await openMacDmg(version);
-      return { ok: true };
+      return await openMacDmgThenQuitIfIdle(version);
     } catch (error) {
       const message = error instanceof Error ? error.message : '打开 dmg 失败';
       setPayload({ status: 'error', errorMessage: message });
@@ -287,8 +302,7 @@ async function installMacUpdate(): Promise<InstallUpdateResult> {
   try {
     await downloadMacDmg(version, url);
     macDownloadInProgress = false;
-    await openMacDmg(version);
-    return { ok: true };
+    return await openMacDmgThenQuitIfIdle(version);
   } catch (error) {
     macDownloadInProgress = false;
     const message = error instanceof Error ? error.message : '下载 dmg 失败';

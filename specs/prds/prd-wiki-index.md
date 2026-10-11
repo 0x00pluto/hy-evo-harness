@@ -9,3 +9,4 @@
 - `specs/prds/prd-00003-plugins-page.md`：00003，图标轨拼图打开插件页（已安装列表、拖放安装台、详情与卸载），工作区去掉插件顶栏并由标题栏正中显示插件名，manifest 增加可选目录信息。界面参考图在 `specs/prds/images/prd-00003-plugins-page/`（`01` 图标轨加号，`02` 插件页，`03` 详情，`04` 卸载菜单，`05` 标题栏名称）。工程 accepted
 - `specs/prds/prd-00004-plugin-market.md`：00004，左栏增加插件市场，右栏改为分类卡片货架，压缩包收进加号，目录补上图标和分类。界面参考图在 `specs/prds/images/prd-00004-plugin-market/`（`01` 货架，`02` 安装中与 toast，`03` 卡片菜单，`04` 路径提示）。工程 backlog
 - `specs/prds/prd-00005-system-settings.md`：00005，设置页左栏在插件列表之上增加「个人设置 / 通用设置」，右侧只读展示产品名、版本和本机用户，并可检查更新、打开用户数据目录与已安装插件目录。工程 backlog
+- `specs/prds/prd-00006-mac-dmg-quit-after-open.md`：00006，macOS 在 dmg 安装盘成功打开后立即退出进程，便于拖入「应用程序」覆盖；有进行中任务则不下载、不退出。工程 accepted
