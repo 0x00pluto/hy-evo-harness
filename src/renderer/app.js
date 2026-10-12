@@ -53,6 +53,7 @@ const plugins = mountPlugins({
   settings: settingsBridge,
   onClearNavigation() { chromeBridge.clearNavigation(); },
   onOpenPluginSettings(pluginId) { void chromeBridge.openSettings(pluginId); },
+  onOpenMarket() { chromeBridge.enterPlugins(); },
   onWorkspaceChanged() { chromeBridge.refresh(); },
   onListChanged() {
     const session = chromeBridge.session();

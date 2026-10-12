@@ -22,6 +22,21 @@ contextBridge.exposeInMainWorld('dex', {
   uninstall(id) {
     return ipcRenderer.invoke('dex:uninstall', id);
   },
+  loadUnpackedDirectory() {
+    return ipcRenderer.invoke('dex:load-unpacked-directory');
+  },
+  reloadUnpacked(id) {
+    return ipcRenderer.invoke('dex:reload-unpacked', id);
+  },
+  startPreview(id) {
+    return ipcRenderer.invoke('dex:start-preview', id);
+  },
+  endPreview(id) {
+    return ipcRenderer.invoke('dex:end-preview', id);
+  },
+  removeUnpacked(id) {
+    return ipcRenderer.invoke('dex:remove-unpacked', id);
+  },
   retryPluginRuntime(id) {
     return ipcRenderer.invoke('dex:retry-plugin-runtime', id);
   },

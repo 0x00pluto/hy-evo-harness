@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
-import type { PluginDirs, PluginRuntimeSpec, PluginSource } from './types.ts';
+import type { PluginDirs, PluginRuntimeSpec, PluginSource, RuntimeLayout } from './types.ts';
 
 /** 全机共用。升级解释器时改这里并发一版 Dex Buddy，已建环境会按新常量重建。 */
 export const UV_VERSION = '0.9.2';
@@ -45,6 +45,10 @@ export interface PrepareRuntimeInput {
   pluginDir: string;
   source: PluginSource;
   spec?: PluginRuntimeSpec;
+  /** 数据与运行时目录。缺省时从清单读 id。本地预览传入实例 id。 */
+  storageId?: string;
+  /** 缺省时已安装插件走 published，其余走仓库里的虚拟环境。 */
+  layout?: RuntimeLayout;
   run?: CommandRunner;
   tools?: RuntimeTools;
   onProgress?: () => void;
@@ -148,9 +152,10 @@ export function devPython(pluginDir: string): string | null {
 }
 
 export async function preparePluginRuntime(input: PrepareRuntimeInput): Promise<PrepareRuntimeResult> {
-  const pluginId = readPluginId(input.pluginDir);
-  const dirs = resolveDirs(input.userData, input.pluginDir, input.source, pluginId);
-  if (input.source === 'installed' && input.userData) {
+  const storageId = input.storageId ?? readPluginId(input.pluginDir);
+  const layout = input.layout ?? (input.source === 'installed' ? 'published' : 'repo');
+  const dirs = resolveDirs(input.userData, input.pluginDir, layout, storageId);
+  if (layout === 'published' && input.userData) {
     fs.mkdirSync(dirs.data, { recursive: true });
     fs.mkdirSync(dirs.cache, { recursive: true });
   }
@@ -159,12 +164,12 @@ export async function preparePluginRuntime(input: PrepareRuntimeInput): Promise<
   input.onProgress?.();
   const run = input.run ?? spawnCommand;
   try {
-    if (input.source !== 'installed') {
+    if (layout !== 'published') {
       return await prepareDevRuntime(input, dirs, run);
     }
     if (!input.userData) return { ok: false, message: '宿主没有用户数据目录' };
     const tools = input.tools ?? await ensureSharedRuntimes(input.userData, run);
-    const bins = await installPluginEnv(input, tools, run);
+    const bins = await installPluginEnv(input, tools, run, storageId);
     return { ok: true, dirs, bins };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -204,13 +209,13 @@ function readPluginId(pluginDir: string): string {
 function resolveDirs(
   userData: string | null,
   pluginDir: string,
-  source: PluginSource,
-  pluginId: string,
+  layout: RuntimeLayout,
+  storageId: string,
 ): PluginDirs {
-  if (source === 'installed' && userData) {
+  if (layout === 'published' && userData) {
     return {
-      data: pluginDataDir(userData, pluginId),
-      cache: path.join(pluginRuntimeDir(userData, pluginId), 'cache'),
+      data: pluginDataDir(userData, storageId),
+      cache: path.join(pluginRuntimeDir(userData, storageId), 'cache'),
     };
   }
   return {
@@ -244,11 +249,11 @@ async function installPluginEnv(
   input: PrepareRuntimeInput,
   tools: RuntimeTools,
   run: CommandRunner,
+  storageId: string,
 ): Promise<{ python?: string; node?: string }> {
   const userData = input.userData;
   if (!userData || !input.spec) return {};
-  const pluginId = readPluginId(input.pluginDir);
-  const runtimeDir = pluginRuntimeDir(userData, pluginId);
+  const runtimeDir = pluginRuntimeDir(userData, storageId);
   const envDir = path.join(runtimeDir, 'env');
   const stamp = desiredStamp(input.pluginDir, input.spec);
   const stampPath = path.join(runtimeDir, STAMP_FILE);

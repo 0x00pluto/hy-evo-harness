@@ -3,6 +3,7 @@ import { mountIcons } from './icons.js';
 const SOURCE_LABEL = {
   bundled: '内置',
   dev: '开发',
+  local: '本地',
   installed: '已安装',
 };
 const CATALOG_SOURCE = '插件中心';
@@ -80,6 +81,33 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
 
   function localPlugin(id) {
     return shell.plugins.find((plugin) => plugin.id === id) || null;
+  }
+
+  function installedPlugin(catalogId) {
+    return shell.plugins.find((plugin) =>
+      plugin.source === 'installed' && (plugin.manifestId || plugin.id) === catalogId,
+    ) || null;
+  }
+
+  function mountLabel(plugin) {
+    if (plugin.mount === 'preview') return '发布预览';
+    if (plugin.mount === 'preview-failed') return '预览失败';
+    return '源码目录';
+  }
+
+  function localMenuItems(plugin) {
+    if (plugin.source !== 'local' || plugin.localFrom === 'config') return [];
+    if (plugin.mount === 'preview' || plugin.mount === 'preview-failed') {
+      return [
+        { label: '结束预览', icon: 'x', run: () => { void endPreview(plugin.id); } },
+        { label: '移除', icon: 'trash-2', run: () => { void removeUnpacked(plugin.id); } },
+      ];
+    }
+    return [
+      { label: '重新加载', icon: 'refresh-cw', run: () => { void reloadUnpacked(plugin.id); } },
+      { label: '按发布预览', icon: 'eye', run: () => { void startPreview(plugin.id); } },
+      { label: '移除', icon: 'trash-2', run: () => { void removeUnpacked(plugin.id); } },
+    ];
   }
 
   function renderList(session) {
@@ -218,12 +246,11 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   }
 
   function closeMenu() {
-    if (menuHost) {
-      const menu = menuHost.querySelector('.plugin-menu');
-      const button = menuHost.querySelector('.plugin-more');
-      if (menu) menu.hidden = true;
-      if (button) button.setAttribute('aria-expanded', 'false');
-    }
+    if (!menuHost) return;
+    const menu = menuHost.querySelector('.plugin-menu');
+    const button = menuHost.querySelector('[aria-haspopup="menu"]');
+    if (menu) menu.hidden = true;
+    if (button) button.setAttribute('aria-expanded', 'false');
     menuHost = null;
   }
 
@@ -351,16 +378,15 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
 
     const actions = document.createElement('div');
     actions.className = 'plugin-detail-actions';
-    if (plugin.source === 'installed') {
-      actions.appendChild(moreMenu([
-        {
+    const menuItems = plugin.source === 'installed'
+      ? [{
           label: '卸载',
           icon: 'trash-2',
           danger: true,
           run: () => { void uninstallPlugin(plugin.id); },
-        },
-      ]));
-    }
+        }]
+      : localMenuItems(plugin);
+    if (menuItems.length > 0) actions.appendChild(moreMenu(menuItems));
 
     const use = document.createElement('button');
     use.type = 'button';
@@ -383,15 +409,16 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       });
       actions.appendChild(update);
     }
-    actions.appendChild(use);
+    if (!plugin.previewError) actions.appendChild(use);
     titleRow.appendChild(actions);
     head.appendChild(titleRow);
     detail.appendChild(head);
 
-    if (plugin.runtimeError || plugin.catalogError) {
+    const notice = plugin.previewError || plugin.runtimeError || plugin.catalogError;
+    if (notice) {
       const error = document.createElement('p');
       error.className = 'settings-error';
-      error.textContent = plugin.runtimeError || plugin.catalogError;
+      error.textContent = notice;
       detail.appendChild(error);
     }
 
@@ -409,6 +436,11 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     ];
     if (plugin.developer) rows.push(['开发者', plugin.developer]);
     if (plugin.category) rows.push(['分类', plugin.category]);
+    if (plugin.instanceId) {
+      rows.push(['清单 id', plugin.manifestId]);
+      rows.push(['实例 id', plugin.instanceId]);
+      rows.push(['加载方式', mountLabel(plugin)]);
+    }
     for (const [label, value] of rows) {
       table.append(...infoRow(label, value));
     }
@@ -501,7 +533,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   }
 
   function marketCard(plugin) {
-    const local = localPlugin(plugin.id);
+    const local = installedPlugin(plugin.id);
     const card = document.createElement('article');
     card.className = 'market-card';
     const installing = busy && busyId === plugin.id;
@@ -714,28 +746,116 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     });
   }
 
-  addBtn.addEventListener('click', () => {
-    void (async () => {
-      if (busy) return;
-      busy = true;
-      busyId = null;
-      addBtn.disabled = true;
-      const session = chrome.session();
-      if (session && !session.pluginsFocus) renderMarket();
-      try {
-        const result = await window.dex.pickAndInstall();
-        await finishInstall(result, 'install');
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : '安装失败', 'error');
-      } finally {
-        busy = false;
-        busyId = null;
-        addBtn.disabled = false;
-        const session = chrome.session();
-        if (session && session.surface === 'plugins') sync(session);
-        await refreshCatalog();
+  async function reloadUnpacked(pluginId) {
+    await runLocal(pluginId, (id) => window.dex.reloadUnpacked(id), '已重新加载');
+  }
+
+  async function startPreview(pluginId) {
+    await runLocal(pluginId, (id) => window.dex.startPreview(id), '已按发布预览');
+  }
+
+  async function endPreview(pluginId) {
+    await runLocal(pluginId, (id) => window.dex.endPreview(id), '已回到源码目录');
+  }
+
+  async function removeUnpacked(pluginId) {
+    const plugin = localPlugin(pluginId);
+    const name = plugin ? plugin.displayName : pluginId;
+    const result = await window.dex.removeUnpacked(pluginId);
+    if (!result.ok) {
+      showToast(result.message || '移除失败', 'error');
+      if (result.plugins) await plugins.refresh(result.plugins);
+      return;
+    }
+    if (shell.activeId === pluginId) shell.activeId = null;
+    await plugins.refresh(result.plugins);
+    showToast(`「${name}」已移除`, 'ok');
+    chrome.enterPlugins();
+  }
+
+  async function runLocal(pluginId, invoke, okText) {
+    try {
+      const result = await invoke(pluginId);
+      if (result.plugins) await plugins.refresh(result.plugins);
+      if (!result.ok) {
+        showToast(result.message || '操作失败', 'error');
+        return;
       }
-    })();
+      showToast(okText, 'ok');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '操作失败', 'error');
+    }
+  }
+
+  async function pickZip() {
+    if (busy) return;
+    busy = true;
+    busyId = null;
+    addBtn.disabled = true;
+    const current = chrome.session();
+    if (current && !current.pluginsFocus) renderMarket();
+    try {
+      const result = await window.dex.pickAndInstall();
+      await finishInstall(result, 'install');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '安装失败', 'error');
+    } finally {
+      busy = false;
+      busyId = null;
+      addBtn.disabled = false;
+      const current = chrome.session();
+      if (current && current.surface === 'plugins') sync(current);
+      await refreshCatalog();
+    }
+  }
+
+  async function loadUnpacked() {
+    if (busy) return;
+    busy = true;
+    addBtn.disabled = true;
+    try {
+      const result = await window.dex.loadUnpackedDirectory();
+      if (!result || result.cancelled) return;
+      if (result.plugins) await plugins.refresh(result.plugins);
+      if (!result.ok) {
+        showToast(result.message || '加载失败', 'error');
+        if (result.focusedId) chrome.focusPlugin(result.focusedId);
+        return;
+      }
+      if (result.focusedId) chrome.focusPlugin(result.focusedId);
+      if (!result.already) showToast('已加载本地目录', 'ok');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '加载失败', 'error');
+    } finally {
+      busy = false;
+      addBtn.disabled = false;
+      const current = chrome.session();
+      if (current && current.surface === 'plugins') sync(current);
+    }
+  }
+
+  const addWrap = document.createElement('div');
+  addWrap.className = 'plugin-more-wrap';
+  addBtn.parentNode.insertBefore(addWrap, addBtn);
+  addWrap.appendChild(addBtn);
+  addBtn.setAttribute('aria-haspopup', 'menu');
+  addBtn.setAttribute('aria-expanded', 'false');
+  const addMenu = document.createElement('div');
+  addMenu.className = 'plugin-menu';
+  addMenu.setAttribute('role', 'menu');
+  addMenu.hidden = true;
+  addMenu.append(
+    menuItem({ label: '添加压缩包', icon: 'file-archive', run: () => { void pickZip(); } }),
+    menuItem({ label: '加载本地目录', icon: 'folder-open', run: () => { void loadUnpacked(); } }),
+  );
+  addWrap.appendChild(addMenu);
+  addBtn.addEventListener('click', () => {
+    const wasOpen = menuHost === addWrap && !addMenu.hidden;
+    closeMenu();
+    if (wasOpen || busy) return;
+    placeMenu(addBtn, addMenu);
+    addBtn.setAttribute('aria-expanded', 'true');
+    menuHost = addWrap;
   });
 
   toastClose.addEventListener('click', () => {

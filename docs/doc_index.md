@@ -10,10 +10,10 @@
 - `docs/plugin-development/README.md`: 可单独转发的插件开发目录：交什么、两种插件，以及清单、设置、数据、运行、打包、发布、插件中心、配色的入口
 - `docs/plugin-development/manifest.md`: plugin.manifest.json 字段与图标尺寸、画布、格式
 - `docs/plugin-development/settings.md`: configSchema、分组、密钥输入与眼睛、settingsEntry、pluginEnv
-- `docs/plugin-development/data.md`: 开发时缓存和导出写在插件仓库；装进 installed_plugins 之后，ctx.dirs.cache 在 plugin-runtime，ctx.dirs.data 在 plugin-data，卸载只删运行环境和缓存
+- `docs/plugin-development/data.md`: 插件页加载的本地实例数据仍在仓库，设置和 plugin-data 用实例 id，与清单 id 隔离；装进 installed_plugins 之后 ctx.dirs 分开，卸载只删运行环境和缓存
 - `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node，页面仍用 dex.call；子进程 PATH 含用户 shell 里已安装的命令
 - `docs/plugin-development/pack.md`: 插件中心打包：宿主默认丢掉密钥和虚拟环境；dex-buddy-plugin.pack 指定要装的路径，dex-buddy-plugin.ignore 再挖掉
-- `docs/plugin-development/ship.md`: 开发挂载、zip 拖进工作台安装，以及会加载失败的情况
+- `docs/plugin-development/ship.md`: 插件页加载本地目录、zip 拖进工作台安装，以及会加载失败的情况
 - `docs/plugin-development/distribute.md`: 插件作者发到插件中心：仓库进授权名单后只推 tag；zip 按 pack.md 从 tag 里取；runtime 在清单里声明，不再用 dex-buddy-plugin-pack.json 打三端二进制
 - `docs/plugin-development/color.md`: 插件页面配色建议：中性色可粘贴，也可自选颜色；壳不检查
 - `AGENTS.md`: 本仓工作约定、目录语义与能力声明；代码检索先走 Codebase MCP；scaffold_version 2.4.0

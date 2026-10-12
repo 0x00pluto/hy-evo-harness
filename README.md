@@ -101,16 +101,19 @@ const result = await window.dex.call('aiComicService', 'renderVideo', [
 
 ## 开发时挂上现有项目
 
-不要把源码复制进 `plugins/`。任选一种方式：
+不要把源码复制进 `plugins/`。已经装好的 Dex Buddy 里，打开插件页，点右上角加号，选「加载本地目录」。可以选插件根（里面直接有 `plugin.manifest.json`），也可以选里面每个子目录是一个插件的文件夹。路径记在用户数据目录的 `unpacked-plugins.json`，重启还在。压缩包从插件页加号的「添加压缩包」安装。
 
-1. 复制 `config.dev.example.json` 为 `config.dev.json`，把项目绝对路径写进 `extraPluginPaths`。这个文件已忽略，只在未打包时读取。路径可以是「里面放了多个插件的目录」，也可以是「自身就有 manifest 的项目根」。把 `forceUpdateIcon` 设为 `true` 时，开发版会显示下载图标并打开和线上一样的确认框，方便看界面；确认不会下载或安装。打包后这个开关无效。
-2. 做软链接：
+本地目录使用按路径算出的实例 id（`dev-` 加 32 位十六进制），不是清单里的 `id`。设置、`app-plugin://` 和这份实例自己的数据都挂在实例 id 上。同一个清单 id 的已安装插件可以同时留在列表里，两边的密钥和 `plugin-data` 互不影响。移除本地实例不删源码，也不动已安装的那一份。
+
+改完代码后，在该插件详情的「…」里选「重新加载」，不用退出 Dex Buddy。上线前可以选「按发布预览」：文件集和依赖安装与插件中心相同，仍然用这份实例的设置。结束预览后回到源码目录。
+
+维护者用未打包的 `pnpm start` 时，还可以把绝对路径写进已忽略的 `config.dev.json` → `extraPluginPaths`。这些路径同样用实例 id，界面里不能移除；要停用就改 JSON 后重启。打包后的 Dex Buddy 不读这个文件。`forceUpdateIcon` 设为 `true` 时，开发版会显示下载图标并打开和线上一样的确认框；确认不会下载或安装。打包后这个开关无效。
+
+软链接仍然可以放进 `plugins/`，但那是内置目录，继续用清单 id，和已安装插件共用设置。要隔离就改用插件页加载。
 
 ```bash
 ln -s "/绝对路径/你的项目" "/绝对路径/0001-HyHarness/plugins/你的项目"
 ```
-
-改完插件代码后重启 Dex Buddy。同名 `id` 先加载的保留，后扫描到的跳过。顺序是：`plugins/`、`config.dev.json`、用户安装目录。
 
 ## 打包给别人安装
 
@@ -121,7 +124,7 @@ cd plugins
 zip -r ../ai-comic-master-v1.0.0.zip ai-comic-master -x '*.DS_Store' -x '*node_modules*'
 ```
 
-在工作台把 zip 拖进欢迎页，或从图标轨的拼图进入插件页再添加、拖入。宿主解压到用户数据目录的 `installed_plugins/<id>/`，校验 manifest 后出现在插件列表里。欢迎页拖放成功后仍停在欢迎页。只有这样安装的插件可以卸载。内置插件和开发路径里的插件不能被安装包覆盖。
+从图标轨的拼图进入插件页，加号里选「添加压缩包」。宿主解压到用户数据目录的 `installed_plugins/<id>/`，校验 manifest 后出现在插件列表里。欢迎页不接受拖放，压缩包只从插件页加号进入。只有这样安装的插件可以卸载。内置插件不能被安装包覆盖。本地目录是另一条实例，不挡住同一个清单 id 的安装。
 
 ## 桌面安装包与自动更新
 

@@ -71,6 +71,16 @@ export function listPackPaths(root: string): string[] {
   return files;
 }
 
+/** 与插件中心打包同一套过滤。pack 行无效或结果缺清单、入口、依赖清单时抛出。 */
+export function filesForPack(root: string): string[] {
+  const files = listPackPaths(root);
+  if (!files.includes('plugin.manifest.json')) {
+    throw new Error('打包结果里没有 plugin.manifest.json');
+  }
+  assertDeclaredFilesPacked(readManifestFile(root), files);
+  return files;
+}
+
 export async function packPluginRelease(options: {
   sourceDir: string;
   tag: string;

@@ -10,6 +10,16 @@ import {
 import { mountIcons } from './icons.js';
 
 const GENERAL_GROUP = '通用配置';
+const SETTINGS_SOURCE = {
+  bundled: '内置',
+  dev: '开发',
+  local: '本地',
+  installed: '已安装',
+};
+
+function settingsSourceLabel(source) {
+  return SETTINGS_SOURCE[source] || '内置';
+}
 
 export function mountSettings({ shell, setStatus, plugins, updater = {} }) {
   const settingsSearch = document.getElementById('settings-search');
@@ -206,11 +216,19 @@ export function mountSettings({ shell, setStatus, plugins, updater = {} }) {
     button.setAttribute('aria-current', plugin.id === activeSettingsId ? 'true' : 'false');
     const copy = document.createElement('span');
     copy.className = 'plugin-row-copy';
-    copy.appendChild(pluginMark(plugin));
     const title = document.createElement('span');
     title.className = 'nav-title';
     title.textContent = plugin.displayName;
-    copy.appendChild(title);
+    const text = document.createElement('span');
+    text.className = 'nav-text';
+    text.appendChild(title);
+    if (plugin.source) {
+      const meta = document.createElement('span');
+      meta.className = 'nav-meta';
+      meta.textContent = settingsSourceLabel(plugin.source);
+      text.appendChild(meta);
+    }
+    copy.append(pluginMark(plugin), text);
     button.appendChild(copy);
     button.addEventListener('click', () => {
       void selectSettings(plugin.id);

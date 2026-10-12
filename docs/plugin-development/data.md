@@ -8,7 +8,7 @@ Dex Buddy 在 `ctx.dirs` 上给出两个目录。密钥和选项仍然走设置�
 
 ## 开发时
 
-软链接或 `config.dev.json` 挂进来时，`ctx.dirs.data` 就是插件仓库，`ctx.dirs.cache` 是仓库里的 `cache/`。继续写仓库里的目录：
+从插件页加载本地目录，或在未打包时用 `config.dev.json` 挂进来，`ctx.dirs.data` 就是插件仓库，`ctx.dirs.cache` 是仓库里的 `cache/`。继续写仓库里的目录：
 
 ```text
 my-tool/
@@ -18,6 +18,10 @@ my-tool/
 ```
 
 仓库里已有 `.venv` 或 `node_modules` 时，Dex Buddy 直接用它们，不另建 `plugin-runtime`。开发环境要作者自己建、自己装。宿主不创建虚拟环境，也不按 `requirements.txt` 安装。改了依赖文件也不会更新这份 `.venv`。声明了 Python 但没有 `.venv` 时，插件不执行 `apply`，插件页显示「开发目录里没有 .venv」。可以重试，重试不会替你建 `.venv`。声明了 Node 但没有 `node_modules` 时同样，错误是「开发目录里没有 node_modules」，作者自己在仓库里 `npm ci`。
+
+本地实例的设置写在 `plugin-settings.json` 的实例 id 下，不写进清单 id。因此测试用的密钥不会覆盖已经安装的正式插件。移除本地实例只删实例 id 这一段，以及 `plugin-data/<实例 id>/`、`plugin-runtime/<实例 id>/`。清单 id 那一段和 `plugin-data/<清单 id>/` 不动，源码目录也不删。
+
+「按发布预览」会把与插件中心相同的文件复制到用户数据里该实例自己的目录，依赖装进 `plugin-runtime/<实例 id>/`，数据目录改到 `plugin-data/<实例 id>/`。预览仍然读这份实例已有的设置，不读不写清单 id。结束预览后回到仓库目录，设置还在。
 
 ## 安装之后
 

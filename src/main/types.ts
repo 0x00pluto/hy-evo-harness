@@ -1,6 +1,12 @@
 export type PluginKind = 'ui' | 'headless';
 
-export type PluginSource = 'bundled' | 'dev' | 'installed';
+export type PluginSource = 'bundled' | 'dev' | 'installed' | 'local';
+
+export type LocalFrom = 'page' | 'config';
+
+export type LocalMountMode = 'source' | 'preview' | 'preview-failed';
+
+export type RuntimeLayout = 'repo' | 'published';
 
 export interface Logger {
   info: (msg: string) => void;
@@ -95,6 +101,15 @@ export interface AppPlugin {
   manifest: PluginManifest;
   absPath: string;
   source: PluginSource;
+  /**
+   * 注册表、设置、协议主机名和数据目录。
+   * 缺省等于清单 id。本地目录传入实例 id。
+   */
+  registryId?: string;
+  /** 作者仓库。预览时 absPath 指向副本，这里仍是源码目录。 */
+  sourcePath?: string;
+  localFrom?: LocalFrom;
+  mount?: LocalMountMode;
   apply: (ctx: AppContext) => void | Promise<void>;
   dispose?: () => void | Promise<void>;
   dirs?: PluginDirs;
@@ -102,14 +117,34 @@ export interface AppPlugin {
   runtimeBins?: { python?: string; node?: string };
 }
 
+export interface LocalRecord {
+  instanceId: string;
+  manifestId: string;
+  sourcePath: string;
+  registeredPath: string;
+  from: LocalFrom;
+  mount: LocalMountMode;
+  previewError?: string;
+}
+
 export interface PluginSummary {
   id: string;
+  /** 清单 id。已安装和内置插件与 id 相同；本地实例是另一把钥匙。 */
+  manifestId: string;
+  /** 仅本地实例。形式是 dev- 加 32 位十六进制。 */
+  instanceId?: string;
+  localFrom?: LocalFrom;
+  mount?: LocalMountMode;
+  /** 发布预览没准备好。插件未执行 apply。 */
+  previewError?: string;
   displayName: string;
   version: string;
   type: PluginKind;
   uiUrl: string | null;
   source: PluginSource;
-  /** 插件目录的绝对路径，用于首页悬停卡片和详情里的目录提示。 */
+  /** 仅已安装插件。市场或压缩包。没有记录时界面按压缩包显示。 */
+  originChannel?: 'market' | 'file';
+  /** 插件目录的绝对路径，用于首页悬停卡片和详情里的目录提示。本地实例是源码目录。 */
   rootPath: string;
   /** 有 configSchema 或 settingsEntry 时，首页悬停卡片可以进入它的设置。 */
   hasSettings: boolean;
@@ -132,4 +167,6 @@ export interface DexResult {
   plugins: PluginSummary[];
   /** 本次安装成功的插件 id。覆盖安装同一个 id 时界面靠它打开详情。 */
   installedId?: string;
+  /** 本地目录加载后要定位的实例 id。 */
+  focusedId?: string;
 }

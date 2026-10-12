@@ -6,6 +6,7 @@ export function mountPlugins({
   settings,
   onClearNavigation = () => {},
   onOpenPluginSettings = () => {},
+  onOpenMarket = () => {},
   onWorkspaceChanged = () => {},
   onListChanged = () => {},
 }) {
@@ -13,7 +14,7 @@ export function mountPlugins({
   const welcome = document.getElementById('welcome-screen');
   const headless = document.getElementById('headless-screen');
   const viewportHost = document.getElementById('viewport-host');
-  const dropZone = document.getElementById('drop-zone');
+  const openMarket = document.getElementById('open-market');
   const headlessTitle = document.getElementById('headless-title');
   const pluginPane = document.getElementById('plugin-pane');
   let hoverCard = null;
@@ -88,11 +89,14 @@ export function mountPlugins({
     const pathLine = document.createElement('button');
     pathLine.type = 'button';
     pathLine.className = 'nav-hover-row nav-hover-muted nav-hover-path';
+    const sourceLabel = document.createElement('span');
+    sourceLabel.className = 'nav-hover-source';
+    sourceLabel.textContent = hoverSourceLabel(plugin);
     const pathLabel = document.createElement('span');
     pathLabel.textContent = pathText;
     const jump = hoverIcon('arrow-up-right');
     jump.classList.add('nav-hover-jump');
-    pathLine.append(hoverIcon('folder'), pathLabel, jump);
+    pathLine.append(hoverIcon('folder'), sourceLabel, pathLabel, jump);
     pathLine.title = plugin.rootPath || '';
     pathLine.addEventListener('click', (event) => {
       event.preventDefault();
@@ -127,6 +131,14 @@ export function mountPlugins({
     mountIcons(card);
     hoverCard = card;
     placeHoverCard(anchor);
+  }
+
+  function hoverSourceLabel(plugin) {
+    if (plugin.source === 'bundled') return '来自内置';
+    if (plugin.source === 'local' || plugin.source === 'dev') return '开发版';
+    if (plugin.originChannel === 'market') return '来自市场';
+    if (plugin.source === 'installed') return '来自压缩包';
+    return '';
   }
 
   function navGlyph() {
@@ -275,13 +287,6 @@ export function mountPlugins({
     }
   }
 
-  async function installZip(zipPath) {
-    if (!zipPath || !zipPath.toLowerCase().endsWith('.zip')) {
-      return { ok: false, message: '请拖入 .zip 插件包' };
-    }
-    return window.dex.installZip(zipPath);
-  }
-
   function suspend() {
     pluginPane.hidden = true;
     welcome.hidden = true;
@@ -299,37 +304,7 @@ export function mountPlugins({
 
   window.addEventListener('dragover', (event) => event.preventDefault());
   window.addEventListener('drop', (event) => event.preventDefault());
+  openMarket.addEventListener('click', () => onOpenMarket());
 
-  dropZone.addEventListener('dragover', (event) => {
-    event.preventDefault();
-    dropZone.classList.add('dragover');
-  });
-  dropZone.addEventListener('dragleave', () => {
-    dropZone.classList.remove('dragover');
-  });
-  dropZone.addEventListener('drop', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    dropZone.classList.remove('dragover');
-    const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
-    if (!file) return;
-    onClearNavigation();
-    const zipPath = window.dex.pathForFile(file);
-    void (async () => {
-      if (!zipPath || !zipPath.toLowerCase().endsWith('.zip')) {
-        setStatus('请拖入 .zip 插件包', 'error');
-        return;
-      }
-      setStatus('正在安装…');
-      const result = await installZip(zipPath);
-      if (!result.ok) {
-        setStatus(result.message || '安装失败', 'error');
-        return;
-      }
-      setStatus('插件已安装', 'ok');
-      await refresh(result.plugins);
-    })();
-  });
-
-  return { refresh, suspend, resume, openPlugin, installZip, showWelcome };
+  return { refresh, suspend, resume, openPlugin, showWelcome };
 }

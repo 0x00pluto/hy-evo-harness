@@ -10,3 +10,4 @@
 - `specs/prds/prd-00004-plugin-market.md`：00004，左栏增加插件市场，右栏改为分类卡片货架，压缩包收进加号，目录补上图标和分类。界面参考图在 `specs/prds/images/prd-00004-plugin-market/`（`01` 货架，`02` 安装中与 toast，`03` 卡片菜单，`04` 路径提示）。工程 backlog
 - `specs/prds/prd-00005-system-settings.md`：00005，设置页左栏在插件列表之上增加「个人设置 / 通用设置」，右侧只读展示产品名、版本和本机用户，并可检查更新、打开用户数据目录与已安装插件目录。工程 backlog
 - `specs/prds/prd-00006-mac-dmg-quit-after-open.md`：00006，macOS 在 dmg 安装盘成功打开后立即退出进程，便于拖入「应用程序」覆盖；有进行中任务则不下载、不退出。工程 accepted
+- `specs/prds/prd-00007-load-unpacked-plugin.md`：00007，已安装的 Dex Buddy 可从插件页加载本地插件目录；本地实例按目录路径生成独立 id，配置与数据与线上插件隔离；另可按插件中心规则做发布预览。工程 partial

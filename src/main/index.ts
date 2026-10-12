@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { readExtraPluginPaths, readForceUpdateIcon } from './dev-config.ts';
 import { INSTALLED_PLUGINS_DIR_NAME, resolveHostDataPath } from './host-data.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
+import { LocalSession } from './local-session.ts';
 import { isHttpUrl } from './manifest.ts';
 import { pluginInstallPath } from './plugin-catalog.ts';
 import { downloadVerifiedZip, fetchPluginCatalog, findRelease, installCatalogRelease } from './plugin-market.ts';
@@ -20,6 +21,12 @@ import { initUpdater } from './updater.ts';
 registerPluginScheme();
 
 const registry = new ServiceRegistry();
+let localSession: LocalSession | null = null;
+
+function session(): LocalSession {
+  if (!localSession) throw new Error('本地目录还没准备好');
+  return localSession;
+}
 
 function bundledPluginsDir(): string {
   return path.join(app.getAppPath(), 'plugins');
@@ -72,12 +79,12 @@ function pluginPreloadFile(): string {
 
 async function loadAllPlugins(): Promise<void> {
   await registry.scanAndLoadPlugins(bundledPluginsDir(), 'bundled');
+  const mounts = session();
   if (!app.isPackaged) {
     const configPath = devConfigPath();
-    for (const extra of readExtraPluginPaths(configPath, registry.logger)) {
-      await registry.scanAndLoadPlugins(extra, 'dev');
-    }
+    await mounts.loadPaths(readExtraPluginPaths(configPath, registry.logger), 'config');
   }
+  await mounts.loadRegistered();
   await registry.scanAndLoadPlugins(installedPluginsDir(), 'installed');
 }
 
@@ -237,9 +244,15 @@ function registerIpc(): void {
     };
   });
 
-  ipcMain.handle('dex:call-service', async (_event, payload: unknown) => {
+  ipcMain.handle('dex:call-service', async (event, payload: unknown) => {
     const call = readCallPayload(payload);
-    return registry.callService(call.serviceName, call.method, call.args);
+    let callerId: string | undefined;
+    try {
+      callerId = pluginIdFromSender(event);
+    } catch {
+      callerId = undefined;
+    }
+    return registry.callService(call.serviceName, call.method, call.args, callerId);
   });
 
   ipcMain.handle('dex:install-zip', async (_event, zipFilePath: unknown) => {
@@ -438,12 +451,88 @@ function registerIpc(): void {
       };
     }
   });
+
+  ipcMain.handle('dex:load-unpacked-directory', async () => {
+    const result = await dialog.showOpenDialog({
+      title: '加载本地目录',
+      properties: ['openDirectory'],
+    });
+    const picked = result.filePaths[0];
+    if (result.canceled || !picked) {
+      return { ok: false, cancelled: true, plugins: registry.getPluginList() };
+    }
+    return session().addDirectory(picked);
+  });
+
+  ipcMain.handle('dex:reload-unpacked', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
+    }
+    try {
+      const plugins = await session().reload(id);
+      return { ok: true, plugins };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        plugins: registry.getPluginList(),
+      };
+    }
+  });
+
+  ipcMain.handle('dex:start-preview', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
+    }
+    try {
+      return await session().startPreview(id);
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        plugins: registry.getPluginList(),
+      };
+    }
+  });
+
+  ipcMain.handle('dex:end-preview', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
+    }
+    try {
+      const plugins = await session().endPreview(id);
+      return { ok: true, plugins };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        plugins: registry.getPluginList(),
+      };
+    }
+  });
+
+  ipcMain.handle('dex:remove-unpacked', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
+    }
+    try {
+      const plugins = await session().remove(id);
+      return { ok: true, plugins };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        plugins: registry.getPluginList(),
+      };
+    }
+  });
 }
 
 app.whenReady().then(async () => {
   // 从 Dock 打开时 PATH 里没有登录 shell 配好的 Homebrew 等命令。先补上，再让插件子进程继承。
   await applyUserSearchPath(process.env);
   registry.setSettings(new PluginSettingsStore(pluginSettingsFile(), registry.logger));
+  registry.setOriginLookup((id) => readOrigins(pluginOriginsFile())[id]?.channel);
   registry.setRuntimeHost({
     userData: app.getPath('userData'),
     onProgress: (event) => {
@@ -451,6 +540,11 @@ app.whenReady().then(async () => {
         win.webContents.send('dex:runtime-progress', event);
       }
     },
+  });
+  localSession = new LocalSession({
+    registry,
+    userData: app.getPath('userData'),
+    unpackedFile: path.join(app.getPath('userData'), 'unpacked-plugins.json'),
   });
   const icon = loadAppIcon();
   applyDockIcon(icon);

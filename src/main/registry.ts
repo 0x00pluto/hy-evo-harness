@@ -12,7 +12,7 @@ import {
 } from './plugin-runtime.ts';
 import { PluginSettingsStore, isSettingsCandidate, type SettingsPluginView, type SettingsSaveResult } from './plugin-settings.ts';
 import { resolvePluginFile } from './protocol.ts';
-import type { AppContext, AppPlugin, Logger, PluginManifest, PluginSource, PluginSummary } from './types.ts';
+import type { AppContext, AppPlugin, LocalMountMode, LocalRecord, Logger, PluginManifest, PluginSource, PluginSummary, RuntimeLayout } from './types.ts';
 
 interface CommonJsModule {
   filename: string;
@@ -33,6 +33,8 @@ type Listener = (...args: unknown[]) => void;
 interface Owned {
   services: string[];
   listeners: Array<{ event: string; handler: Listener }>;
+  /** 本地实例的服务不进全局表。 */
+  instanceId?: string;
 }
 
 interface PluginModule {
@@ -53,10 +55,16 @@ const defaultLogger: Logger = {
 };
 
 interface RuntimeProblem {
+  registryId: string;
   manifest: PluginManifest;
   absPath: string;
+  sourcePath?: string;
   source: PluginSource;
   message: string;
+  localFrom?: LocalRecord['from'];
+  mount?: LocalMountMode;
+  /** 发布预览失败。列表用 previewError，而不是运行环境错误。 */
+  preview?: boolean;
 }
 
 export interface RuntimeHost {
@@ -68,8 +76,11 @@ export interface RuntimeHost {
 
 export class ServiceRegistry {
   private readonly services = new Map<string, unknown>();
+  private readonly instanceServices = new Map<string, Map<string, unknown>>();
+  private readonly hostServiceNames = new Set<string>();
   private readonly plugins = new Map<string, AppPlugin>();
   private readonly problems = new Map<string, RuntimeProblem>();
+  private readonly locals = new Map<string, LocalRecord>();
   private readonly ownership = new Map<string, Owned>();
   private readonly bus = new EventEmitter();
   private settings: PluginSettingsStore;
@@ -77,6 +88,7 @@ export class ServiceRegistry {
   private commandRun: CommandRunner | undefined;
   private runtimeTools: RuntimeTools | undefined;
   private onRuntimeProgress: RuntimeHost['onProgress'];
+  private originChannel: (id: string) => 'market' | 'file' | undefined = () => undefined;
   readonly logger: Logger;
 
   constructor(logger: Logger = defaultLogger, settings?: PluginSettingsStore) {
@@ -87,6 +99,11 @@ export class ServiceRegistry {
 
   setSettings(settings: PluginSettingsStore): void {
     this.settings = settings;
+  }
+
+  /** 已安装插件的市场或压缩包记录。列表返回时按清单 id 查。 */
+  setOriginLookup(lookup: (id: string) => 'market' | 'file' | undefined): void {
+    this.originChannel = lookup;
   }
 
   setRuntimeHost(host: RuntimeHost): void {
@@ -106,9 +123,145 @@ export class ServiceRegistry {
   async retryRuntime(id: string): Promise<string | null> {
     const problem = this.problems.get(id);
     if (!problem) return '插件没有待重试的运行环境';
+    if (problem.source === 'local') {
+      const record = this.locals.get(id);
+      if (!record || record.mount !== 'source') return '插件没有待重试的运行环境';
+      this.problems.delete(id);
+      return this.mountLocal({
+        record,
+        pluginDir: record.sourcePath,
+        layout: 'repo',
+      });
+    }
     this.problems.delete(id);
     await this.loadPluginFromDirectory(problem.absPath, problem.source);
     return this.problems.get(id)?.message ?? null;
+  }
+
+  listLocals(): LocalRecord[] {
+    return Array.from(this.locals.values());
+  }
+
+  getLocal(id: string): LocalRecord | undefined {
+    return this.locals.get(id);
+  }
+
+  manifestIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const plugin of this.plugins.values()) ids.add(plugin.manifest.id);
+    for (const problem of this.problems.values()) ids.add(problem.manifest.id);
+    return ids;
+  }
+
+  hasRegistryId(id: string): boolean {
+    return this.plugins.has(id) || this.problems.has(id);
+  }
+
+  clearLocal(id: string): void {
+    this.locals.delete(id);
+    this.problems.delete(id);
+    this.instanceServices.delete(id);
+  }
+
+  noteRegisteredPath(instanceId: string, registeredPath: string): void {
+    const local = this.locals.get(instanceId);
+    if (!local) return;
+    local.registeredPath = registeredPath;
+  }
+
+  /** 预览文件集没准备好。不执行 apply，列表仍留着这一条。 */
+  failPreview(record: LocalRecord, message: string): void {
+    this.problems.delete(record.instanceId);
+    this.failLocal({ ...record, mount: 'preview' }, message, record.sourcePath);
+  }
+
+  /**
+   * 按实例 id 挂上本地目录。失败时不执行 apply，返回原因。
+   * 成功返回 null。
+   */
+  async mountLocal(input: {
+    record: LocalRecord;
+    pluginDir: string;
+    layout: RuntimeLayout;
+  }): Promise<string | null> {
+    const id = input.record.instanceId;
+    if (this.plugins.has(id)) {
+      return `插件 ${id} 已加载`;
+    }
+    for (const plugin of this.plugins.values()) {
+      if (plugin.manifest.id === id) {
+        const message = `实例 id 与已加载插件 ${plugin.manifest.id} 相同，已拒绝`;
+        this.failLocal(input.record, message, input.pluginDir);
+        return message;
+      }
+    }
+    this.locals.set(id, { ...input.record, previewError: undefined });
+    this.problems.delete(id);
+
+    let manifest: PluginManifest;
+    try {
+      manifest = readManifestFile(input.pluginDir);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.failLocal(input.record, message, input.pluginDir);
+      return message;
+    }
+
+    const prepared = await preparePluginRuntime({
+      userData: this.userData,
+      pluginDir: input.pluginDir,
+      source: 'local',
+      spec: manifest.runtime,
+      storageId: id,
+      layout: input.layout,
+      run: this.commandRun,
+      tools: this.runtimeTools,
+      onProgress: manifest.runtime
+        ? () => this.onRuntimeProgress?.({ id, phase: 'preparing' })
+        : undefined,
+    });
+    if (!prepared.ok) {
+      this.failLocal(input.record, prepared.message, input.pluginDir, manifest);
+      return prepared.message;
+    }
+
+    let pluginModule: { apply: AppPlugin['apply']; dispose?: AppPlugin['dispose'] };
+    try {
+      pluginModule = this.loadModule(input.pluginDir, manifest.main);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.failLocal(input.record, message, input.pluginDir, manifest);
+      return message;
+    }
+
+    const mount = input.record.mount === 'preview' ? 'preview' : 'source';
+    const plugin: AppPlugin = {
+      manifest,
+      absPath: path.resolve(input.pluginDir),
+      sourcePath: input.record.sourcePath,
+      source: 'local',
+      registryId: id,
+      localFrom: input.record.from,
+      mount,
+      apply: pluginModule.apply,
+      dispose: pluginModule.dispose,
+      dirs: prepared.dirs,
+      runtimeBins: prepared.bins,
+    };
+    try {
+      await this.loadPlugin(plugin);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.failLocal(input.record, message, input.pluginDir, manifest);
+      return message;
+    }
+    this.locals.set(id, {
+      ...input.record,
+      manifestId: manifest.id,
+      mount,
+      previewError: undefined,
+    });
+    return null;
   }
 
   registerService<T = unknown>(name: string, service: T): void {
@@ -144,13 +297,13 @@ export class ServiceRegistry {
   savePluginSettings(id: string, draft: unknown): SettingsSaveResult {
     const plugin = this.plugins.get(id);
     if (!plugin) return { ok: false, message: '插件不存在' };
-    return this.settings.save(plugin.manifest, draft);
+    return this.settings.save(plugin.manifest, draft, registryIdOf(plugin));
   }
 
   revealPluginSecret(id: string, key: string): { ok: true; value: string } | { ok: false } {
     const plugin = this.plugins.get(id);
     if (!plugin) return { ok: false };
-    return this.settings.reveal(plugin.manifest, key);
+    return this.settings.reveal(plugin.manifest, key, registryIdOf(plugin));
   }
 
   deletePluginSettings(id: string): void {
@@ -160,24 +313,34 @@ export class ServiceRegistry {
   getPluginList(): PluginSummary[] {
     const loaded = Array.from(this.plugins.values()).map((plugin) => summarizePlugin(plugin));
     const failed = Array.from(this.problems.values())
-      .filter((problem) => !this.plugins.has(problem.manifest.id))
+      .filter((problem) => !this.plugins.has(problem.registryId))
       .map((problem) => summarizeProblem(problem));
-    return loaded.concat(failed);
+    return loaded.concat(failed).map((plugin) => this.withOrigin(plugin));
   }
 
-  async callService(serviceName: string, method: string, args: unknown[]): Promise<unknown> {
+  private withOrigin(plugin: PluginSummary): PluginSummary {
+    if (plugin.source !== 'installed') return plugin;
+    const channel = this.originChannel(plugin.manifestId);
+    if (channel !== 'market' && channel !== 'file') return plugin;
+    return { ...plugin, originChannel: channel };
+  }
+
+  async callService(serviceName: string, method: string, args: unknown[], callerId?: string): Promise<unknown> {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(method)) {
       throw new Error(`不允许调用方法: ${method}`);
     }
-    const service = this.getService<Record<string, unknown>>(serviceName);
+    const caller = callerId ? this.plugins.get(callerId) : undefined;
+    const instanceId = caller?.source === 'local' ? registryIdOf(caller) : undefined;
+    const service = this.lookupService(serviceName, instanceId);
     if (!service || typeof service !== 'object') {
       throw new Error(`服务或方法不存在: ${serviceName}.${method}`);
     }
-    const fn = service[method];
-    if (!Object.prototype.hasOwnProperty.call(service, method) || typeof fn !== 'function') {
+    const record = service as Record<string, unknown>;
+    const fn = record[method];
+    if (!Object.prototype.hasOwnProperty.call(record, method) || typeof fn !== 'function') {
       throw new Error(`服务或方法不存在: ${serviceName}.${method}`);
     }
-    return await (fn as (...params: unknown[]) => unknown).apply(service, args);
+    return await (fn as (...params: unknown[]) => unknown).apply(record, args);
   }
 
   /**
@@ -228,6 +391,7 @@ export class ServiceRegistry {
     });
     if (!prepared.ok) {
       this.problems.set(manifest.id, {
+        registryId: manifest.id,
         manifest,
         absPath: path.resolve(pluginDir),
         source,
@@ -250,7 +414,7 @@ export class ServiceRegistry {
   }
 
   async loadPlugin(plugin: AppPlugin): Promise<void> {
-    const id = plugin.manifest.id;
+    const id = registryIdOf(plugin);
     if (this.plugins.has(id)) {
       throw new DuplicatePluginError(id);
     }
@@ -318,31 +482,62 @@ export class ServiceRegistry {
   }
 
   private createContext(owned: Owned, plugin: AppPlugin): AppContext {
+    const id = registryIdOf(plugin);
+    const local = plugin.source === 'local';
     return {
       logger: this.logger,
       registerService: (name, service) => {
-        this.registerOwnedService(owned, name, service);
+        this.registerOwnedService(owned, name, service, local ? id : null);
       },
-      getService: (name) => this.getService(name),
+      getService: <T = unknown>(name: string) => this.lookupService(name, local ? id : undefined) as T | undefined,
       emit: (event, ...args) => {
         this.emit(event, ...args);
       },
       on: (event, handler) => {
         this.trackListener(owned, event, handler);
       },
-      getPluginConfig: () => this.settings.getPluginConfig(plugin.manifest),
-      pluginEnv: () => this.settings.pluginEnv(plugin.manifest, process.env),
+      getPluginConfig: () => this.settings.getPluginConfig(plugin.manifest, id),
+      pluginEnv: () => this.settings.pluginEnv(plugin.manifest, process.env, id),
       dirs: plugin.dirs ?? {
         data: plugin.absPath,
         cache: path.join(plugin.absPath, 'cache'),
       },
-      ...runtimeBinding(plugin, () => this.settings.pluginEnv(plugin.manifest, process.env)),
+      ...runtimeBinding(plugin, () => this.settings.pluginEnv(plugin.manifest, process.env, id)),
     };
   }
 
-  private registerOwnedService(owner: Owned | string, name: string, service: unknown): void {
+  private lookupService(name: string, instanceId?: string): unknown {
+    if (instanceId) {
+      const own = this.instanceServices.get(instanceId)?.get(name);
+      if (own !== undefined) return own;
+      if (this.hostServiceNames.has(name)) return this.services.get(name);
+      return undefined;
+    }
+    return this.services.get(name);
+  }
+
+  private instanceTable(instanceId: string): Map<string, unknown> {
+    const existing = this.instanceServices.get(instanceId);
+    if (existing) return existing;
+    const created = new Map<string, unknown>();
+    this.instanceServices.set(instanceId, created);
+    return created;
+  }
+
+  private registerOwnedService(owner: Owned | string, name: string, service: unknown, instanceId: string | null = null): void {
     if (typeof name !== 'string' || name.trim() === '') {
       this.logger.error('服务名无效，拒绝注册');
+      return;
+    }
+    const owned = typeof owner === 'string' ? this.ownedBucket(owner) : owner;
+    if (instanceId) {
+      if (this.hostServiceNames.has(name) || this.instanceTable(instanceId).has(name)) {
+        this.logger.error(`Service '${name}' 已存在，拒绝重复注册`);
+        return;
+      }
+      this.instanceTable(instanceId).set(name, service);
+      owned.instanceId = instanceId;
+      owned.services.push(name);
       return;
     }
     if (this.services.has(name)) {
@@ -350,7 +545,7 @@ export class ServiceRegistry {
       return;
     }
     this.services.set(name, service);
-    const owned = typeof owner === 'string' ? this.ownedBucket(owner) : owner;
+    if (typeof owner === 'string' && owner === '__host__') this.hostServiceNames.add(name);
     owned.services.push(name);
   }
 
@@ -369,9 +564,54 @@ export class ServiceRegistry {
     return created;
   }
 
+  private failLocal(
+    record: LocalRecord,
+    message: string,
+    pluginDir: string,
+    manifest?: PluginManifest,
+  ): void {
+    const failedMount: LocalMountMode = record.mount === 'source' ? 'source' : 'preview-failed';
+    const next: LocalRecord = {
+      ...record,
+      mount: failedMount,
+      previewError: failedMount === 'preview-failed' ? message : undefined,
+    };
+    this.locals.set(record.instanceId, next);
+    let parsed = manifest;
+    if (!parsed) {
+      try {
+        parsed = readManifestFile(record.sourcePath);
+      } catch {
+        parsed = undefined;
+      }
+    }
+    if (!parsed) {
+      this.logger.error(`本地插件 ${record.instanceId} 未能挂载: ${message}`);
+      return;
+    }
+    this.problems.set(record.instanceId, {
+      registryId: record.instanceId,
+      manifest: parsed,
+      absPath: path.resolve(pluginDir),
+      sourcePath: record.sourcePath,
+      source: 'local',
+      localFrom: record.from,
+      mount: failedMount,
+      message,
+      preview: failedMount === 'preview-failed',
+    });
+    this.logger.error(`插件 ${parsed.id} 未能挂载: ${message}`);
+  }
+
   private releaseOwned(owned: Owned): void {
-    for (const name of owned.services) {
-      this.services.delete(name);
+    if (owned.instanceId) {
+      const table = this.instanceServices.get(owned.instanceId);
+      for (const name of owned.services) table?.delete(name);
+    } else {
+      for (const name of owned.services) {
+        this.services.delete(name);
+        this.hostServiceNames.delete(name);
+      }
     }
     owned.services.length = 0;
     for (const { event, handler } of owned.listeners) {
@@ -399,36 +639,50 @@ function runtimeBinding(
 }
 
 function summarizeProblem(problem: RuntimeProblem): PluginSummary {
-  return {
-    ...summarizePlugin({
-      manifest: problem.manifest,
-      absPath: problem.absPath,
-      source: problem.source,
-      apply: () => {},
-    }),
-    runtimeError: problem.message,
-  };
+  const summary = summarizePlugin({
+    manifest: problem.manifest,
+    absPath: problem.absPath,
+    sourcePath: problem.sourcePath,
+    source: problem.source,
+    registryId: problem.registryId,
+    localFrom: problem.localFrom,
+    mount: problem.mount,
+    apply: () => {},
+  });
+  if (problem.preview) {
+    summary.previewError = problem.message;
+    summary.mount = 'preview-failed';
+    return summary;
+  }
+  return { ...summary, runtimeError: problem.message };
 }
 
 function summarizePlugin(plugin: AppPlugin): PluginSummary {
   const manifest = plugin.manifest;
+  const id = registryIdOf(plugin);
   const summary: PluginSummary = {
-    id: manifest.id,
+    id,
+    manifestId: manifest.id,
     displayName: manifest.displayName,
     version: manifest.version,
     type: manifest.type,
     uiUrl:
       manifest.type === 'ui' && manifest.uiEntry
-        ? `app-plugin://${manifest.id}/${manifest.uiEntry}`
+        ? `app-plugin://${id}/${manifest.uiEntry}`
         : null,
     source: plugin.source,
-    rootPath: plugin.absPath,
+    rootPath: plugin.sourcePath ?? plugin.absPath,
     hasSettings: isSettingsCandidate(manifest),
   };
+  if (plugin.source === 'local') {
+    summary.instanceId = id;
+    if (plugin.localFrom) summary.localFrom = plugin.localFrom;
+    summary.mount = plugin.mount ?? 'source';
+  }
   if (manifest.description) summary.description = manifest.description;
   if (manifest.icon) {
     const iconPath = manifest.icon.split(/[/\\]/).map((part) => encodeURIComponent(part)).join('/');
-    summary.iconUrl = `app-plugin://${manifest.id}/${iconPath}`;
+    summary.iconUrl = `app-plugin://${id}/${iconPath}`;
   }
   if (manifest.developer) summary.developer = manifest.developer;
   if (manifest.category) summary.category = manifest.category;
@@ -437,6 +691,10 @@ function summarizePlugin(plugin: AppPlugin): PluginSummary {
   if (manifest.termsOfService) summary.termsOfService = manifest.termsOfService;
   if (manifest.catalogError) summary.catalogError = manifest.catalogError;
   return summary;
+}
+
+function registryIdOf(plugin: AppPlugin): string {
+  return plugin.registryId ?? plugin.manifest.id;
 }
 
 function loadCommonJs(entryPath: string): PluginModule {

@@ -608,6 +608,13 @@ body[data-surface="settings"] .split-section {
   white-space: nowrap;
 }
 
+.nav-hover-row .nav-hover-source {
+  flex: none;
+  min-width: auto;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 .nav-hover-name {
   font-size: var(--text-body);
   font-weight: 500;
@@ -703,6 +710,7 @@ body[data-surface="settings"] .split-section {
 #shell-toast-close:focus-visible,
 .plugins-market-entry:focus-visible,
 #plugins-use:focus-visible,
+#open-market:focus-visible,
 #plugins-update:focus-visible,
 .market-action:focus-visible,
 .plugin-icon-btn:focus-visible,
@@ -717,7 +725,6 @@ body[data-surface="settings"] .split-section {
 .settings-select:focus-visible,
 .settings-switch input:focus-visible + span,
 #uninstall-btn:focus-visible,
-#drop-zone:focus-visible,
 .nav-item:focus-visible,
 #update-later:focus-visible,
 #update-confirm:focus-visible,
@@ -795,24 +802,6 @@ h1 {
   color: var(--muted);
   font-size: var(--text-body);
   line-height: 1.6;
-}
-
-#drop-zone {
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  min-height: 112px;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  background: var(--card);
-  box-shadow: var(--shadow);
-  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
-}
-
-#drop-zone.dragover {
-  border-color: #d0d0d0;
-  color: var(--ink);
-  background: var(--hover);
 }
 
 #status {
@@ -958,7 +947,8 @@ h1 {
 }
 
 #plugins-use,
-#plugins-update {
+#plugins-update,
+#open-market {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -973,7 +963,8 @@ h1 {
 }
 
 #plugins-use:hover,
-#plugins-update:hover { background: #e8e8e8; }
+#plugins-update:hover,
+#open-market:hover { background: #e8e8e8; }
 
 #plugins-market-list {
   container-type: inline-size;

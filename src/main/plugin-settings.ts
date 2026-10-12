@@ -29,6 +29,7 @@ export interface SettingsFieldView {
 export interface SettingsPluginView {
   id: string;
   displayName: string;
+  source: AppPlugin['source'];
   settingsEntryUrl: string | null;
   schemaError: string | null;
   fields: SettingsFieldView[];
@@ -52,18 +53,18 @@ export class PluginSettingsStore {
     this.logger = logger;
   }
 
-  getPluginConfig(manifest: PluginManifest): PluginConfig {
+  getPluginConfig(manifest: PluginManifest, storageId = manifest.id): PluginConfig {
     if (!manifest.configSchema || manifest.configSchemaError) return {};
-    const saved = this.read()[manifest.id] ?? {};
+    const saved = this.read()[storageId] ?? {};
     return mergeConfig(manifest.configSchema, saved);
   }
 
   /**
    * 返回新对象。调用方拿去传给子进程，不能写回宿主环境。
    */
-  pluginEnv(manifest: PluginManifest, base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  pluginEnv(manifest: PluginManifest, base: NodeJS.ProcessEnv, storageId = manifest.id): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...base };
-    for (const [key, value] of Object.entries(this.getPluginConfig(manifest))) {
+    for (const [key, value] of Object.entries(this.getPluginConfig(manifest, storageId))) {
       env[key] = stringifyConfigValue(value);
     }
     return env;
@@ -75,24 +76,26 @@ export class PluginSettingsStore {
 
   viewFor(plugin: AppPlugin): SettingsPluginView {
     const manifest = plugin.manifest;
+    const storageId = plugin.registryId ?? manifest.id;
     const fields: SettingsFieldView[] = [];
     if (manifest.configSchema && !manifest.configSchemaError) {
-      const saved = this.read()[manifest.id] ?? {};
+      const saved = this.read()[storageId] ?? {};
       const merged = mergeConfig(manifest.configSchema, saved);
       for (const [key, field] of Object.entries(manifest.configSchema)) {
         fields.push(toFieldView(key, field, merged));
       }
     }
     const view: SettingsPluginView = {
-      id: manifest.id,
+      id: storageId,
       displayName: manifest.displayName,
+      source: plugin.source,
       settingsEntryUrl: manifest.settingsEntry
-        ? `app-plugin://${manifest.id}/${manifest.settingsEntry}`
+        ? `app-plugin://${storageId}/${manifest.settingsEntry}`
         : null,
       schemaError: manifest.configSchemaError ?? null,
       fields,
     };
-    const iconUrl = catalogIconUrl(manifest);
+    const iconUrl = catalogIconUrl(manifest, storageId);
     if (iconUrl) view.iconUrl = iconUrl;
     return view;
   }
@@ -101,16 +104,16 @@ export class PluginSettingsStore {
    * 只给出已加载插件里密钥字段的当前生效值。非密钥字段不返回。
    * 调用方不要把返回值写进日志。
    */
-  reveal(manifest: PluginManifest, key: string): { ok: true; value: string } | { ok: false } {
+  reveal(manifest: PluginManifest, key: string, storageId = manifest.id): { ok: true; value: string } | { ok: false } {
     const schema = manifest.configSchema;
     if (!schema || manifest.configSchemaError) return { ok: false };
     const field = schema[key];
     if (!field || field.secret !== true) return { ok: false };
-    const value = this.getPluginConfig(manifest)[key];
+    const value = this.getPluginConfig(manifest, storageId)[key];
     return { ok: true, value: typeof value === 'string' ? value : '' };
   }
 
-  save(manifest: PluginManifest, draft: unknown): SettingsSaveResult {
+  save(manifest: PluginManifest, draft: unknown, storageId = manifest.id): SettingsSaveResult {
     if (manifest.configSchemaError) {
       return { ok: false, message: manifest.configSchemaError };
     }
@@ -118,9 +121,9 @@ export class PluginSettingsStore {
       return { ok: false, message: '该插件没有可保存的配置' };
     }
     const all = this.read();
-    const normalized = normalizeDraft(manifest.configSchema, all[manifest.id] ?? {}, draft);
+    const normalized = normalizeDraft(manifest.configSchema, all[storageId] ?? {}, draft);
     if (!normalized.ok) return normalized;
-    all[manifest.id] = normalized.values;
+    all[storageId] = normalized.values;
     try {
       this.write(all);
     } catch (err) {
@@ -340,10 +343,10 @@ function checkValue(
   return { ok: true, value };
 }
 
-function catalogIconUrl(manifest: PluginManifest): string | undefined {
+function catalogIconUrl(manifest: PluginManifest, storageId: string): string | undefined {
   if (!manifest.icon) return undefined;
   const iconPath = manifest.icon.split(/[/\\]/).map((part) => encodeURIComponent(part)).join('/');
-  return `app-plugin://${manifest.id}/${iconPath}`;
+  return `app-plugin://${storageId}/${iconPath}`;
 }
 
 function stringifyConfigValue(value: PluginConfigValue): string {

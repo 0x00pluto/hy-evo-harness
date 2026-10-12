@@ -100,6 +100,19 @@ test('扫描插件目录，跳过无 manifest 的项', async (t) => {
   assert.deepEqual(registry.getService('goodService'), { ok: true });
 });
 
+test('已安装插件的列表带上来源频道', async (t) => {
+  const root = tempDir();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writePlugin(path.join(root, 'marketed'), headless('marketed', '市场插件'), 'module.exports = { apply() {} };');
+  writePlugin(path.join(root, 'zipped'), headless('zipped', '压缩包插件'), 'module.exports = { apply() {} };');
+  const registry = new ServiceRegistry(silent);
+  registry.setOriginLookup((id) => (id === 'marketed' ? 'market' : undefined));
+  await registry.scanAndLoadPlugins(root, 'installed');
+  const list = registry.getPluginList();
+  assert.equal(list.find((item) => item.id === 'marketed')?.originChannel, 'market');
+  assert.equal(list.find((item) => item.id === 'zipped')?.originChannel, undefined);
+});
+
 test('路径本身是插件根时直接加载', async (t) => {
   const root = tempDir();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
