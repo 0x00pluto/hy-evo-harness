@@ -11,7 +11,7 @@ import { isHttpUrl } from './manifest.ts';
 import { pluginInstallPath } from './plugin-catalog.ts';
 import { downloadVerifiedZip, fetchPluginCatalog, findRelease, installCatalogRelease } from './plugin-market.ts';
 import { deleteOrigin, marketUpdates, readOrigins, writeOrigin } from './plugin-origins.ts';
-import { PluginSettingsStore } from './plugin-settings.ts';
+import { exampleSettingIdsToDrop, PluginSettingsStore } from './plugin-settings.ts';
 import { ensurePluginProtocol, pluginPartition, registerPluginScheme } from './protocol.ts';
 import { ServiceRegistry } from './registry.ts';
 import { applyUserSearchPath } from './shell-path.ts';
@@ -78,14 +78,46 @@ function pluginPreloadFile(): string {
 }
 
 async function loadAllPlugins(): Promise<void> {
-  await registry.scanAndLoadPlugins(bundledPluginsDir(), 'bundled');
   const mounts = session();
   if (!app.isPackaged) {
+    await registry.scanAndLoadPlugins(bundledPluginsDir(), 'bundled');
     const configPath = devConfigPath();
     await mounts.loadPaths(readExtraPluginPaths(configPath, registry.logger), 'config');
   }
   await mounts.loadRegistered();
   await registry.scanAndLoadPlugins(installedPluginsDir(), 'installed');
+  dropStaleExampleSettings();
+}
+
+function installedPluginDirectoryIds(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  const ids: string[] = [];
+  for (const name of fs.readdirSync(dir)) {
+    // 覆盖安装的备份目录以点开头，不是已安装插件。
+    if (name.startsWith('.')) continue;
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(path.join(dir, name));
+    } catch {
+      continue;
+    }
+    if (stat.isDirectory()) ids.push(name);
+  }
+  return ids;
+}
+
+function dropStaleExampleSettings(): void {
+  const loaded = registry.getPluginList().map((plugin) => ({
+    source: plugin.source,
+    manifestId: plugin.manifestId,
+  }));
+  const ids = exampleSettingIdsToDrop({
+    loaded,
+    installedIds: installedPluginDirectoryIds(installedPluginsDir()),
+  });
+  for (const id of ids) {
+    registry.deletePluginSettings(id);
+  }
 }
 
 function attachWebviewGuard(): void {

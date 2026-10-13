@@ -28,7 +28,7 @@ pnpm start
 src/main/        主进程：注册表、协议、安装
 src/preload/     宿主与插件的预加载脚本（.cjs）
 src/renderer/    工作台界面
-plugins/         内置示例插件，也可放开发软链接
+plugins/         示例插件，只在 pnpm start 扫描；也可放开发软链接
 ```
 
 包类型是 ESM，所以预加载脚本使用 `.cjs`，才能在隔离环境里 `require('electron')`。插件入口 `index.js` 仍按 CommonJS 执行（`module.exports`），不跟随 Dex Buddy 的 `"type": "module"`。插件页面拿不到 Node，只能调用 `window.dex.call`。
@@ -94,7 +94,7 @@ const result = await window.dex.call('aiComicService', 'renderVideo', [
 
 返回值必须能被结构化克隆（普通对象、数组、字符串、数字）。不要从服务方法返回函数或类实例。
 
-仓库里有两个示例：
+仓库里有两个示例，只在 `pnpm start` 出现。安装包不带 `plugins/`。
 
 - `plugins/ai-comic-master`：带界面，`aiComicService.renderVideo` 返回固定结果。
 - `plugins/quanmedia-crawl`：无界面，`crawlerService.fetchAccountData`，并监听 `trigger-all-spiders`。
@@ -109,7 +109,7 @@ const result = await window.dex.call('aiComicService', 'renderVideo', [
 
 维护者用未打包的 `pnpm start` 时，还可以把绝对路径写进已忽略的 `config.dev.json` → `extraPluginPaths`。这些路径同样用实例 id，界面里不能移除；要停用就改 JSON 后重启。打包后的 Dex Buddy 不读这个文件。`forceUpdateIcon` 设为 `true` 时，开发版会显示下载图标并打开和线上一样的确认框；确认不会下载或安装。打包后这个开关无效。
 
-软链接仍然可以放进 `plugins/`，但那是内置目录，继续用清单 id，和已安装插件共用设置。要隔离就改用插件页加载。
+软链接仍然可以放进 `plugins/`，但只有未打包运行会扫到，并用清单 id，和已安装插件共用设置。要隔离就改用插件页加载。
 
 ```bash
 ln -s "/绝对路径/你的项目" "/绝对路径/0001-HyHarness/plugins/你的项目"
@@ -124,7 +124,7 @@ cd plugins
 zip -r ../ai-comic-master-v1.0.0.zip ai-comic-master -x '*.DS_Store' -x '*node_modules*'
 ```
 
-从图标轨的拼图进入插件页，加号里选「添加压缩包」。宿主解压到用户数据目录的 `installed_plugins/<id>/`，校验 manifest 后出现在插件列表里。欢迎页不接受拖放，压缩包只从插件页加号进入。只有这样安装的插件可以卸载。内置插件不能被安装包覆盖。本地目录是另一条实例，不挡住同一个清单 id 的安装。
+从图标轨的拼图进入插件页，加号里选「添加压缩包」。宿主解压到用户数据目录的 `installed_plugins/<id>/`，校验 manifest 后出现在插件列表里。欢迎页不接受拖放，压缩包只从插件页加号进入。只有这样安装的插件可以卸载。未打包运行里，同清单 id 已由示例目录加载时，安装会被拒绝。打包后的 Dex Buddy 没有示例目录。本地目录是另一条实例，不挡住同一个清单 id 的安装。
 
 ## 桌面安装包与自动更新
 

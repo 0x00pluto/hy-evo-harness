@@ -2,19 +2,18 @@
 name: prd-00008-unbundle-example-plugins
 sequence: 8
 description: 安装包不再带示例插件；只有未打包的 pnpm start 加载 plugins/，界面标为示例。
-status: in_progress
+status: accepted
 created: 2026-10-13T03:15:05Z
-last_accepted_at: 2026-10-13T04:24:43Z
-accepted_commit: fe74ccc
-accepted_branch: main
-accepted_scope: R0
+last_accepted_at: 2026-10-13T05:24:28Z
+accepted_branch: dev
+accepted_scope: R0,R1
 ---
 
 # PRD: 示例插件不进安装包
 
 | 属性 | 值 |
 |---|---|
-| 状态 | 工程：in_progress。见文末「工程验收状态」 |
+| 状态 | 工程：accepted。见文末「工程验收状态」 |
 | 范围 | 安装包文件列表、未打包时对 `plugins/` 的扫描、来源文案、升级时两份示例的设置残留 |
 | 关联文档 | `README.md`、`docs/DESIGN.md`、`docs/plugin-development/ship.md`、`docs/plugin-development/settings.md`、`docs/workflows/publish-plugin.md`、`electron-builder.yml`、`specs/prds/prd-00004-plugin-market.md`、`specs/prds/prd-00007-load-unpacked-plugin.md` |
 | 关联实现 | `src/main/index.ts`（`loadAllPlugins`、`bundledPluginsDir`）、`src/main/install.ts`、`src/main/plugin-settings.ts`、`src/renderer/plugins.js`、`src/renderer/plugins-page.js`、`src/renderer/settings.js` |
@@ -289,55 +288,54 @@ stateDiagram-v2
 
 ## 1. 工程验收状态
 
-> 由 `/team:prd-accept` 维护；勿手工编造「通过」。最后更新：2026-10-13T04:24:43Z，main@fe74ccc，范围：R0。
+> 由 `/team:prd-accept` 维护；勿手工编造「通过」。最后更新：2026-10-13T05:24:28Z，dev，范围：R0,R1。
 
 ### 总览
 
-- 工程状态：`in_progress`
-- 验收判定：Release 0 的打包排除、打包后跳过扫描、来源文案、设置清理和文档都还没有实现，不能标 `accepted`
-- 最近验收：2026-10-13T04:24:43Z
-- 代码提交：`main` 的 HEAD `fe74ccc` 仍把 `plugins/**` 打进安装包，启动时无条件扫描。本 PRD 还在工作区，未提交
-- 开发运行里仍能看到两份示例，示例也没有「卸载」。这是改之前就有的行为，不是本篇新做的门闩
+- 工程状态：`accepted`
+- 验收判定：Release 0 纳入项均通过。正文声明没有 Release 1，标为范围外。
+- 最近验收：2026-10-13T05:24:28Z
+- 代码提交：实现与本验收章在同一提交。
+- 安装包 `files` 不再包含 `plugins/**`。只有 `!app.isPackaged` 才扫描示例目录。维护者确认打包后的列表没有这两份示例，`pnpm start` 的来源文案已手测通过。
+- 加载完成后按三条条件删除 `ai-comic-master`、`quanmedia-crawl` 的设置段。同清单 id 的安装拒绝文案为示例目录。示例没有卸载。
+- `pnpm test` 115 项通过。打包排除与清理条件在 `test/unbundle-examples.test.ts`。
 
 ### Release 交付
 
 | Release | 状态 | 说明 |
 |---|---|---|
-| R0 | 未实现 | 安装包仍包含 `plugins/**`；`loadAllPlugins` 不看 `app.isPackaged`；界面仍写「内置」；没有样品设置清理 |
+| R0 | 通过 | 打包排除、未打包才扫描、来源文案、设置清理、文档和 `node:test` 均有证据。安装包空列表与界面文案由维护者手测通过 |
 | R1 | 范围外 | 正文写明本篇没有 Release 1。市场示例分类和一键复制示例在非目标 |
 
 ### 功能验收清单（Agent 优先读此表）
 
 | ID | 能力摘要 | Release | 状态 | 证据 |
 |---|---|---|---|---|
-| US-01 | 安装包不含 `plugins/**`，正式包列表没有这两份示例 | R0 | 未实现 | `electron-builder.yml` 的 `files` 仍有 `plugins/**`。`src/main/index.ts` `loadAllPlugins` 无条件 `scanAndLoadPlugins(bundledPluginsDir(), 'bundled')` |
-| US-02 | 升级后示例离开列表，其它已安装插件仍在 | R0 | 未实现 | 打包后的进程仍会扫安装包里的 `plugins/`。没有按「未打包才扫描」把旧示例留在包外 |
-| US-03 | 没有已安装实例和本地实例时，删掉这两个清单 id 的设置 | R0 | 未实现 | 仓库里没有针对 `ai-comic-master`、`quanmedia-crawl` 的清理。`deletePlugin` 只在卸载已安装插件时调用 |
-| US-04 | 已安装的同 id 插件和它的设置留下 | R0 | 未实现 | 清理分支不存在，保留条件也无法执行 |
-| US-05 | `pnpm start` 仍加载仓库 `plugins/` 里的两份示例 | R0 | 通过 | `loadAllPlugins` 会扫 `plugins/`。`test/registry.test.ts`「示例插件可以扫描并调用」断言这两个 id。`plugins/` 目录仍在仓库里 |
-| US-06 | 插件页、设置页写「示例」，首页悬停写「来自示例」 | R0 | 未实现 | `src/renderer/plugins-page.js` 与 `src/renderer/settings.js` 的 `bundled` 仍是「内置」。`src/renderer/plugins.js` `hoverSourceLabel` 仍返回「来自内置」 |
-| US-07 | 同清单 id 的安装被拒绝，提示来自示例目录 | R0 | 部分 | `src/main/install.ts` `replaceInstalledPlugin` 会拒绝非 `installed` 来源。`test/registry.test.ts`「不能用安装包覆盖内置插件」覆盖了拒绝。文案仍是「内置目录」，不是「示例目录」 |
-| US-08 | 示例没有「卸载」 | R0 | 通过 | `src/renderer/plugins-page.js` 只有 `plugin.source === 'installed'` 时才放入「卸载」 |
-| US-09 | 五篇文档改成示例只在未打包运行出现 | R0 | 未实现 | `README.md`、`docs/DESIGN.md`、`docs/plugin-development/ship.md`、`docs/plugin-development/settings.md`、`docs/workflows/publish-plugin.md` 仍把它们写成会随应用出现的内置插件 |
-| R0-TEST | `node:test` 断言打包列表不含 `plugins/**`，并覆盖三条清理条件 | R0 | 未实现 | `test/` 里没有读 `electron-builder.yml` 的断言，也没有样品设置清理测试 |
+| US-01 | 安装包不含 `plugins/**`，正式包列表没有这两份示例 | R0 | 通过 | `electron-builder.yml` 的 `files` 只有 `dist/**`、`src/renderer/**`、`src/preload/**`。`loadAllPlugins` 把 `scanAndLoadPlugins(bundledPluginsDir(), 'bundled')` 放在 `!app.isPackaged` 内。维护者确认正式包列表没有这两项 |
+| US-02 | 升级后示例离开列表，其它已安装插件仍在 | R0 | 通过 | 打包后的进程不再扫描安装包内的 `plugins/`。`installed_plugins` 仍由 `scanAndLoadPlugins(installedPluginsDir(), 'installed')` 加载。不另写迁移清单 |
+| US-03 | 没有已安装实例和本地实例时，删掉这两个清单 id 的设置 | R0 | 通过 | `exampleSettingIdsToDrop` 只候选这两个 id。`dropStaleExampleSettings` 在加载后调用 `deletePluginSettings`。`test/unbundle-examples.test.ts`「三条都成立」与文件回合 |
+| US-04 | 已安装的同 id 插件和它的设置留下 | R0 | 通过 | `installedIds` 含该 id 时不进入删除列表。同测例「已安装目录留下对应 id」；`deletePlugin` 只删返回的键 |
+| US-05 | `pnpm start` 仍加载仓库 `plugins/` 里的两份示例 | R0 | 通过 | 未打包分支仍扫描 `bundledPluginsDir()`。`plugins/ai-comic-master` 与 `plugins/quanmedia-crawl` 仍在。`test/registry.test.ts`「示例插件可以扫描并调用」 |
+| US-06 | 插件页、设置页写「示例」，首页悬停写「来自示例」 | R0 | 通过 | `plugins-page.js` 与 `settings.js` 的 `bundled` 为「示例」。`plugins.js` `hoverSourceLabel` 返回「来自示例」。维护者确认 `pnpm start` 手测 |
+| US-07 | 同清单 id 的安装被拒绝，提示来自示例目录 | R0 | 通过 | `install.ts` 非 `dev` 来源写「示例目录」。市场安装走 `installPluginZip`。`test/registry.test.ts` 断言 `/已由示例目录提供，不能覆盖安装/` |
+| US-08 | 示例没有「卸载」 | R0 | 通过 | `plugins-page.js` 只有 `plugin.source === 'installed'` 时才放入「卸载」。市场卡片同样只在已安装来源放「卸载」 |
+| US-09 | 五篇文档改成示例只在未打包运行出现 | R0 | 通过 | `README.md`、`docs/DESIGN.md`、`docs/plugin-development/ship.md`、`docs/plugin-development/settings.md`、`docs/workflows/publish-plugin.md` 已改。`docs/hub-plugin-architecture.md` 按非目标不改 |
+| R0-TEST | `node:test` 断言打包列表不含 `plugins/**`，并覆盖三条清理条件 | R0 | 通过 | `test/unbundle-examples.test.ts`：文件列表、bundled / `installedIds` / 本地实例各留一条、其它键与 `dev-` 键保留 |
 | NG-01 | 市场里的示例分类 | R1 | 范围外 | 非目标。本篇没有 Release 1 |
 | NG-02 | 一键把示例复制到本地目录 | R1 | 范围外 | 非目标。本篇没有 Release 1 |
 
 ### 未完成与遗留
 
-- `electron-builder.yml` 仍打包 `plugins/**`。打包后的 Dex Buddy 仍会加载「AI 漫剧大师」和「全媒体爬虫引擎」。
-- 来源文案仍是「内置」/「来自内置」/「内置目录」。
-- 升级时不清理 `plugin-settings.json` 里这两个清单 id。
-- 五篇文档和本篇要求的两条测试都还没写。
-- 安装包空列表本篇要求手测。这次没有打包，因为扫描门闩和文件列表都还没改。
+- 无阻塞项。
+- `docs/hub-plugin-architecture.md` 仍是方案原文备份，本篇不改。
 
 ### 质量检查
 
 | 检查项 | 状态 |
 |---|---|
-| pnpm test | 通过，112 项。没有本篇新增的打包排除和设置清理用例 |
-| 文档同步（README / docs/doc_index.md） | 未改。README 仍写内置示例。`docs/doc_index.md` 不登记单篇 PRD |
+| pnpm test | 通过，115 项 |
+| 文档同步（README / docs/doc_index.md） | README 已写示例只在 `pnpm start` 出现，安装包不带 `plugins/`。`docs/doc_index.md` 不登记单篇 PRD，现有一行摘要仍成立 |
 
 ---
 
-统计：通过 2 / 部分 1 / 未实现 7 / 范围外 2
+统计：通过 10 / 部分 0 / 未实现 0 / 范围外 2

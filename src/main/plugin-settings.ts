@@ -8,6 +8,7 @@ import type {
   PluginConfig,
   PluginConfigValue,
   PluginManifest,
+  PluginSource,
 } from './types.ts';
 
 export interface SettingsFieldView {
@@ -195,6 +196,30 @@ export class PluginSettingsStore {
       throw err;
     }
   }
+}
+
+/** 旧安装包里随应用出现的两份示例。新示例不在这份名单里。 */
+const LEGACY_EXAMPLE_PLUGIN_IDS = ['ai-comic-master', 'quanmedia-crawl'] as const;
+
+export interface LoadedPluginRef {
+  source: PluginSource;
+  manifestId: string;
+}
+
+/**
+ * 三条同时成立才返回该清单 id：没有 bundled、installed_plugins 里没有、已加载的本地实例里也没有。
+ * 调用方再用按 id 删除设置，其它键（含 dev- 开头的实例 id）不动。
+ */
+export function exampleSettingIdsToDrop(input: {
+  loaded: ReadonlyArray<LoadedPluginRef>;
+  installedIds: ReadonlyArray<string>;
+}): string[] {
+  const installed = new Set(input.installedIds);
+  return LEGACY_EXAMPLE_PLUGIN_IDS.filter((id) => {
+    const hasBundled = input.loaded.some((plugin) => plugin.source === 'bundled' && plugin.manifestId === id);
+    const hasLocal = input.loaded.some((plugin) => plugin.source === 'local' && plugin.manifestId === id);
+    return !hasBundled && !installed.has(id) && !hasLocal;
+  });
 }
 
 export function isSettingsCandidate(manifest: PluginManifest): boolean {

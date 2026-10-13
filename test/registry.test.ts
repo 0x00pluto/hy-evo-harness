@@ -387,7 +387,7 @@ test('不能用安装包覆盖内置插件', async (t) => {
   await registry.scanAndLoadPlugins(bundled, 'bundled');
   await assert.rejects(
     () => installPluginZip({ registry, zipFilePath: zipPath, userPluginsDir: path.join(work, 'installed') }),
-    /不能覆盖安装/,
+    /已由示例目录提供，不能覆盖安装/,
   );
   assert.equal(await registry.callService('sampleTool', 'ping', []), 'bundled');
 });

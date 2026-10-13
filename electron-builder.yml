@@ -7,7 +7,6 @@ files:
   - dist/**
   - src/renderer/**
   - src/preload/**
-  - plugins/**
   - '!dev-app-update.yml'
 asarUnpack:
   - src/preload/**

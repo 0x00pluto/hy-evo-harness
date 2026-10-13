@@ -131,7 +131,7 @@ async function replaceInstalledPlugin(
 ): Promise<void> {
   const existing = registry.getPlugin(id);
   if (existing && existing.source !== 'installed') {
-    const from = existing.source === 'dev' ? '开发路径' : '内置目录';
+    const from = existing.source === 'dev' ? '开发路径' : '示例目录';
     throw new Error(`插件 ${id} 已由${from}提供，不能覆盖安装`);
   }
   if (existing) {

@@ -134,7 +134,7 @@ export function mountPlugins({
   }
 
   function hoverSourceLabel(plugin) {
-    if (plugin.source === 'bundled') return '来自内置';
+    if (plugin.source === 'bundled') return '来自示例';
     if (plugin.source === 'local' || plugin.source === 'dev') return '开发版';
     if (plugin.originChannel === 'market') return '来自市场';
     if (plugin.source === 'installed') return '来自压缩包';

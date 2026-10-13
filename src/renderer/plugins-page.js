@@ -1,7 +1,7 @@
 import { mountIcons } from './icons.js';
 
 const SOURCE_LABEL = {
-  bundled: '内置',
+  bundled: '示例',
   dev: '开发',
   local: '本地',
   installed: '已安装',
