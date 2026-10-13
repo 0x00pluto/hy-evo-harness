@@ -103,6 +103,17 @@ html.is-mac #titlebar { padding-left: 78px; }
 .titlebar-btn:hover:not(:disabled),
 .rail-btn:hover { background: var(--hover); }
 
+#rail-home[aria-current="page"],
+#rail-plugins[aria-current="page"] {
+  background: var(--hover);
+  box-shadow: var(--shadow);
+}
+
+#rail-home[aria-current="page"] svg,
+#rail-plugins[aria-current="page"] svg {
+  fill: currentColor;
+}
+
 #sidebar-toggle[aria-pressed="true"] { background: var(--hover); }
 
 .titlebar-btn:disabled {

@@ -84,6 +84,8 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     collapseBtn.hidden = !workspace;
     collapseBtn.disabled = !canCollapse(session);
     collapseBtn.setAttribute('aria-pressed', session.pinned ? 'false' : 'true');
+    homeBtn.setAttribute('aria-current', workspace ? 'page' : 'false');
+    pluginsBtn.setAttribute('aria-current', pluginsOpen ? 'page' : 'false');
     titleName.textContent = workspace ? workspacePluginName() : '';
     if (!floating()) {
       window.clearTimeout(closeTimer);
