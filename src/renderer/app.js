@@ -5,6 +5,7 @@ import { mountUpdater } from './updater.js';
 import { mountSettings } from './settings.js';
 import { mountChrome } from './chrome.js';
 import { mountIcons } from './icons.js';
+import { mountShellToast } from './shell-toast.js';
 
 const shell = {
   plugins: [],
@@ -21,6 +22,7 @@ function setStatus(message, kind) {
 }
 
 mountIcons();
+mountShellToast();
 const sidebar = mountSidebar();
 
 // 插件列表刷新时可能正停在设置里，设置返回时又要回到刚才的插件。

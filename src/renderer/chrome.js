@@ -18,6 +18,7 @@ const LOCAL_USER_LABEL = '本地用户';
 export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, applySplitWidth = () => {} }) {
   const backBtn = document.getElementById('history-back');
   const forwardBtn = document.getElementById('history-forward');
+  const reloadBtn = document.getElementById('history-reload');
   const collapseBtn = document.getElementById('sidebar-toggle');
   const gearBtn = document.getElementById('rail-settings');
   const popover = document.getElementById('gear-popover');
@@ -70,6 +71,7 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     if (!workspace) applySplitWidth();
     backBtn.disabled = !canGoBack(session);
     forwardBtn.disabled = !canGoForward(session);
+    reloadBtn.hidden = !showingUiPlugin();
     collapseBtn.hidden = !workspace;
     collapseBtn.disabled = !canCollapse(session);
     collapseBtn.setAttribute('aria-pressed', session.pinned ? 'false' : 'true');
@@ -86,6 +88,12 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     if (!shell.activeId) return '';
     const plugin = shell.plugins.find((item) => item.id === shell.activeId);
     return plugin ? plugin.displayName : '';
+  }
+
+  function showingUiPlugin() {
+    if (session.surface !== 'workspace' || !shell.activeId) return false;
+    const plugin = shell.plugins.find((item) => item.id === shell.activeId);
+    return Boolean(plugin && plugin.type === 'ui' && plugin.uiUrl);
   }
 
   function openFloat() {
@@ -183,6 +191,10 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     }
     if (session.surface === 'plugins') plugins.suspend();
     apply();
+  });
+
+  reloadBtn.addEventListener('click', () => {
+    void plugins.reloadActive();
   });
 
   collapseBtn.addEventListener('click', () => {

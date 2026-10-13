@@ -13,6 +13,12 @@ contextBridge.exposeInMainWorld('dex', {
   preparePlugin(id) {
     return ipcRenderer.invoke('dex:prepare-plugin', id);
   },
+  availableMemory() {
+    return ipcRenderer.invoke('dex:available-memory');
+  },
+  setViewThrottling(webContentsId, throttle) {
+    return ipcRenderer.invoke('dex:set-view-throttling', webContentsId, throttle);
+  },
   installZip(zipFilePath) {
     return ipcRenderer.invoke('dex:install-zip', zipFilePath);
   },

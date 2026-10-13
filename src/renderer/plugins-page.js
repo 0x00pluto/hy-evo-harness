@@ -1,4 +1,5 @@
 import { mountIcons } from './icons.js';
+import { showShellToast as showToast } from './shell-toast.js';
 
 const SOURCE_LABEL = {
   bundled: '示例',
@@ -8,7 +9,6 @@ const SOURCE_LABEL = {
 };
 const CATALOG_SOURCE = '插件中心';
 const OTHER_CATEGORY = '其他';
-const TOAST_MS = 4000;
 
 export function mountPluginsPage({ shell, plugins, chrome }) {
   const search = document.getElementById('plugins-search');
@@ -22,10 +22,6 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   const marketPane = document.getElementById('plugins-market');
   const marketList = document.getElementById('plugins-market-list');
   const marketEntry = document.getElementById('plugins-market-entry');
-  const toast = document.getElementById('shell-toast');
-  const toastIcon = document.getElementById('shell-toast-icon');
-  const toastText = document.getElementById('shell-toast-text');
-  const toastClose = document.getElementById('shell-toast-close');
 
   let busy = false;
   let busyId = null;
@@ -33,32 +29,11 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   let catalogPlugins = [];
   let updates = [];
   let marketError = '';
-  let toastTimer = 0;
 
   function setStatus(message, kind) {
     statusEl.textContent = message || '';
     if (kind) statusEl.dataset.kind = kind;
     else delete statusEl.dataset.kind;
-  }
-
-  function showToast(message, kind) {
-    toastIcon.replaceChildren();
-    const icon = document.createElement('i');
-    icon.dataset.lucide = kind === 'ok' ? 'circle-check' : 'circle-x';
-    toastIcon.appendChild(icon);
-    toastText.textContent = message;
-    toast.dataset.kind = kind === 'ok' ? 'ok' : 'error';
-    toast.hidden = false;
-    mountIcons(toast);
-    window.clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => {
-      toast.hidden = true;
-    }, TOAST_MS);
-  }
-
-  function hideToast() {
-    window.clearTimeout(toastTimer);
-    toast.hidden = true;
   }
 
   function sourceLabel(source) {
@@ -621,6 +596,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     addBtn.disabled = true;
     try {
       chrome.enterPlugins();
+      if (kind === 'update') plugins.releaseView(pluginId);
       const result = await window.dex.installCatalogPlugin(pluginId);
       await finishInstall(result, kind);
     } catch (err) {
@@ -659,6 +635,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   async function uninstallPlugin(pluginId) {
     const plugin = localPlugin(pluginId);
     const name = plugin ? plugin.displayName : pluginId;
+    plugins.releaseView(pluginId);
     const result = await window.dex.uninstall(pluginId);
     if (!result.ok) {
       showToast(result.message || '卸载失败', 'error');
@@ -679,7 +656,9 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       if (result.plugins) await plugins.refresh(result.plugins);
       return;
     }
+    if (result.installedId) plugins.releaseView(result.installedId);
     await plugins.refresh(result.plugins);
+    plugins.reopenIfWatching(result.installedId);
     const installed = result.installedId ? localPlugin(result.installedId) : null;
     if (installed && installed.runtimeError) {
       showToast(installed.runtimeError, 'error');
@@ -761,6 +740,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   async function removeUnpacked(pluginId) {
     const plugin = localPlugin(pluginId);
     const name = plugin ? plugin.displayName : pluginId;
+    plugins.releaseView(pluginId);
     const result = await window.dex.removeUnpacked(pluginId);
     if (!result.ok) {
       showToast(result.message || '移除失败', 'error');
@@ -774,6 +754,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   }
 
   async function runLocal(pluginId, invoke, okText) {
+    plugins.releaseView(pluginId);
     try {
       const result = await invoke(pluginId);
       if (result.plugins) await plugins.refresh(result.plugins);
@@ -784,6 +765,8 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       showToast(okText, 'ok');
     } catch (err) {
       showToast(err instanceof Error ? err.message : '操作失败', 'error');
+    } finally {
+      plugins.reopenIfWatching(pluginId);
     }
   }
 
@@ -856,10 +839,6 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     placeMenu(addBtn, addMenu);
     addBtn.setAttribute('aria-expanded', 'true');
     menuHost = addWrap;
-  });
-
-  toastClose.addEventListener('click', () => {
-    hideToast();
   });
 
   document.addEventListener('keydown', (event) => {

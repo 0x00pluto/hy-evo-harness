@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell, type IpcMainInvokeEvent, type NativeImage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell, webContents, type IpcMainInvokeEvent, type NativeImage } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { readAvailableMemory } from './available-memory.ts';
 import { readExtraPluginPaths, readForceUpdateIcon } from './dev-config.ts';
 import { INSTALLED_PLUGINS_DIR_NAME, resolveHostDataPath } from './host-data.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
@@ -274,6 +275,21 @@ function registerIpc(): void {
       partition,
       preloadUrl: pathToFileURL(pluginPreloadFile()).href,
     };
+  });
+
+  ipcMain.handle('dex:available-memory', () => {
+    return readAvailableMemory(process.platform, () => process.getSystemMemoryInfo());
+  });
+
+  ipcMain.handle('dex:set-view-throttling', (event, webContentsId: unknown, throttle: unknown) => {
+    if (typeof webContentsId !== 'number' || !Number.isInteger(webContentsId) || typeof throttle !== 'boolean') return;
+    const target = webContents.fromId(webContentsId);
+    if (!target || target.isDestroyed()) return;
+    const host = target.hostWebContents;
+    if (!host || host.id !== event.sender.id) return;
+    const url = target.getURL();
+    if (!url.startsWith('app-plugin://')) return;
+    target.setBackgroundThrottling(throttle);
   });
 
   ipcMain.handle('dex:call-service', async (event, payload: unknown) => {

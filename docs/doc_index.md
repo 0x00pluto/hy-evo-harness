@@ -3,7 +3,7 @@
 ## Index
 
 - `README.md`: Dex Buddy 产品说明：Electron 宿主、插件契约、开发挂载与打包
-- `docs/DESIGN.md`: 工作台壳视觉事实源：白底、浅灰选中、细线文字按钮、双色独角兽字标；图标轨拼图打开插件市场；顶栏下方 toast 用现有色令牌；控件第二次出现再抽到 src/renderer/ui/；改 src/renderer 外观前先读
+- `docs/DESIGN.md`: 工作台壳视觉事实源：白底、浅灰选中、细线文字按钮、双色独角兽字标；图标轨拼图打开插件市场；标题栏前进右侧有重新加载（refresh-cw），只在工作区显示界面插件时出现且不参与拖拽；顶栏下方 toast 用现有色令牌；控件第二次出现再抽到 src/renderer/ui/；改 src/renderer 外观前先读
 - `docs/build-and-release.md`: 桌面安装包、三端 CI、GitHub Release 页，以及从七牛下载的应用内自动更新；解释器单独用 publish-runtimes 传到 dex-buddy/runtimes/，不打进安装包
 - `docs/hub-plugin-architecture.md`: Dex Buddy 插件化技术选型与方案原文备份：注册表、app-plugin 协议、开发挂载、ZIP 安装；第一期插件中心见 publish-plugin 工作流，不改技能中心
 - `docs/plugin-development.md`: 插件开发说明已拆到 `docs/plugin-development/`，本文件只保留入口

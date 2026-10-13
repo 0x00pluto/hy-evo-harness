@@ -1,4 +1,6 @@
 import { mountIcons } from './icons.js';
+import { mountPluginViews } from './plugin-views.js';
+import { showShellToast } from './shell-toast.js';
 
 export function mountPlugins({
   shell,
@@ -14,6 +16,16 @@ export function mountPlugins({
   const welcome = document.getElementById('welcome-screen');
   const headless = document.getElementById('headless-screen');
   const viewportHost = document.getElementById('viewport-host');
+  let openSeq = 0;
+  const views = mountPluginViews({
+    viewportHost,
+    onReopened() {
+      showShellToast('已重新打开', 'ok');
+    },
+    onFailed(id, message) {
+      handleViewFailed(id, message);
+    },
+  });
   const openMarket = document.getElementById('open-market');
   const headlessTitle = document.getElementById('headless-title');
   const pluginPane = document.getElementById('plugin-pane');
@@ -216,65 +228,110 @@ export function mountPlugins({
     mountIcons(nav);
   }
 
+  function workspaceOpen() {
+    return document.body.dataset.surface === 'workspace' && !pluginPane.hidden;
+  }
+
+  function isUi(plugin) {
+    return plugin.type === 'ui' && !!plugin.uiUrl;
+  }
+
+  function revealViewport() {
+    welcome.hidden = true;
+    headless.hidden = true;
+    viewportHost.hidden = false;
+  }
+
   function showWelcome() {
+    openSeq += 1;
+    views.parkHot();
     shell.activeId = null;
     welcome.hidden = false;
     headless.hidden = true;
     viewportHost.hidden = true;
-    viewportHost.replaceChildren();
     settings.dismissSurface();
     renderNav();
     onWorkspaceChanged();
+    void views.enforceQuota(null);
+  }
+
+  function handleViewFailed(id, message) {
+    if (shell.activeId !== id || !workspaceOpen()) return;
+    showWelcome();
+    setStatus(message || '打开插件失败', 'error');
   }
 
   async function openPlugin(plugin) {
+    const seq = ++openSeq;
     pluginPane.hidden = false;
     shell.activeId = plugin.id;
     setStatus('');
     settings.dismissSurface();
     renderNav();
 
-    try {
-      if (plugin.type === 'ui' && plugin.uiUrl) {
-        const prepared = await window.dex.preparePlugin(plugin.id);
-        welcome.hidden = true;
-        headless.hidden = true;
-        viewportHost.hidden = false;
-        viewportHost.replaceChildren();
-        const webview = document.createElement('webview');
-        webview.setAttribute('partition', prepared.partition);
-        webview.setAttribute('preload', prepared.preloadUrl);
-        webview.setAttribute('webpreferences', 'contextIsolation=yes,nodeIntegration=no,sandbox=yes');
-        webview.setAttribute('src', plugin.uiUrl);
-        viewportHost.appendChild(webview);
-        onWorkspaceChanged();
-        return;
-      }
-
+    if (!isUi(plugin)) {
+      views.parkHot();
       welcome.hidden = true;
       viewportHost.hidden = true;
-      viewportHost.replaceChildren();
       headless.hidden = false;
       headlessTitle.textContent = plugin.displayName;
       onWorkspaceChanged();
+      await views.enforceQuota(null);
+      return;
+    }
+
+    if (views.isShowing(plugin.id)) {
+      revealViewport();
+      onWorkspaceChanged();
+      return;
+    }
+
+    views.parkHot();
+
+    if (views.has(plugin.id)) {
+      try {
+        await window.dex.preparePlugin(plugin.id);
+      } catch {
+        // 页面还在。partition 上次打开时已经准备过，这次失败不换节点。
+      }
+      if (seq !== openSeq || !workspaceOpen()) return;
+      revealViewport();
+      views.present(plugin.id);
+      onWorkspaceChanged();
+      await views.enforceQuota(plugin.id);
+      return;
+    }
+
+    try {
+      const prepared = await window.dex.preparePlugin(plugin.id);
+      if (seq !== openSeq || !workspaceOpen()) return;
+      revealViewport();
+      views.mount(plugin, prepared);
+      onWorkspaceChanged();
+      await views.enforceQuota(plugin.id);
     } catch (err) {
+      if (seq !== openSeq) return;
       showWelcome();
       setStatus(err instanceof Error ? err.message : '打开插件失败', 'error');
     }
   }
 
   function forgetWorkspacePlugin() {
+    openSeq += 1;
     shell.activeId = null;
     welcome.hidden = false;
     headless.hidden = true;
     viewportHost.hidden = true;
-    viewportHost.replaceChildren();
     renderNav();
     onWorkspaceChanged();
   }
 
   async function refresh(nextPlugins) {
     shell.plugins = nextPlugins || (await window.dex.listPlugins());
+    const live = new Set(shell.plugins.map((plugin) => plugin.id));
+    for (const id of views.ids()) {
+      if (!live.has(id)) views.drop(id, 'force');
+    }
     renderNav();
     onListChanged();
     if (shell.settingsMode) {
@@ -288,11 +345,13 @@ export function mountPlugins({
   }
 
   function suspend() {
+    const shown = views.parkHot();
+    const protectedId = views.has(shell.activeId) ? shell.activeId : shown;
     pluginPane.hidden = true;
     welcome.hidden = true;
     headless.hidden = true;
     viewportHost.hidden = true;
-    viewportHost.replaceChildren();
+    void views.enforceQuota(protectedId);
   }
 
   function resume(pluginId) {
@@ -302,9 +361,37 @@ export function mountPlugins({
     else showWelcome();
   }
 
+  function releaseView(id) {
+    views.drop(id, 'force');
+  }
+
+  function reopenIfWatching(id) {
+    if (!id || !workspaceOpen() || shell.activeId !== id) return;
+    const plugin = shell.plugins.find((item) => item.id === id);
+    if (!plugin) return;
+    void openPlugin(plugin);
+  }
+
+  async function reloadActive() {
+    if (!workspaceOpen()) return;
+    const plugin = shell.plugins.find((item) => item.id === shell.activeId);
+    if (!plugin || !isUi(plugin)) return;
+    views.drop(plugin.id, 'force');
+    await openPlugin(plugin);
+  }
+
   window.addEventListener('dragover', (event) => event.preventDefault());
   window.addEventListener('drop', (event) => event.preventDefault());
   openMarket.addEventListener('click', () => onOpenMarket());
 
-  return { refresh, suspend, resume, openPlugin, showWelcome };
+  return {
+    refresh,
+    suspend,
+    resume,
+    openPlugin,
+    showWelcome,
+    releaseView,
+    reopenIfWatching,
+    reloadActive,
+  };
 }
