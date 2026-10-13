@@ -1,13 +1,11 @@
-import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { isPluginId, readManifestFile } from './manifest.ts';
 import type { ServiceRegistry } from './registry.ts';
 import type { PluginSummary } from './types.ts';
+import { extractZip, listZipEntryNames } from './zip-extract.ts';
 
-const execFileAsync = promisify(execFile);
 const MAX_ZIP_ENTRIES = 2000;
 
 export function assertZipEntriesSafe(entries: string[]): void {
@@ -35,12 +33,12 @@ export async function installPluginZip(options: {
     throw new Error('找不到插件压缩包');
   }
 
-  const entries = await listZipEntries(zipFilePath);
+  const entries = listZipEntryNames(zipFilePath);
   assertZipEntriesSafe(entries);
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-'));
   try {
-    await execFileAsync('unzip', ['-q', zipFilePath, '-d', tmpDir]);
+    await extractZip(zipFilePath, tmpDir);
     assertExtractedTree(tmpDir);
     const pluginRoot = findPluginRoot(tmpDir);
     const manifest = readManifestFile(pluginRoot);
@@ -67,22 +65,6 @@ export async function uninstallInstalledPlugin(options: {
   // 目录已经删掉才动配置。删除失败时上面的 rmSync 会抛出，配置块留着。
   options.registry.deletePluginSettings(options.id);
   return options.registry.getPluginList();
-}
-
-async function listZipEntries(zipFilePath: string): Promise<string[]> {
-  try {
-    const result = await execFileAsync('unzip', ['-Z1', zipFilePath], { maxBuffer: 10 * 1024 * 1024 });
-    return result.stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message.includes('ENOENT')) {
-      throw new Error('系统未找到 unzip，无法安装插件');
-    }
-    throw new Error('无法读取插件压缩包');
-  }
 }
 
 function findPluginRoot(extractedDir: string): string {

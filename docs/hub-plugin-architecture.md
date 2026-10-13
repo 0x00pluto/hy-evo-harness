@@ -16,7 +16,7 @@
 | 扫描根 | 只扫 `plugins/` 子目录 | 既扫「里面放多个插件的目录」，也扫「自身就有 manifest 的项目根」 |
 | 同名插件 | 已加载则跳过 | 扫描顺序固定：仓库 `plugins/`、未打包时的 `config.dev.json`、`userData/installed_plugins/`。先加载的保留 |
 | 开发挂载 | 软链接，或多目录扫描 | 两种都保留。外部路径写在已忽略的 `config.dev.json` → `extraPluginPaths` |
-| 安装包 | `adm-zip` 或 `unzipper` | 使用 macOS 自带 `unzip`，不增加解压依赖。解压前拒绝绝对路径和 `..` |
+| 安装包 | `adm-zip` 或 `unzipper` | 进程内用 Node `zlib` 解压，不增加解压依赖。解压前拒绝绝对路径和 `..` |
 | 卸载 | 未写界面 | 只有安装到用户目录的插件可卸载。内置示例和开发路径不能被安装包覆盖 |
 | 在线市场 | 作为商业化扩展写出 | 当前版本不做 |
 | 依赖 | 零框架，示例里出现解压库 | 运行时依赖为 Electron 与 electron-updater。插件后端保持 CommonJS。包管理用 pnpm |
