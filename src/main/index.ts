@@ -9,9 +9,16 @@ import { INSTALLED_PLUGINS_DIR_NAME, resolveHostDataPath } from './host-data.ts'
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
 import { LocalSession } from './local-session.ts';
 import { isHttpUrl } from './manifest.ts';
-import { pluginInstallPath } from './plugin-catalog.ts';
+import { pluginInstallPath, type PluginRelease } from './plugin-catalog.ts';
 import { downloadVerifiedZip, fetchPluginCatalog, findRelease, installCatalogRelease } from './plugin-market.ts';
 import { deleteOrigin, marketUpdates, readOrigins, writeOrigin } from './plugin-origins.ts';
+import {
+  createInstallLock,
+  createPluginSilentUpdates,
+  PLUGIN_SILENT_UPDATE_INTERVAL_MS,
+  type PluginSilentUpdates,
+  type SilentInstallResult,
+} from './plugin-silent-update.ts';
 import { exampleSettingIdsToDrop, PluginSettingsStore } from './plugin-settings.ts';
 import { ensurePluginProtocol, pluginPartition, registerPluginScheme } from './protocol.ts';
 import { ServiceRegistry } from './registry.ts';
@@ -23,6 +30,10 @@ registerPluginScheme();
 
 const registry = new ServiceRegistry();
 let localSession: LocalSession | null = null;
+const installLock = createInstallLock();
+let silentUpdates: PluginSilentUpdates | null = null;
+let silentTimer: ReturnType<typeof setInterval> | null = null;
+let reportedWatchingId: string | null = null;
 
 function session(): LocalSession {
   if (!localSession) throw new Error('本地目录还没准备好');
@@ -198,6 +209,9 @@ function createWindow(icon: NativeImage | null): void {
   });
   // 宿主页用 img 加载 app-plugin:// 图标。协议原先只挂在插件 partition 上，默认 session 也要有一份。
   ensurePluginProtocol(registry, '');
+  win.webContents.once('did-finish-load', () => {
+    startSilentPluginUpdates();
+  });
   void win.loadFile(path.join(app.getAppPath(), 'src/renderer/index.html'));
 }
 
@@ -223,13 +237,45 @@ async function installFromZip(zipFilePath: string): Promise<DexResult> {
   if (!zipFilePath.toLowerCase().endsWith('.zip')) {
     return { ok: false, message: '请选择 .zip 插件包', plugins: registry.getPluginList() };
   }
+  return installLock.run(async () => {
+    try {
+      const installed = await installPluginZip({
+        registry,
+        zipFilePath,
+        userPluginsDir: installedPluginsDir(),
+      });
+      recordFileOrigin(installed.installedId);
+      return { ok: true, plugins: installed.plugins, installedId: installed.installedId };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        plugins: registry.getPluginList(),
+      };
+    }
+  });
+}
+
+function isIgnoredInstall(value: DexResult | { ignored: true }): value is { ignored: true } {
+  return 'ignored' in value && value.ignored === true;
+}
+
+async function installKnownRelease(release: PluginRelease): Promise<SilentInstallResult> {
+  const zipFilePath = path.join(os.tmpdir(), `dex-buddy-catalog-${process.pid}.zip`);
   try {
-    const installed = await installPluginZip({
+    await downloadVerifiedZip(release, zipFilePath);
+    const installed = await installCatalogRelease({
       registry,
+      release,
       zipFilePath,
       userPluginsDir: installedPluginsDir(),
     });
-    recordFileOrigin(installed.installedId);
+    writeOrigin(pluginOriginsFile(), installed.installedId, {
+      channel: 'market',
+      version: release.version,
+      sha256: release.sha256,
+      installedAt: new Date().toISOString(),
+    });
     return { ok: true, plugins: installed.plugins, installedId: installed.installedId };
   } catch (err) {
     return {
@@ -237,7 +283,59 @@ async function installFromZip(zipFilePath: string): Promise<DexResult> {
       message: err instanceof Error ? err.message : String(err),
       plugins: registry.getPluginList(),
     };
+  } finally {
+    fs.rmSync(zipFilePath, { force: true });
   }
+}
+
+async function installCatalogById(id: string): Promise<DexResult> {
+  try {
+    const catalog = await fetchPluginCatalog();
+    const release = findRelease(catalog, id);
+    return installKnownRelease(release);
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+      plugins: registry.getPluginList(),
+    };
+  }
+}
+
+function startSilentPluginUpdates(): void {
+  if (silentUpdates) {
+    silentUpdates.setWatching(reportedWatchingId);
+    return;
+  }
+  silentUpdates = createPluginSilentUpdates({
+    async fetchCatalog() {
+      const catalog = await fetchPluginCatalog();
+      return { plugins: catalog.plugins };
+    },
+    readInstalled() {
+      return registry.getPluginList().map((plugin) => ({
+        id: plugin.id,
+        version: plugin.version,
+        source: plugin.source,
+      }));
+    },
+    readOrigins() {
+      return readOrigins(pluginOriginsFile());
+    },
+    installRelease(release) {
+      return installKnownRelease(release);
+    },
+    send(event) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('dex:plugin-silent-update', event);
+      }
+    },
+  }, installLock);
+  silentUpdates.setWatching(reportedWatchingId);
+  void silentUpdates.runRound();
+  silentTimer = setInterval(() => {
+    void silentUpdates?.runRound();
+  }, PLUGIN_SILENT_UPDATE_INTERVAL_MS);
 }
 
 function devConfigPath(): string {
@@ -427,37 +525,23 @@ function registerIpc(): void {
     }
   });
 
+  ipcMain.on('dex:set-watching-plugin', (_event, id: unknown) => {
+    reportedWatchingId = typeof id === 'string' && id.trim() !== '' ? id : null;
+    silentUpdates?.setWatching(reportedWatchingId);
+  });
+
   ipcMain.handle('dex:plugin-install-catalog', async (_event, id: unknown) => {
     if (typeof id !== 'string') {
       return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
     }
-    const zipFilePath = path.join(os.tmpdir(), `dex-buddy-catalog-${process.pid}.zip`);
-    try {
-      const catalog = await fetchPluginCatalog();
-      const release = findRelease(catalog, id);
-      await downloadVerifiedZip(release, zipFilePath);
-      const installed = await installCatalogRelease({
-        registry,
-        release,
-        zipFilePath,
-        userPluginsDir: installedPluginsDir(),
-      });
-      writeOrigin(pluginOriginsFile(), installed.installedId, {
-        channel: 'market',
-        version: release.version,
-        sha256: release.sha256,
-        installedAt: new Date().toISOString(),
-      });
-      return { ok: true, plugins: installed.plugins, installedId: installed.installedId };
-    } catch (err) {
-      return {
-        ok: false,
-        message: err instanceof Error ? err.message : String(err),
-        plugins: registry.getPluginList(),
-      };
-    } finally {
-      fs.rmSync(zipFilePath, { force: true });
+    const outcome = await installLock.tryRun(() => {
+      silentUpdates?.noteManualInstall(id);
+      return installCatalogById(id);
+    });
+    if (isIgnoredInstall(outcome)) {
+      return { ok: false, ignored: true, plugins: registry.getPluginList() };
     }
+    return outcome;
   });
 
   ipcMain.handle('dex:retry-plugin-runtime', async (_event, id: unknown) => {
@@ -483,21 +567,24 @@ function registerIpc(): void {
     if (typeof id !== 'string') {
       return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
     }
-    try {
-      const plugins = await uninstallInstalledPlugin({
-        registry,
-        id,
-        userPluginsDir: installedPluginsDir(),
-      });
-      deleteOrigin(pluginOriginsFile(), id);
-      return { ok: true, plugins };
-    } catch (err) {
-      return {
-        ok: false,
-        message: err instanceof Error ? err.message : String(err),
-        plugins: registry.getPluginList(),
-      };
-    }
+    silentUpdates?.cancel(id);
+    return installLock.run(async () => {
+      try {
+        const plugins = await uninstallInstalledPlugin({
+          registry,
+          id,
+          userPluginsDir: installedPluginsDir(),
+        });
+        deleteOrigin(pluginOriginsFile(), id);
+        return { ok: true, plugins };
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+          plugins: registry.getPluginList(),
+        };
+      }
+    });
   });
 
   ipcMain.handle('dex:load-unpacked-directory', async () => {
@@ -609,4 +696,11 @@ app.on('activate', () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  if (silentTimer) {
+    clearInterval(silentTimer);
+    silentTimer = null;
+  }
 });

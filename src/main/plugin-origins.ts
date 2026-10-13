@@ -69,6 +69,41 @@ export function marketUpdates(options: {
   return notices;
 }
 
+export interface SilentUpdatePlan {
+  install: string[];
+  defer: string[];
+}
+
+/** UTF-16 码元序，不用本地化比较，避免同一批 id 在不同机器上顺序不同。 */
+export function comparePluginId(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+export function planSilentPluginUpdates(options: {
+  catalog: PluginRelease[];
+  origins: Record<string, PluginOriginRecord>;
+  installed: Array<{ id: string; version: string; source: string }>;
+  watchingId: string | null;
+}): SilentUpdatePlan {
+  const watching = options.watchingId && options.watchingId.trim() !== '' ? options.watchingId : null;
+  const install: string[] = [];
+  const defer: string[] = [];
+  for (const notice of marketUpdates(options)) {
+    if (watching === notice.id) defer.push(notice.id);
+    else install.push(notice.id);
+  }
+  return {
+    install: uniqueSorted(install),
+    defer: uniqueSorted(defer),
+  };
+}
+
+function uniqueSorted(ids: string[]): string[] {
+  return [...new Set(ids)].sort(comparePluginId);
+}
+
 function parseOrigin(id: string, value: unknown): PluginOriginRecord | null {
   if (!isPluginId(id) || !value || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;

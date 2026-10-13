@@ -24,11 +24,23 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   const marketEntry = document.getElementById('plugins-market-entry');
 
   let busy = false;
+  let silentBusy = false;
   let busyId = null;
   let menuHost = null;
   let catalogPlugins = [];
   let updates = [];
   let marketError = '';
+
+  function isBusy() {
+    return busy || silentBusy;
+  }
+
+  function releaseLocalBusy() {
+    busy = false;
+    if (silentBusy) return;
+    busyId = null;
+    addBtn.disabled = false;
+  }
 
   function setStatus(message, kind) {
     statusEl.textContent = message || '';
@@ -511,7 +523,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     const local = installedPlugin(plugin.id);
     const card = document.createElement('article');
     card.className = 'market-card';
-    const installing = busy && busyId === plugin.id;
+    const installing = isBusy() && busyId === plugin.id;
     if (installing) card.classList.add('market-card-installing');
     const iconSource = { iconUrl: plugin.iconUrl || (local && local.iconUrl), displayName: plugin.displayName };
     card.appendChild(pluginMark(iconSource, 'market'));
@@ -556,7 +568,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     button.type = 'button';
     button.className = 'plugin-icon-btn';
     button.setAttribute('aria-label', `安装${plugin.displayName}`);
-    button.disabled = busy;
+    button.disabled = isBusy();
     const icon = document.createElement('i');
     icon.dataset.lucide = 'plus';
     button.appendChild(icon);
@@ -590,7 +602,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   }
 
   async function installFromCatalog(pluginId, kind) {
-    if (busy) return;
+    if (isBusy()) return;
     busy = true;
     busyId = pluginId;
     addBtn.disabled = true;
@@ -598,13 +610,12 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       chrome.enterPlugins();
       if (kind === 'update') plugins.releaseView(pluginId);
       const result = await window.dex.installCatalogPlugin(pluginId);
+      if (result && result.ignored) return;
       await finishInstall(result, kind);
     } catch (err) {
       showToast(err instanceof Error ? err.message : '安装失败', 'error');
     } finally {
-      busy = false;
-      busyId = null;
-      addBtn.disabled = false;
+      releaseLocalBusy();
       const session = chrome.session();
       if (session && session.surface === 'plugins') sync(session);
       await refreshCatalog();
@@ -650,10 +661,10 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   }
 
   async function finishInstall(result, kind) {
-    if (result.cancelled) return;
+    if (result.cancelled || result.ignored) return;
     if (!result.ok) {
       showToast(result.message || '安装失败', 'error');
-      if (result.plugins) await plugins.refresh(result.plugins);
+      if (Array.isArray(result.plugins)) await plugins.refresh(result.plugins);
       return;
     }
     if (result.installedId) plugins.releaseView(result.installedId);
@@ -664,8 +675,42 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       showToast(installed.runtimeError, 'error');
       return;
     }
-    const name = installed ? installed.displayName : '插件';
+    const name = installed && installed.displayName ? installed.displayName : '插件';
     showToast(kind === 'update' ? `「${name}」已更新` : `「${name}」已安装`, 'ok');
+  }
+
+  async function onSilentUpdate(event) {
+    if (!event || typeof event !== 'object') return;
+    if (event.phase === 'start') {
+      silentBusy = true;
+      busyId = event.id;
+      addBtn.disabled = true;
+      plugins.releaseView(event.id);
+      const session = chrome.session();
+      if (session && session.surface === 'plugins') sync(session);
+      return;
+    }
+    if (event.phase === 'result') {
+      await finishInstall({
+        ok: event.ok,
+        message: event.message,
+        plugins: event.plugins,
+        installedId: event.installedId,
+        ignored: false,
+      }, 'update');
+      if (!event.ok) plugins.reopenIfWatching(event.id);
+      return;
+    }
+    if (event.phase === 'idle') {
+      silentBusy = false;
+      if (!busy) {
+        busyId = null;
+        addBtn.disabled = false;
+        const session = chrome.session();
+        if (session && session.surface === 'plugins') sync(session);
+      }
+      await refreshCatalog();
+    }
   }
 
   async function retryRuntime(pluginId) {
@@ -720,7 +765,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
 
   if (window.dex.onRuntimeProgress) {
     window.dex.onRuntimeProgress((event) => {
-      if (busy) return;
+      if (isBusy()) return;
       if (event && event.phase === 'preparing') setStatus('正在准备运行环境');
     });
   }
@@ -771,7 +816,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   }
 
   async function pickZip() {
-    if (busy) return;
+    if (isBusy()) return;
     busy = true;
     busyId = null;
     addBtn.disabled = true;
@@ -783,9 +828,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     } catch (err) {
       showToast(err instanceof Error ? err.message : '安装失败', 'error');
     } finally {
-      busy = false;
-      busyId = null;
-      addBtn.disabled = false;
+      releaseLocalBusy();
       const current = chrome.session();
       if (current && current.surface === 'plugins') sync(current);
       await refreshCatalog();
@@ -793,7 +836,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   }
 
   async function loadUnpacked() {
-    if (busy) return;
+    if (isBusy()) return;
     busy = true;
     addBtn.disabled = true;
     try {
@@ -810,8 +853,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     } catch (err) {
       showToast(err instanceof Error ? err.message : '加载失败', 'error');
     } finally {
-      busy = false;
-      addBtn.disabled = false;
+      releaseLocalBusy();
       const current = chrome.session();
       if (current && current.surface === 'plugins') sync(current);
     }
@@ -835,7 +877,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   addBtn.addEventListener('click', () => {
     const wasOpen = menuHost === addWrap && !addMenu.hidden;
     closeMenu();
-    if (wasOpen || busy) return;
+    if (wasOpen || isBusy()) return;
     placeMenu(addBtn, addMenu);
     addBtn.setAttribute('aria-expanded', 'true');
     menuHost = addWrap;
@@ -860,6 +902,12 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     if (menuHost.contains(target)) return;
     closeMenu();
   });
+
+  if (window.dex.onPluginSilentUpdate) {
+    window.dex.onPluginSilentUpdate((event) => {
+      void onSilentUpdate(event);
+    });
+  }
 
   return {
     sync,

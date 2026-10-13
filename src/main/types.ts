@@ -169,4 +169,6 @@ export interface DexResult {
   installedId?: string;
   /** 本地目录加载后要定位的实例 id。 */
   focusedId?: string;
+  /** 安装锁被占用。点击被忽略，界面不要当成失败 toast。 */
+  ignored?: boolean;
 }

@@ -50,6 +50,15 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
   let session = createChromeSession();
   let popoverOpen = false;
   let closeTimer = 0;
+  let reportedWatching;
+
+  function reportWatching() {
+    const watching = session.surface === 'workspace' && shell.activeId ? shell.activeId : null;
+    if (watching === reportedWatching) return;
+    reportedWatching = watching;
+    if (!window.dex.setWatchingPlugin) return;
+    window.dex.setWatchingPlugin(watching);
+  }
 
   function floating() {
     return !session.pinned && session.surface === 'workspace';
@@ -82,6 +91,7 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     }
     if (!workspace) setPopover(false);
     pluginsPage.sync(session);
+    reportWatching();
   }
 
   function workspacePluginName() {

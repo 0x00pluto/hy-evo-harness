@@ -13,3 +13,4 @@
 - `specs/prds/prd-00007-load-unpacked-plugin.md`：00007，已安装的 Dex Buddy 可从插件页加载本地插件目录；本地实例按目录路径生成独立 id，配置与数据与线上插件隔离；另可按插件中心规则做发布预览。工程 partial
 - `specs/prds/prd-00008-unbundle-example-plugins.md`：00008，安装包不再带 `plugins/` 里的两份示例；只有未打包的 `pnpm start` 才加载，界面标为示例，并在升级时按条件清掉样品设置。工程 accepted
 - `specs/prds/prd-00009-plugin-view-keepalive.md`：00009，侧栏互切以及从插件页或设置页回来时保持插件界面；隐藏页降频，硬上限 5 再按可用内存缩到 3 或 1，最久未用的隐藏页被拆掉。工程 accepted
+- `specs/prds/prd-00010-plugin-silent-update.md`：00010，从插件市场安装的插件在启动时和每 6 小时静默更新；正在看的那个离开后再装。手动更新仍留在市场菜单。工程 accepted

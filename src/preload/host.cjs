@@ -57,6 +57,14 @@ contextBridge.exposeInMainWorld('dex', {
   installCatalogPlugin(id) {
     return ipcRenderer.invoke('dex:plugin-install-catalog', id);
   },
+  setWatchingPlugin(id) {
+    ipcRenderer.send('dex:set-watching-plugin', id);
+  },
+  onPluginSilentUpdate(callback) {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('dex:plugin-silent-update', listener);
+    return () => ipcRenderer.removeListener('dex:plugin-silent-update', listener);
+  },
   settingsCatalog() {
     return ipcRenderer.invoke('dex:settings-catalog');
   },
