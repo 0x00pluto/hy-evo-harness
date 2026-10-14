@@ -583,6 +583,10 @@ body[data-surface="settings"] .split-section {
   color: var(--muted);
 }
 
+#plugin-nav .nav-meta.is-danger {
+  color: var(--danger);
+}
+
 .nav-hover-card {
   position: fixed;
   z-index: 30;
@@ -617,13 +621,6 @@ body[data-surface="settings"] .split-section {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.nav-hover-row .nav-hover-source {
-  flex: none;
-  min-width: auto;
-  overflow: visible;
-  text-overflow: clip;
 }
 
 .nav-hover-name {
@@ -704,7 +701,8 @@ body[data-surface="settings"] .split-section {
 }
 
 #update-later,
-#settings-discard-stay {
+#settings-discard-stay,
+#tool-install-later {
   border: 0;
   border-radius: 8px;
   padding: 6px 8px;
@@ -740,7 +738,10 @@ body[data-surface="settings"] .split-section {
 #update-later:focus-visible,
 #update-confirm:focus-visible,
 #settings-discard-stay:focus-visible,
-#settings-discard-confirm:focus-visible {
+#settings-discard-confirm:focus-visible,
+#tool-install-later:focus-visible,
+#tool-install-copy:focus-visible,
+.plugin-install-copy:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -801,7 +802,8 @@ h1 {
 }
 
 #update-dialog h2,
-#settings-discard-dialog h2 {
+#settings-discard-dialog h2,
+#tool-install-dialog h2 {
   margin: 0 0 8px;
   font-size: var(--text-page);
   font-weight: 600;
@@ -968,7 +970,8 @@ h1 {
 
 #plugins-use,
 #plugins-update,
-#open-market {
+#open-market,
+.plugin-install-copy {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -984,7 +987,8 @@ h1 {
 
 #plugins-use:hover,
 #plugins-update:hover,
-#open-market:hover { background: #e8e8e8; }
+#open-market:hover,
+.plugin-install-copy:hover { background: #e8e8e8; }
 
 #plugins-market-list {
   container-type: inline-size;
@@ -1611,7 +1615,8 @@ h1 {
 }
 
 #update-dialog,
-#settings-discard-dialog {
+#settings-discard-dialog,
+#tool-install-dialog {
   border: 1px solid var(--line);
   border-radius: 20px;
   padding: 24px;
@@ -1650,7 +1655,8 @@ h1 {
 }
 
 #update-dialog::backdrop,
-#settings-discard-dialog::backdrop {
+#settings-discard-dialog::backdrop,
+#tool-install-dialog::backdrop {
   background: rgba(23, 23, 23, 0.28);
 }
 
@@ -1668,12 +1674,47 @@ h1 {
 }
 
 #update-later,
-#settings-discard-stay {
+#settings-discard-stay,
+#tool-install-later {
   color: var(--muted);
 }
 
 #update-later:hover,
-#settings-discard-stay:hover { background: var(--hover); }
+#settings-discard-stay:hover,
+#tool-install-later:hover { background: var(--hover); }
+
+#tool-install-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+#tool-install-body {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: var(--text-ui);
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.plugin-install-note {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plugin-install-note .settings-error {
+  margin: 0;
+  flex: 1;
+}
+
+.plugin-install-copy {
+  flex: none;
+  white-space: nowrap;
+}
 
 .primary,
 #update-confirm {

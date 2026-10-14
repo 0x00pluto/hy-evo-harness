@@ -3,6 +3,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { Module } from 'node:module';
 import { readManifestFile } from './manifest.ts';
+import { prepareExternalTools, prependToolDirs } from './external-tools.ts';
 import {
   pluginRuntimeDir,
   preparePluginRuntime,
@@ -61,17 +62,27 @@ interface RuntimeProblem {
   sourcePath?: string;
   source: PluginSource;
   message: string;
+  /** 外部命令缺失时的可复制说明。解析错误没有这一项。 */
+  installPrompt?: string;
   localFrom?: LocalRecord['from'];
   mount?: LocalMountMode;
   /** 发布预览失败。列表用 previewError，而不是运行环境错误。 */
   preview?: boolean;
 }
 
+export interface RuntimeProgress {
+  id: string;
+  phase: 'preparing';
+  /** 正在准备的外部命令。解释器阶段没有这一项。 */
+  bin?: string;
+}
+
 export interface RuntimeHost {
   userData: string;
   run?: CommandRunner;
   tools?: RuntimeTools;
-  onProgress?: (event: { id: string; phase: 'preparing' }) => void;
+  onProgress?: (event: RuntimeProgress) => void;
+  lookup?: (name: string, pathEnv: string, platform: NodeJS.Platform) => string | null;
 }
 
 export class ServiceRegistry {
@@ -88,6 +99,7 @@ export class ServiceRegistry {
   private commandRun: CommandRunner | undefined;
   private runtimeTools: RuntimeTools | undefined;
   private onRuntimeProgress: RuntimeHost['onProgress'];
+  private lookupTool: RuntimeHost['lookup'];
   private originChannel: (id: string) => 'market' | 'file' | undefined = () => undefined;
   readonly logger: Logger;
 
@@ -111,6 +123,7 @@ export class ServiceRegistry {
     this.commandRun = host.run;
     this.runtimeTools = host.tools;
     this.onRuntimeProgress = host.onProgress;
+    this.lookupTool = host.lookup;
   }
 
   /** 卸载时丢掉这个插件的依赖和缓存。用户数据目录留给下次安装。 */
@@ -224,6 +237,11 @@ export class ServiceRegistry {
       this.failLocal(input.record, prepared.message, input.pluginDir, manifest);
       return prepared.message;
     }
+    const tools = await this.prepareDeclaredTools(id, manifest);
+    if (!tools.ok) {
+      this.failLocal(input.record, tools.message, input.pluginDir, manifest, tools.installPrompt);
+      return tools.message;
+    }
 
     let pluginModule: { apply: AppPlugin['apply']; dispose?: AppPlugin['dispose'] };
     try {
@@ -247,6 +265,8 @@ export class ServiceRegistry {
       dispose: pluginModule.dispose,
       dirs: prepared.dirs,
       runtimeBins: prepared.bins,
+      toolBins: tools.bins,
+      toolDirs: tools.dirs,
     };
     try {
       await this.loadPlugin(plugin);
@@ -390,14 +410,12 @@ export class ServiceRegistry {
         : undefined,
     });
     if (!prepared.ok) {
-      this.problems.set(manifest.id, {
-        registryId: manifest.id,
-        manifest,
-        absPath: path.resolve(pluginDir),
-        source,
-        message: prepared.message,
-      });
-      this.logger.error(`插件 ${manifest.id} 的运行环境未就绪: ${prepared.message}`);
+      this.noteRuntimeProblem(manifest.id, manifest, pluginDir, source, prepared.message);
+      return;
+    }
+    const tools = await this.prepareDeclaredTools(manifest.id, manifest);
+    if (!tools.ok) {
+      this.noteRuntimeProblem(manifest.id, manifest, pluginDir, source, tools.message, tools.installPrompt);
       return;
     }
     const pluginModule = this.loadModule(pluginDir, manifest.main);
@@ -409,6 +427,8 @@ export class ServiceRegistry {
       dispose: pluginModule.dispose,
       dirs: prepared.dirs,
       runtimeBins: prepared.bins,
+      toolBins: tools.bins,
+      toolDirs: tools.dirs,
     };
     await this.loadPlugin(plugin);
   }
@@ -497,12 +517,18 @@ export class ServiceRegistry {
         this.trackListener(owned, event, handler);
       },
       getPluginConfig: () => this.settings.getPluginConfig(plugin.manifest, id),
-      pluginEnv: () => this.settings.pluginEnv(plugin.manifest, process.env, id),
+      pluginEnv: () => {
+        const configEnv = this.settings.pluginEnv(plugin.manifest, process.env, id);
+        // 声明了 runtime 时，命令目录写在 runtime.env，避免作者拿错环境。
+        if (plugin.runtimeBins) return configEnv;
+        return prependToolDirs(configEnv, plugin.toolDirs ?? []);
+      },
       dirs: plugin.dirs ?? {
         data: plugin.absPath,
         cache: path.join(plugin.absPath, 'cache'),
       },
       ...runtimeBinding(plugin, () => this.settings.pluginEnv(plugin.manifest, process.env, id)),
+      ...(plugin.toolBins ? { tools: { ...plugin.toolBins } } : {}),
     };
   }
 
@@ -564,11 +590,48 @@ export class ServiceRegistry {
     return created;
   }
 
+  private async prepareDeclaredTools(
+    id: string,
+    manifest: PluginManifest,
+  ): Promise<{ ok: true; bins?: Record<string, string>; dirs?: string[] } | { ok: false; message: string; installPrompt?: string }> {
+    if (manifest.externalToolsError) return { ok: false, message: manifest.externalToolsError };
+    if (!manifest.externalTools || manifest.externalTools.length === 0) return { ok: true };
+    const prepared = await prepareExternalTools({
+      tools: manifest.externalTools,
+      platform: process.platform,
+      pathEnv: process.env.PATH ?? process.env.Path ?? '',
+      lookup: this.lookupTool,
+      onProgress: (bin) => this.onRuntimeProgress?.({ id, phase: 'preparing', bin }),
+    });
+    if (!prepared.ok) return prepared;
+    return { ok: true, bins: prepared.bins, dirs: prepared.dirs };
+  }
+
+  private noteRuntimeProblem(
+    registryId: string,
+    manifest: PluginManifest,
+    pluginDir: string,
+    source: PluginSource,
+    message: string,
+    installPrompt?: string,
+  ): void {
+    this.problems.set(registryId, {
+      registryId,
+      manifest,
+      absPath: path.resolve(pluginDir),
+      source,
+      message,
+      installPrompt,
+    });
+    this.logger.error(`插件 ${manifest.id} 的运行环境未就绪: ${message}`);
+  }
+
   private failLocal(
     record: LocalRecord,
     message: string,
     pluginDir: string,
     manifest?: PluginManifest,
+    installPrompt?: string,
   ): void {
     const failedMount: LocalMountMode = record.mount === 'source' ? 'source' : 'preview-failed';
     const next: LocalRecord = {
@@ -598,6 +661,7 @@ export class ServiceRegistry {
       localFrom: record.from,
       mount: failedMount,
       message,
+      installPrompt,
       preview: failedMount === 'preview-failed',
     });
     this.logger.error(`插件 ${parsed.id} 未能挂载: ${message}`);
@@ -628,11 +692,12 @@ function runtimeBinding(
 ): { runtime: AppContext['runtime'] } | Record<string, never> {
   if (!plugin.runtimeBins) return {};
   const bins = plugin.runtimeBins;
+  const toolDirs = plugin.toolDirs ?? [];
   return {
     runtime: {
       ...bins,
       get env() {
-        return runtimeEnv(pluginEnv(), bins);
+        return runtimeEnv(prependToolDirs(pluginEnv(), toolDirs), bins);
       },
     },
   };
@@ -649,12 +714,14 @@ function summarizeProblem(problem: RuntimeProblem): PluginSummary {
     mount: problem.mount,
     apply: () => {},
   });
+  if (problem.installPrompt) summary.installPrompt = problem.installPrompt;
   if (problem.preview) {
     summary.previewError = problem.message;
     summary.mount = 'preview-failed';
     return summary;
   }
-  return { ...summary, runtimeError: problem.message };
+  summary.runtimeError = problem.message;
+  return summary;
 }
 
 function summarizePlugin(plugin: AppPlugin): PluginSummary {

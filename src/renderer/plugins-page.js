@@ -22,8 +22,14 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   const marketPane = document.getElementById('plugins-market');
   const marketList = document.getElementById('plugins-market-list');
   const marketEntry = document.getElementById('plugins-market-entry');
+  const installDialog = document.getElementById('tool-install-dialog');
+  const installTitle = document.getElementById('tool-install-title');
+  const installBody = document.getElementById('tool-install-body');
+  const installLater = document.getElementById('tool-install-later');
+  const installCopy = document.getElementById('tool-install-copy');
 
   let busy = false;
+  let installPromptShownFor = null;
   let silentBusy = false;
   let busyId = null;
   let menuHost = null;
@@ -406,7 +412,30 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       const error = document.createElement('p');
       error.className = 'settings-error';
       error.textContent = notice;
-      detail.appendChild(error);
+      if (installPromptOf(plugin)) {
+        const note = document.createElement('div');
+        note.className = 'plugin-install-note';
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'plugin-install-copy';
+        copy.textContent = '一键复制给大模型安装环境';
+        copy.addEventListener('click', () => {
+          void copyInstallPrompt(plugin.installPrompt);
+        });
+        note.append(error, copy);
+        detail.appendChild(note);
+      } else {
+        detail.appendChild(error);
+      }
+    }
+    if (installPromptOf(plugin)) {
+      if (installPromptShownFor !== plugin.id) {
+        installPromptShownFor = plugin.id;
+        openInstallDialog(plugin);
+      }
+    } else if (installPromptShownFor === plugin.id) {
+      installPromptShownFor = null;
+      if (installDialog && installDialog.open) installDialog.close();
     }
 
     const section = document.createElement('div');
@@ -457,6 +486,8 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       renderDetail(plugin);
       return;
     }
+    installPromptShownFor = null;
+    if (installDialog && installDialog.open) installDialog.close();
     if (session.pluginsFocus) {
       chrome.enterPlugins();
       return;
@@ -713,6 +744,33 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     }
   }
 
+  function installPromptOf(plugin) {
+    return plugin && typeof plugin.installPrompt === 'string' && plugin.installPrompt !== ''
+      ? plugin.installPrompt
+      : '';
+  }
+
+  function openInstallDialog(plugin) {
+    const prompt = installPromptOf(plugin);
+    if (!prompt || !installDialog || !installTitle || !installBody) return;
+    installTitle.textContent = '把下面这段复制给 Codex 或 Workbuddy，并让它执行';
+    installBody.textContent = prompt;
+    if (!installDialog.open) installDialog.showModal();
+  }
+
+  async function copyInstallPrompt(text) {
+    if (typeof text !== 'string' || text === '' || !window.dex.copyText) {
+      setStatus('无法复制', 'error');
+      return;
+    }
+    try {
+      const result = await window.dex.copyText(text);
+      if (!result || !result.ok) setStatus('无法复制', 'error');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : '无法复制', 'error');
+    }
+  }
+
   async function retryRuntime(pluginId) {
     setStatus('正在准备运行环境');
     try {
@@ -720,6 +778,8 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       if (!result.ok) {
         setStatus(result.message || '运行环境未就绪', 'error');
         if (result.plugins) await plugins.refresh(result.plugins);
+        const plugin = (result.plugins || shell.plugins).find((item) => item.id === pluginId);
+        if (installPromptOf(plugin)) openInstallDialog(plugin);
         return;
       }
       setStatus('运行环境已就绪', 'ok');
@@ -763,10 +823,24 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     chrome.enterPlugins();
   });
 
+  if (installLater) {
+    installLater.addEventListener('click', () => {
+      if (installDialog) installDialog.close();
+    });
+  }
+  if (installCopy) {
+    installCopy.addEventListener('click', () => {
+      void copyInstallPrompt(installBody ? installBody.textContent : '');
+    });
+  }
+
   if (window.dex.onRuntimeProgress) {
     window.dex.onRuntimeProgress((event) => {
       if (isBusy()) return;
-      if (event && event.phase === 'preparing') setStatus('正在准备运行环境');
+      if (event && event.phase === 'preparing') {
+        const bin = typeof event.bin === 'string' && event.bin.trim() !== '' ? `：${event.bin.trim()}` : '';
+        setStatus(`正在准备运行环境${bin}`);
+      }
     });
   }
 

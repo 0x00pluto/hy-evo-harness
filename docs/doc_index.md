@@ -11,7 +11,7 @@
 - `docs/plugin-development/manifest.md`: plugin.manifest.json 字段与图标尺寸、画布、格式
 - `docs/plugin-development/settings.md`: configSchema、分组、密钥输入与眼睛、settingsEntry、pluginEnv
 - `docs/plugin-development/data.md`: 插件页加载的本地实例数据仍在仓库，设置和 plugin-data 用实例 id，与清单 id 隔离；装进 installed_plugins 之后 ctx.dirs 分开，卸载只删运行环境和缓存
-- `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node，页面仍用 dex.call；子进程 PATH 含用户 shell 里已安装的命令
+- `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node；externalTools 在 apply 前只查 PATH，缺了给可复制的安装说明，ctx.tools 给绝对路径；未声明的命令仍靠本机 PATH
 - `docs/plugin-development/pack.md`: 插件中心打包：宿主默认丢掉密钥和虚拟环境；dex-buddy-plugin.pack 指定要装的路径，dex-buddy-plugin.ignore 再挖掉
 - `docs/plugin-development/ship.md`: 插件页加载本地目录、zip 拖进工作台安装，以及会加载失败的情况
 - `docs/plugin-development/distribute.md`: 插件作者发到插件中心：仓库进授权名单后只推 tag；zip 按 pack.md 从 tag 里取；runtime 在清单里声明，不再用 dex-buddy-plugin-pack.json 打三端二进制

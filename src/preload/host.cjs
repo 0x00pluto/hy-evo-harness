@@ -89,6 +89,9 @@ contextBridge.exposeInMainWorld('dex', {
   generalSettings() {
     return ipcRenderer.invoke('dex:general-settings');
   },
+  copyText(text) {
+    return ipcRenderer.invoke('dex:copy-text', text);
+  },
   openHostData(kind) {
     return ipcRenderer.invoke('dex:open-host-data', kind);
   },

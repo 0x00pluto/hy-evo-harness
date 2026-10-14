@@ -4,6 +4,8 @@ import type {
   ConfigField,
   ConfigFieldType,
   ConfigSchema,
+  ExternalToolGuideByPlatform,
+  ExternalToolSpec,
   PluginConfigValue,
   PluginManifest,
   PluginRuntimeSpec,
@@ -19,6 +21,8 @@ const CATALOG_TEXT = [
   { key: 'category', max: 32 },
 ] as const;
 const CATALOG_URLS = ['website', 'privacyPolicy', 'termsOfService'] as const;
+const TOOL_BIN_PATTERN = /^[A-Za-z0-9._-]+$/;
+const TOOL_FIELDS = new Set(['bin', 'extraBins', 'guide']);
 
 /** 只接受带主机名的 http(s)。目录字段另有长度限制，打开外链不再卡这层。 */
 export function isHttpUrl(value: string): boolean {
@@ -72,6 +76,7 @@ export function parseManifest(value: unknown): PluginManifest {
   }
   const parsedSchema = parseConfigSchema(raw.configSchema);
   const runtime = parseRuntime(raw.runtime);
+  const external = parseExternalTools(raw.externalTools);
   const catalog = parseCatalog(raw);
   const manifest: PluginManifest = {
     id: raw.id,
@@ -86,6 +91,8 @@ export function parseManifest(value: unknown): PluginManifest {
   if (parsedSchema.schema) manifest.configSchema = parsedSchema.schema;
   if (parsedSchema.error) manifest.configSchemaError = parsedSchema.error;
   if (runtime) manifest.runtime = runtime;
+  if (external.tools) manifest.externalTools = external.tools;
+  if (external.error) manifest.externalToolsError = external.error;
   if (catalog.error) manifest.catalogError = catalog.error;
   return manifest;
 }
@@ -199,6 +206,102 @@ function parseRuntimePath(
     throw new Error(`manifest.runtime.${group}.${field} 必须是插件目录内的相对路径`);
   }
   return file;
+}
+
+function parseExternalTools(value: unknown): { tools?: ExternalToolSpec[]; error?: string } {
+  if (value === undefined) return {};
+  if (!Array.isArray(value)) return { error: 'externalTools 必须是数组' };
+  if (value.length === 0) return {};
+  const tools: ExternalToolSpec[] = [];
+  const seen = new Set<string>();
+  for (let index = 0; index < value.length; index += 1) {
+    const parsed = parseExternalTool(index, value[index]);
+    if (typeof parsed === 'string') return { error: parsed };
+    if (seen.has(parsed.bin)) return { error: `${toolLabel(index, parsed.bin)} 与前面的命令重复` };
+    seen.add(parsed.bin);
+    tools.push(parsed);
+  }
+  return { tools };
+}
+
+function parseExternalTool(index: number, value: unknown): ExternalToolSpec | string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return `${toolLabel(index)} 必须是对象`;
+  }
+  const raw = value as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (!TOOL_FIELDS.has(key)) return `${toolLabel(index, readBin(raw.bin))} 含未知字段 ${key}`;
+  }
+  const bin = parseToolBin(raw.bin);
+  if (typeof bin !== 'string') return `${toolLabel(index)} 的 bin ${bin.error}`;
+  const label = toolLabel(index, bin);
+  const spec: ExternalToolSpec = { bin };
+
+  if (raw.extraBins !== undefined) {
+    const extra = parseExtraBins(label, bin, raw.extraBins);
+    if (typeof extra === 'string') return extra;
+    if (extra.length > 0) spec.extraBins = extra;
+  }
+  if (raw.guide !== undefined) {
+    const guide = parseGuide(raw.guide);
+    if ('error' in guide) return `${label} 的 guide ${guide.error}`;
+    spec.guide = guide.guide;
+  }
+  return spec;
+}
+
+function toolLabel(index: number, bin?: string): string {
+  return bin ? `externalTools[${index}]（${bin}）` : `externalTools[${index}]`;
+}
+
+function readBin(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+}
+
+function parseToolBin(value: unknown): string | { error: string } {
+  if (typeof value !== 'string') return { error: '无效' };
+  const trimmed = value.trim();
+  if (!TOOL_BIN_PATTERN.test(trimmed) || trimmed === '.' || trimmed === '..') return { error: '无效' };
+  return trimmed;
+}
+
+function parseExtraBins(label: string, bin: string, value: unknown): string[] | string {
+  if (!Array.isArray(value)) return `${label} 的 extraBins 必须是数组`;
+  const names: string[] = [];
+  const seen = new Set<string>([bin]);
+  for (const item of value) {
+    const parsed = parseToolBin(item);
+    if (typeof parsed !== 'string') return `${label} 的 extraBins 含无效命令名`;
+    if (seen.has(parsed)) return `${label} 的 extraBins 与已有命令重复`;
+    seen.add(parsed);
+    names.push(parsed);
+  }
+  return names;
+}
+
+function parseGuide(value: unknown): { guide: string | ExternalToolGuideByPlatform } | { error: string } {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!isHttpUrl(trimmed)) return { error: '必须是带主机名的 http(s)' };
+    return { guide: trimmed };
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { error: '必须是链接或按系统分开的对象' };
+  }
+  const raw = value as Record<string, unknown>;
+  const guide: ExternalToolGuideByPlatform = {};
+  for (const key of Object.keys(raw)) {
+    if (key !== 'darwin' && key !== 'win32') return { error: `含未知字段 ${key}` };
+  }
+  for (const key of ['darwin', 'win32'] as const) {
+    if (raw[key] === undefined) continue;
+    if (typeof raw[key] !== 'string' || !isHttpUrl((raw[key] as string).trim())) {
+      return { error: '必须是带主机名的 http(s)' };
+    }
+    guide[key] = (raw[key] as string).trim();
+  }
+  if (!guide.darwin && !guide.win32) return { error: '必须是带主机名的 http(s)' };
+  return { guide };
 }
 
 function parseConfigSchema(value: unknown): { schema?: ConfigSchema; error?: string } {

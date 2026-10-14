@@ -8,7 +8,7 @@
 
 工作台不读 `.env`，也不替你写 `.env`。脚本本身只认环境变量，不引用 Dex Buddy：
 
-- 在工作台里跑：声明了 `runtime` 时，用 `ctx.runtime.python` 或 `ctx.runtime.node`，环境传 `{ env: ctx.runtime.env }`。没有声明运行时，才传 `{ env: ctx.pluginEnv() }`。设置页里的值在这两种环境里都有。虚拟环境和 `PATH` 只在 `ctx.runtime.env` 里。
+- 在工作台里跑：声明了 `runtime` 时，用 `ctx.runtime.python` 或 `ctx.runtime.node`，环境传 `{ env: ctx.runtime.env }`。没有声明运行时，才传 `{ env: ctx.pluginEnv() }`。设置页里的值在这两种环境里都有。虚拟环境在 `ctx.runtime.env` 里。声明了 `externalTools` 且没有 `runtime` 时，这些命令的目录在 `pluginEnv()` 的 PATH 前面；声明了 `runtime` 时在 `ctx.runtime.env` 里。
 - 离开工作台单独跑：脚本自己加载项目里的 `.env`。已有的环境变量优先，这样工作台注入的值不会被 `.env` 盖掉。
 
 `.env` 可以留在你自己的仓库里做本地调试，不要打进 zip。

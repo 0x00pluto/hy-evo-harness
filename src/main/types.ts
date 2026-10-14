@@ -43,11 +43,15 @@ export interface AppContext {
   getPluginConfig: () => PluginConfig;
   /**
    * 给子进程的环境变量副本：先复制宿主环境，再盖上本插件配置的字符串形式。
-   * 不修改宿主 process.env。
+   * 不修改宿主 process.env。没有 runtime、但准备了外部命令时，PATH 前面还有这些命令的目录。
    */
   pluginEnv: () => NodeJS.ProcessEnv;
   /** 用户数据与可重建缓存。已安装插件分别在 plugin-data 与 plugin-runtime。 */
   dirs: PluginDirs;
+  /**
+   * 清单声明了 externalTools 且准备成功时才有。键是 bin 与 extraBins，值是绝对路径。
+   */
+  tools?: Record<string, string>;
   /**
    * 仅当清单声明了 runtime。python / node 只包含已声明的那一项。
    * env 每次读取都会重新合并插件配置。
@@ -63,6 +67,18 @@ export interface PluginDirs {
 export interface PluginRuntimeSpec {
   python?: { requirements: string };
   node?: { package: string };
+}
+
+export interface ExternalToolGuideByPlatform {
+  darwin?: string;
+  win32?: string;
+}
+
+/** 插件要在子进程里调用的本机命令。宿主只检查 PATH，不代装。 */
+export interface ExternalToolSpec {
+  bin: string;
+  extraBins?: string[];
+  guide?: string | ExternalToolGuideByPlatform;
 }
 
 export interface PluginRuntimeBindings {
@@ -95,6 +111,10 @@ export interface PluginManifest {
   catalogError?: string;
   /** 清单声明了运行时。没有版本号，解释器版本由宿主钉死。 */
   runtime?: PluginRuntimeSpec;
+  /** 合法的外部命令。空数组不会留下这个字段。 */
+  externalTools?: ExternalToolSpec[];
+  /** 写了 externalTools 但不可用。插件仍然出现在列表，不执行 apply。 */
+  externalToolsError?: string;
 }
 
 export interface AppPlugin {
@@ -115,6 +135,9 @@ export interface AppPlugin {
   dirs?: PluginDirs;
   /** 已准备好的解释器。env 由上下文在读取时生成。 */
   runtimeBins?: { python?: string; node?: string };
+  /** 本次准备好的外部命令。有 runtime 时目录进 runtime.env，否则进 pluginEnv。 */
+  toolBins?: Record<string, string>;
+  toolDirs?: string[];
 }
 
 export interface LocalRecord {
@@ -158,6 +181,8 @@ export interface PluginSummary {
   catalogError?: string;
   /** 运行环境没准备好。插件未执行 apply。 */
   runtimeError?: string;
+  /** 外部命令不在 PATH 里。详情可复制给编程助手，由助手安装。 */
+  installPrompt?: string;
 }
 
 export interface DexResult {

@@ -44,12 +44,46 @@
 - `developer`：可选。1–64 个字符。
 - `category`：可选。1–32 个字符。详情展示这一行，插件市场用同一字符串分段；没写时归入「其他」。
 - `website`、`privacyPolicy`、`termsOfService`：可选。带主机名的 `http` 或 `https`，最长 300 个字符。工作台用系统浏览器打开。
+- `externalTools`：可选。本机命令，见下面「外部命令」。不写就不要写空数组。
 
 这些目录字段全部可以不写。没写、或去掉空白后是空字符串，就当作没有。写错了插件仍然加载，详情不显示该字段，并给出一段说明。它们不进 `getPluginConfig()`，也不进 `pluginEnv()`。插件目录由工作台显示在名称旁的文件夹上，不用写进 manifest。
 
 `main`、`uiEntry`、`settingsEntry` 和 `icon` 必须落在插件目录里面。不要写绝对路径，也不要写 `../`。`main`、`uiEntry`、`settingsEntry` 写错会导致加载失败；`icon` 写错只改用默认拼图。
 
 页面里的 CSS、图片、脚本用相对路径即可。Dex Buddy 会按 `uiEntry` 所在位置去找它们。
+
+## 外部命令
+
+插件要调用 FFmpeg、agent-browser 这类本机命令时，在 `externalTools` 里按顺序声明。Dex Buddy 打开插件前只检查 PATH：都在才执行 `apply`。缺了就把还缺的命令合成一份编号说明，同事复制给 Codex 或 Workbuddy，由助手在这台电脑上装好。没写这个字段时，行为与现在一样：命令靠同事自己装在 PATH 里，没装时要等到调用才失败。
+
+宿主不下载、不调用 brew / winget / npm，也不执行安装脚本。清单里不要写 `archive`、`npm`、`brew`、`winget`、`setup`。
+
+```json
+{
+  "externalTools": [
+    {
+      "bin": "agent-browser",
+      "guide": {
+        "darwin": "https://github.com/vercel-labs/agent-browser",
+        "win32": "https://github.com/vercel-labs/agent-browser"
+      }
+    },
+    {
+      "bin": "ffmpeg",
+      "extraBins": ["ffprobe"],
+      "guide": "https://ffmpeg.org/download.html"
+    }
+  ]
+}
+```
+
+- `bin`：必填。只能是字母、数字、点、下划线和连字符。Windows 上还会找 `bin.exe` 和 `bin.cmd`。
+- `extraBins`：同一份里的附带命令，例如 `ffprobe`。缺任何一个都算整组未就绪。
+- `guide`：可选。一个 http(s) 链接，或按 `darwin` / `win32` 分开。只写进那份可复制说明，不当成要打开的页面。宿主不请求页面正文。
+
+写错时插件仍出现在列表里，不执行 `apply`。错误会指出是第几条、缺了什么。缺命令时详情会弹出说明，并留下「复制」。装好后点「重试」。
+
+声明了 `runtime` 时，用 `ctx.runtime.env` 拉起子进程，命令的绝对路径在 `ctx.tools`。没有声明 `runtime` 时，用 `pluginEnv()`，里面的 PATH 已经带上这些目录。不要改 Dex Buddy 自己的环境变量。
 
 ## 图标
 

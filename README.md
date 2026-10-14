@@ -73,7 +73,7 @@ module.exports = {
 };
 ```
 
-`ctx` 提供 `registerService`、`getService`、`logger`、`emit`、`on`、`getPluginConfig`、`pluginEnv`、`dirs`。清单声明了 `runtime` 时还有 `runtime`。卸载时宿主会调用 `dispose`，并移除该插件注册的服务和事件。已安装插件的 `dirs.data` 在 `plugin-data/<id>/`，卸载后保留；`dirs.cache` 在 `plugin-runtime/<id>/cache`，卸载时连同依赖环境一起删除。
+`ctx` 提供 `registerService`、`getService`、`logger`、`emit`、`on`、`getPluginConfig`、`pluginEnv`、`dirs`。清单声明了 `runtime` 时还有 `runtime`。清单声明了 `externalTools` 且本机 PATH 里已有这些命令时还有 `tools`：键是命令名，值是绝对路径。声明了 `runtime` 时，这些命令的目录在 `ctx.runtime.env` 的 PATH 前面；没有 `runtime` 时在 `pluginEnv()` 里。宿主自己的 `process.env` 不会被改写。卸载时宿主会调用 `dispose`，并移除该插件注册的服务和事件。已安装插件的 `dirs.data` 在 `plugin-data/<id>/`，卸载后保留；`dirs.cache` 在 `plugin-runtime/<id>/cache`，卸载时连同依赖环境一起删除。
 
 `getPluginConfig()` 只返回当前插件已声明的配置。拉起子进程时显式传入环境，不要改宿主的 `process.env`：
 

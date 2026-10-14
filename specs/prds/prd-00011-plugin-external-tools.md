@@ -6,6 +6,8 @@ status: backlog
 created: 2026-10-14T06:19:20Z
 ---
 
+> **修订（2026-10-14）**：静默代装取消。当前实现只检查 PATH；缺命令时弹出一份可复制给编程助手（Codex / Workbuddy）的编号安装说明，不打开下载页，也不写 brew / winget / archive / npm / setup。下文仍是初稿原文，实现以作者文档为准。
+
 # PRD: 插件外部 CLI 一次准备
 
 | 属性 | 值 |

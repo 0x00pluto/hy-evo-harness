@@ -11,6 +11,7 @@ export function mountPlugins({
   onOpenMarket = () => {},
   onWorkspaceChanged = () => {},
   onListChanged = () => {},
+  onUnavailable = () => {},
 }) {
   const nav = document.getElementById('plugin-nav');
   const welcome = document.getElementById('welcome-screen');
@@ -101,14 +102,11 @@ export function mountPlugins({
     const pathLine = document.createElement('button');
     pathLine.type = 'button';
     pathLine.className = 'nav-hover-row nav-hover-muted nav-hover-path';
-    const sourceLabel = document.createElement('span');
-    sourceLabel.className = 'nav-hover-source';
-    sourceLabel.textContent = hoverSourceLabel(plugin);
     const pathLabel = document.createElement('span');
     pathLabel.textContent = pathText;
     const jump = hoverIcon('arrow-up-right');
     jump.classList.add('nav-hover-jump');
-    pathLine.append(hoverIcon('folder'), sourceLabel, pathLabel, jump);
+    pathLine.append(hoverIcon('folder'), pathLabel, jump);
     pathLine.title = plugin.rootPath || '';
     pathLine.addEventListener('click', (event) => {
       event.preventDefault();
@@ -116,7 +114,14 @@ export function mountPlugins({
       if (!plugin.rootPath) return;
       void window.dex.openPluginFolder(plugin.rootPath);
     });
-    card.append(name, status, hoverRule(), pathLine);
+    card.append(name, status, hoverRule());
+    const source = hoverSource(plugin);
+    if (source) {
+      const sourceRow = hoverRow(source.icon, source.text);
+      sourceRow.classList.add('nav-hover-muted');
+      card.append(sourceRow);
+    }
+    card.append(pathLine);
     if (plugin.hasSettings) {
       const gear = document.createElement('button');
       gear.type = 'button';
@@ -145,12 +150,12 @@ export function mountPlugins({
     placeHoverCard(anchor);
   }
 
-  function hoverSourceLabel(plugin) {
-    if (plugin.source === 'bundled') return '来自示例';
-    if (plugin.source === 'local' || plugin.source === 'dev') return '开发版';
-    if (plugin.originChannel === 'market') return '来自市场';
-    if (plugin.source === 'installed') return '来自压缩包';
-    return '';
+  function hoverSource(plugin) {
+    if (plugin.source === 'bundled') return { icon: 'boxes', text: '来自示例' };
+    if (plugin.source === 'local' || plugin.source === 'dev') return { icon: 'code', text: '开发版' };
+    if (plugin.originChannel === 'market') return { icon: 'store', text: '来自市场' };
+    if (plugin.source === 'installed') return { icon: 'file-archive', text: '来自压缩包' };
+    return null;
   }
 
   function navGlyph() {
@@ -202,7 +207,12 @@ export function mountPlugins({
       title.textContent = plugin.displayName;
       const meta = document.createElement('span');
       meta.className = 'nav-meta';
-      meta.textContent = plugin.version;
+      if (plugin.runtimeError || plugin.previewError) {
+        meta.textContent = '环境未就绪';
+        meta.classList.add('is-danger');
+      } else {
+        meta.textContent = plugin.version;
+      }
       text.append(title, meta);
 
       button.append(navMark(plugin), text);
@@ -262,6 +272,11 @@ export function mountPlugins({
   }
 
   async function openPlugin(plugin) {
+    if (plugin.runtimeError || plugin.previewError) {
+      setStatus('');
+      onUnavailable(plugin.id);
+      return;
+    }
     const seq = ++openSeq;
     pluginPane.hidden = false;
     shell.activeId = plugin.id;

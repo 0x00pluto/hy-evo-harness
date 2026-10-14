@@ -20,7 +20,7 @@ test('指定了目录里的插件时选中该插件', () => {
   assert.equal(preferredSettingsId('alpha', ['alpha', 'beta']), 'alpha');
 });
 
-test('搜索命中通用设置或五行标题时保留该项', () => {
+test('搜索命中通用设置的标题时保留该项', () => {
   assert.equal(generalNavMatches(''), true);
   assert.equal(generalNavMatches('  '), true);
   for (const label of ['通用设置', '产品名称', '版本', '当前用户', '用户数据目录', '已安装插件目录']) {

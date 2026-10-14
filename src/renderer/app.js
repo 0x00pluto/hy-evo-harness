@@ -61,6 +61,12 @@ const plugins = mountPlugins({
     const session = chromeBridge.session();
     if (session) pluginsPageBridge.sync(session);
   },
+  onUnavailable(pluginId) {
+    void (async () => {
+      await chromeBridge.enterPlugins();
+      chromeBridge.focusPlugin(pluginId);
+    })();
+  },
 });
 const pluginsPage = mountPluginsPage({ shell, plugins, chrome: chromeBridge });
 pluginsPageBridge.sync = pluginsPage.sync;

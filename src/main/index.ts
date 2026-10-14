@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell, webContents, type IpcMainInvokeEvent, type NativeImage } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, shell, webContents, type IpcMainInvokeEvent, type NativeImage } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -461,6 +461,12 @@ function registerIpc(): void {
     } catch {
       return { ok: false };
     }
+  });
+
+  ipcMain.handle('dex:copy-text', (_event, text: unknown) => {
+    if (typeof text !== 'string' || text === '') return { ok: false };
+    clipboard.writeText(text);
+    return { ok: true };
   });
 
   ipcMain.handle('dex:general-settings', () => {
