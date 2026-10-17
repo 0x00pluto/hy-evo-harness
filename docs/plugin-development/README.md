@@ -26,12 +26,15 @@ my-tool/
 
 `index.js` 在 Dex Buddy 主进程里按 CommonJS 执行。这里可以用 Node，例如 `fs`、`child_process`，也可以拉起本机脚本。页面跑在隔离窗口里，没有 Node，不能 `require`，只能调用 `window.dex.call`。页面不要自己调命令行，见 [运行](runtime.md)。
 
+后端要用更严的写法时，仍交这份 `index.js`，按 [后端 JavaScript](typing.md) 用 `@ts-check` 和 JSDoc；不要改成 `.ts` 或另交编译目录。
+
 ## 往下读
 
 - [清单](manifest.md)：`plugin.manifest.json` 的字段，以及图标尺寸。
 - [设置](settings.md)：`configSchema`、分组、密钥和 `pluginEnv()`。
 - [数据](data.md)：缓存、导出和数据库放在用户数据目录，不要写进安装目录。
 - [运行](runtime.md)：`index.js`、页面里的 `dex.call`，以及 Python / Node 运行时。
+- [后端 JavaScript](typing.md)：`@ts-check`、JSDoc、禁止 `any`；入口仍是 `.js`。
 - [打包](pack.md)：宿主默认丢掉什么，以及 `dex-buddy-plugin.pack` 和 `dex-buddy-plugin.ignore` 怎么配合。
 - [发布](ship.md)：开发时挂到 Dex Buddy、打成 zip 拖进工作台、什么情况会加载失败。
 - [发到插件中心](distribute.md)：推 tag；需要解释器时在清单里声明 `runtime`。

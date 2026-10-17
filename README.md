@@ -94,6 +94,8 @@ const result = await window.dex.call('aiComicService', 'renderVideo', [
 
 返回值必须能被结构化克隆（普通对象、数组、字符串、数字）。不要从服务方法返回函数或类实例。
 
+后端要用更严的 JavaScript 写法时，见 [docs/plugin-development/typing.md](docs/plugin-development/typing.md)。
+
 仓库里有两个示例，只在 `pnpm start` 出现。安装包不带 `plugins/`。
 
 - `plugins/ai-comic-master`：带界面，`aiComicService.renderVideo` 返回固定结果。

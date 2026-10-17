@@ -77,7 +77,7 @@ const result = await window.dex.call('myToolService', 'run', [{ lesson: '6-upper
 
 ## 后端 index.js
 
-用 CommonJS 导出 `apply`。需要回收资源时再导出 `dispose`。
+用 CommonJS 导出 `apply`。需要回收资源时再导出 `dispose`。要把写法收严时，见 [后端 JavaScript](typing.md)（`@ts-check` 与 JSDoc）；入口仍是这份 `.js`，宿主不因检查失败而拒载。
 
 ```javascript
 module.exports = {
