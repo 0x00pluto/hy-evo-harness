@@ -391,6 +391,24 @@ export function mountPlugins({
     if (!workspaceOpen()) return;
     const plugin = shell.plugins.find((item) => item.id === shell.activeId);
     if (!plugin || !isUi(plugin)) return;
+    if (plugin.source === 'local') {
+      try {
+        const result = await window.dex.reloadUnpacked(plugin.id);
+        if (result.plugins) await refresh(result.plugins);
+        if (!result.ok) {
+          setStatus(result.message || '重新加载失败', 'error');
+          return;
+        }
+        setStatus('已重新加载', 'ok');
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : '重新加载失败', 'error');
+        return;
+      }
+      views.drop(plugin.id, 'force');
+      const next = shell.plugins.find((item) => item.id === plugin.id);
+      if (next) await openPlugin(next);
+      return;
+    }
     views.drop(plugin.id, 'force');
     await openPlugin(plugin);
   }

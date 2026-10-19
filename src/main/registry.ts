@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { Module } from 'node:module';
+import { createRequire, Module } from 'node:module';
 import { readManifestFile } from './manifest.ts';
 import { prepareExternalTools, prependToolDirs } from './external-tools.ts';
 import {
@@ -28,6 +28,7 @@ interface CommonJsModuleConstructor {
 }
 
 const CommonJsModule = Module as unknown as CommonJsModuleConstructor;
+const nodeRequire = createRequire(import.meta.url);
 
 type Listener = (...args: unknown[]) => void;
 
@@ -466,6 +467,11 @@ export class ServiceRegistry {
       if (owned) this.releaseOwned(owned);
       this.ownership.delete(id);
       this.plugins.delete(id);
+      clearPluginModuleCache(plugin.absPath);
+      if (plugin.sourcePath) {
+        const source = path.resolve(plugin.sourcePath);
+        if (source !== path.resolve(plugin.absPath)) clearPluginModuleCache(source);
+      }
       this.logger.info(`卸载插件: ${plugin.manifest.displayName}`);
     }
   }
@@ -772,4 +778,14 @@ function loadCommonJs(entryPath: string): PluginModule {
   mod.paths = CommonJsModule._nodeModulePaths(path.dirname(filename));
   mod._compile(source, filename);
   return mod.exports as PluginModule;
+}
+
+/** 重新加载时丢掉该目录下已 require 的子模块；.node 原生扩展不能重复加载。 */
+function clearPluginModuleCache(pluginDir: string): void {
+  const root = path.resolve(pluginDir);
+  const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  for (const key of Object.keys(nodeRequire.cache)) {
+    if (key.endsWith('.node')) continue;
+    if (key === root || key.startsWith(prefix)) delete nodeRequire.cache[key];
+  }
 }

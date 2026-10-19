@@ -92,6 +92,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     if (plugin.source !== 'local' || plugin.localFrom === 'config') return [];
     if (plugin.mount === 'preview' || plugin.mount === 'preview-failed') {
       return [
+        { label: '重新加载', icon: 'refresh-cw', run: () => { void reloadUnpacked(plugin.id); } },
         { label: '结束预览', icon: 'x', run: () => { void endPreview(plugin.id); } },
         { label: '移除', icon: 'trash-2', run: () => { void removeUnpacked(plugin.id); } },
       ];

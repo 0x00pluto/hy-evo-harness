@@ -220,6 +220,85 @@ test('非法目录不写入登记，移除不删源码和清单 id 设置', asyn
   assert.deepEqual(readUnpackedPaths(unpackedFile), []);
 });
 
+test('重新加载清掉 require 缓存，并从源码目录重读清单', async (t) => {
+  const root = tempDir();
+  const userData = path.join(root, 'user');
+  fs.mkdirSync(userData);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const source = path.join(root, 'plugin');
+  fs.mkdirSync(source, { recursive: true });
+  fs.writeFileSync(path.join(source, 'plugin.manifest.json'), JSON.stringify({
+    id: 'reload-demo',
+    displayName: 'reload-demo',
+    version: '1.0.0',
+    type: 'headless',
+    main: 'index.js',
+  }));
+  fs.writeFileSync(path.join(source, 'message.js'), 'module.exports = { text: "old" };\n');
+  fs.writeFileSync(
+    path.join(source, 'index.js'),
+    'const { text } = require("./message"); module.exports = { apply(ctx) { ctx.registerService("reloadDemo", { text() { return text; } }); } };\n',
+  );
+
+  const registry = new ServiceRegistry(silent);
+  registry.setRuntimeHost({ userData });
+  const session = new LocalSession({
+    registry,
+    userData,
+    unpackedFile: path.join(userData, 'unpacked-plugins.json'),
+    logger: silent,
+  });
+  const added = await session.addDirectory(source);
+  assert.equal(added.ok, true);
+  const instanceId = added.focusedId ?? '';
+  assert.equal(await registry.callService('reloadDemo', 'text', [], instanceId), 'old');
+  assert.equal(registry.getPluginList().find((item) => item.id === instanceId)?.version, '1.0.0');
+
+  fs.writeFileSync(path.join(source, 'message.js'), 'module.exports = { text: "new" };\n');
+  fs.writeFileSync(path.join(source, 'plugin.manifest.json'), JSON.stringify({
+    id: 'reload-demo',
+    displayName: 'reload-demo',
+    version: '2.0.0',
+    type: 'headless',
+    main: 'index.js',
+  }));
+  const plugins = await session.reload(instanceId);
+  assert.equal(plugins.find((item) => item.id === instanceId)?.version, '2.0.0');
+  assert.equal(await registry.callService('reloadDemo', 'text', [], instanceId), 'new');
+  assert.equal(registry.getPlugin(instanceId)?.mount, 'source');
+});
+
+test('预览中重新加载回到源码目录', async (t) => {
+  const root = tempDir();
+  const userData = path.join(root, 'user');
+  fs.mkdirSync(userData);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const source = path.join(root, 'plugin');
+  writePlugin(source, 'preview-reload', 'module.exports = { apply(ctx) { ctx.registerService("previewReload", { ok() { return true; } }); } };');
+  fs.writeFileSync(path.join(source, 'dex-buddy-plugin.pack'), 'index.js\nplugin.manifest.json\n');
+
+  const registry = new ServiceRegistry(silent);
+  registry.setRuntimeHost({ userData });
+  const session = new LocalSession({
+    registry,
+    userData,
+    unpackedFile: path.join(userData, 'unpacked-plugins.json'),
+    logger: silent,
+  });
+  const added = await session.addDirectory(source);
+  assert.equal(added.ok, true);
+  const instanceId = added.focusedId ?? '';
+  const preview = await session.startPreview(instanceId);
+  assert.equal(preview.ok, true);
+  assert.equal(registry.getPlugin(instanceId)?.mount, 'preview');
+
+  const plugins = await session.reload(instanceId);
+  assert.equal(plugins.find((item) => item.id === instanceId)?.mount, 'source');
+  assert.equal(registry.getPlugin(instanceId)?.absPath, canonicalDirectory(source));
+  assert.equal(fs.existsSync(instanceDataPaths(userData, instanceId).previewDir), false);
+  assert.equal(await registry.callService('previewReload', 'ok', [], instanceId), true);
+});
+
 test('清单不合法或实例 id 撞车时不写登记', async (t) => {
   const root = tempDir();
   const userData = path.join(root, 'user');

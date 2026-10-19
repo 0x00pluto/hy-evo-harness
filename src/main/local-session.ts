@@ -107,8 +107,11 @@ export class LocalSession {
   }
 
   async reload(instanceId: string): Promise<PluginSummary[]> {
-    const record = this.requirePageSource(instanceId);
+    const record = this.requireLocal(instanceId);
     await this.registry.unloadPlugin(instanceId);
+    if (record.mount === 'preview' || record.mount === 'preview-failed') {
+      fs.rmSync(previewDir(this.userData, instanceId), { recursive: true, force: true });
+    }
     const message = await this.registry.mountLocal({
       record: { ...record, mount: 'source', previewError: undefined },
       pluginDir: record.sourcePath,
@@ -203,10 +206,10 @@ export class LocalSession {
     return undefined;
   }
 
-  private requirePageSource(instanceId: string): LocalRecord {
+  private requireLocal(instanceId: string): LocalRecord {
     const record = this.registry.getLocal(instanceId);
-    if (!record || record.from !== 'page' || record.mount !== 'source') {
-      throw new Error('只能重新加载源码目录');
+    if (!record) {
+      throw new Error('只能重新加载本地目录');
     }
     return record;
   }
