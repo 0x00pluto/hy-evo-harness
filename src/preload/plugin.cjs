@@ -1,11 +1,17 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+/** IPC 只能传可结构化克隆的值；Alpine / Vue 代理先打成纯 JSON。 */
+function plainArgs(args) {
+  const list = Array.isArray(args) ? args : [];
+  return JSON.parse(JSON.stringify(list));
+}
+
 contextBridge.exposeInMainWorld('dex', {
   call(serviceName, method, args) {
     return ipcRenderer.invoke('dex:call-service', {
       serviceName,
       method,
-      args: Array.isArray(args) ? args : [],
+      args: plainArgs(args),
     });
   },
   readSettings() {

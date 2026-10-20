@@ -11,7 +11,7 @@
 - `docs/plugin-development/manifest.md`: plugin.manifest.json 字段与图标尺寸、画布、格式
 - `docs/plugin-development/settings.md`: configSchema、分组、密钥输入与眼睛、settingsEntry、pluginEnv
 - `docs/plugin-development/data.md`: 插件页加载的本地实例数据仍在仓库，设置和 plugin-data 用实例 id，与清单 id 隔离；装进 installed_plugins 之后 ctx.dirs 分开，卸载只删运行环境和缓存
-- `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node；externalTools 在 apply 前只查 PATH，缺了给可复制的安装说明，ctx.tools 给绝对路径；未声明的命令仍靠本机 PATH
+- `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node；externalTools 在 apply 前只查 PATH，缺了给可复制的安装说明，ctx.tools 给绝对路径；未声明的命令仍靠本机 PATH；dex.call 参数须可 JSON 序列化，宿主 IPC 前再圆整一次
 - `docs/plugin-development/typing.md`: 后端严格 JavaScript 约定：`@ts-check`、JSDoc、禁止 any；入口仍是 index.js，不编译 dist，宿主不因检查失败拒载
 - `docs/plugin-development/pack.md`: 插件中心打包：宿主默认丢掉密钥和虚拟环境；dex-buddy-plugin.pack 指定要装的路径，dex-buddy-plugin.ignore 再挖掉
 - `docs/plugin-development/ship.md`: 插件页加载本地目录、重新加载从源码重挂后端并清 require 缓存、zip 拖进工作台安装，以及会加载失败的情况

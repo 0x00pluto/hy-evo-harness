@@ -71,6 +71,8 @@ const result = await window.dex.call('myToolService', 'run', [{ lesson: '6-upper
 
 `window.dex.call` 是一次请求、一次返回，没有单独的超时。命令还在跑的时候，页面收不到中途进度。不要在一次调用里把整段合成或下载耗完。长任务的方法先返回任务 id，页面再轮询另一个方法。等命令结束，再返回 `{ success: true, outputPath: '/path/to/result.mp4' }` 这样的普通对象。
 
+第三个参数必须是可 JSON 序列化的普通对象（或装在数组里的普通对象）。不要直接传 Alpine、Vue 等响应式代理，否则独立跑 HTTP 正常、嵌进工作台会报 `An object could not be cloned`。宿主 preload 在进 IPC 前会再做一次 JSON 圆整，但页面侧仍应自己交出普通对象。
+
 一行一个 JSON 的协议，拉起 Python 时加上 `PYTHONUNBUFFERED=1`，否则子进程会把输出攒住，调用方一直等。
 
 改布局时可以先用浏览器打开 HTML。放进 Dex Buddy 之后，按钮必须走 `window.dex.call`。
