@@ -80,6 +80,7 @@ export interface PluginSilentUpdates {
 export function createPluginSilentUpdates(host: PluginSilentUpdateHost, lock: InstallLock): PluginSilentUpdates {
   let watchingId: string | null = null;
   let roundRunning = false;
+  let pendingRound = false;
   let draining = false;
   let batchOpen = false;
   let pendingId: string | null = null;
@@ -88,6 +89,7 @@ export function createPluginSilentUpdates(host: PluginSilentUpdateHost, lock: In
   const dropped = new Set<string>();
   let queue: PluginRelease[] = [];
   let pumpTail: Promise<void> = Promise.resolve();
+  let roundTail: Promise<void> = Promise.resolve();
 
   function stillHigher(release: PluginRelease): boolean {
     const installed = host.readInstalled().find((plugin) => plugin.id === release.id);
@@ -180,12 +182,67 @@ export function createPluginSilentUpdates(host: PluginSilentUpdateHost, lock: In
     }
   }
 
-  function whenIdle(): Promise<void> {
+  function whenPumpIdle(): Promise<void> {
     const pending = pumpTail;
     return pending.then(() => {
       if (pending === pumpTail) return undefined;
+      return whenPumpIdle();
+    });
+  }
+
+  function whenIdle(): Promise<void> {
+    const round = roundTail;
+    const pump = pumpTail;
+    return Promise.all([round, pump]).then(() => {
+      if (round === roundTail && pump === pumpTail) return undefined;
       return whenIdle();
     });
+  }
+
+  async function runRounds(): Promise<void> {
+    do {
+      pendingRound = false;
+      let catalog: { plugins: PluginRelease[] };
+      try {
+        catalog = await host.fetchCatalog();
+      } catch {
+        // 目录失败不安装；离开又排了一轮时再试一次。
+        continue;
+      }
+      const plan = planSilentPluginUpdates({
+        catalog: catalog.plugins,
+        origins: host.readOrigins(),
+        installed: host.readInstalled(),
+        watchingId,
+      });
+      const nextDeferred = new Map<string, PluginRelease>();
+      for (const id of plan.defer) {
+        const plugin = catalog.plugins.find((item) => item.id === id);
+        if (plugin) nextDeferred.set(id, plugin);
+      }
+      deferred.clear();
+      for (const [id, plugin] of nextDeferred) deferred.set(id, plugin);
+      for (const id of plan.install) {
+        const plugin = catalog.plugins.find((item) => item.id === id);
+        if (plugin) enqueueRelease(plugin);
+      }
+      await whenPumpIdle();
+    } while (pendingRound);
+  }
+
+  function runRound(): Promise<void> {
+    if (roundRunning) {
+      pendingRound = true;
+      return roundTail;
+    }
+    roundRunning = true;
+    const work = runRounds().finally(() => {
+      roundRunning = false;
+      // while 已退出与清标志之间又有人要求再查时，立刻开下一轮。
+      if (pendingRound) return runRound();
+    });
+    roundTail = roundTail.then(() => work, () => work);
+    return work;
   }
 
   return {
@@ -196,9 +253,12 @@ export function createPluginSilentUpdates(host: PluginSilentUpdateHost, lock: In
       watchingId = next;
       if (!previous) return;
       const plugin = deferred.get(previous);
-      if (!plugin) return;
-      deferred.delete(previous);
-      enqueueRelease(plugin);
+      if (plugin) {
+        deferred.delete(previous);
+        enqueueRelease(plugin);
+      }
+      // 离开正在看的插件时再读目录，会话中途发布的更高版本不用等重启或满 6 小时。
+      void runRound();
     },
     cancel(id: string): void {
       dropQueued(id);
@@ -206,38 +266,7 @@ export function createPluginSilentUpdates(host: PluginSilentUpdateHost, lock: In
     noteManualInstall(id: string): void {
       dropQueued(id);
     },
-    async runRound(): Promise<void> {
-      if (roundRunning) return;
-      roundRunning = true;
-      try {
-        let catalog: { plugins: PluginRelease[] };
-        try {
-          catalog = await host.fetchCatalog();
-        } catch {
-          return;
-        }
-        const plan = planSilentPluginUpdates({
-          catalog: catalog.plugins,
-          origins: host.readOrigins(),
-          installed: host.readInstalled(),
-          watchingId,
-        });
-        const nextDeferred = new Map<string, PluginRelease>();
-        for (const id of plan.defer) {
-          const plugin = catalog.plugins.find((item) => item.id === id);
-          if (plugin) nextDeferred.set(id, plugin);
-        }
-        deferred.clear();
-        for (const [id, plugin] of nextDeferred) deferred.set(id, plugin);
-        for (const id of plan.install) {
-          const plugin = catalog.plugins.find((item) => item.id === id);
-          if (plugin) enqueueRelease(plugin);
-        }
-        await whenIdle();
-      } finally {
-        roundRunning = false;
-      }
-    },
+    runRound,
     whenIdle,
   };
 }

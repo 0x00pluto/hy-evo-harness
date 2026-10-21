@@ -305,6 +305,8 @@ async function installCatalogById(id: string): Promise<DexResult> {
 function startSilentPluginUpdates(): void {
   if (silentUpdates) {
     silentUpdates.setWatching(reportedWatchingId);
+    // macOS 关掉窗口进程还在；再打开窗口时仍做一次启动检查。
+    void silentUpdates.runRound();
     return;
   }
   silentUpdates = createPluginSilentUpdates({

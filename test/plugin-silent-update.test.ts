@@ -116,15 +116,16 @@ test('目录版本相同或更低时不入队', () => {
 test('静默更新按字典序安装，正在看的离开后才装', async () => {
   const installedIds: string[] = [];
   const events: SilentUpdateEvent[] = [];
+  const versions: Record<string, string> = { zeta: '1.0.0', alpha: '1.0.0', mid: '1.0.0' };
   const host: PluginSilentUpdateHost = {
     async fetchCatalog() {
       return { plugins: [release('zeta', '2.0.0'), release('alpha', '2.0.0'), release('mid', '2.0.0')] };
     },
     readInstalled() {
       return [
-        { id: 'zeta', version: '1.0.0', source: 'installed' },
-        { id: 'alpha', version: '1.0.0', source: 'installed' },
-        { id: 'mid', version: '1.0.0', source: 'installed' },
+        { id: 'zeta', version: versions.zeta, source: 'installed' },
+        { id: 'alpha', version: versions.alpha, source: 'installed' },
+        { id: 'mid', version: versions.mid, source: 'installed' },
       ];
     },
     readOrigins() {
@@ -136,6 +137,7 @@ test('静默更新按字典序安装，正在看的离开后才装', async () =>
     },
     async installRelease(plugin) {
       installedIds.push(plugin.id);
+      versions[plugin.id] = plugin.version;
       return { ok: true, installedId: plugin.id, plugins: [] };
     },
     send(event) {
@@ -155,6 +157,7 @@ test('静默更新按字典序安装，正在看的离开后才装', async () =>
 test('目录读失败时不安装，已推迟的仍可在离开后补装', async () => {
   let fail = false;
   const installedIds: string[] = [];
+  let version = '1.0.0';
   const events: SilentUpdateEvent[] = [];
   const updates = createPluginSilentUpdates({
     async fetchCatalog() {
@@ -162,13 +165,14 @@ test('目录读失败时不安装，已推迟的仍可在离开后补装', async
       return { plugins: [release('alpha', '2.0.0')] };
     },
     readInstalled() {
-      return [{ id: 'alpha', version: '1.0.0', source: 'installed' }];
+      return [{ id: 'alpha', version, source: 'installed' }];
     },
     readOrigins() {
       return { alpha: origin('market') };
     },
     async installRelease(plugin) {
       installedIds.push(plugin.id);
+      version = plugin.version;
       return { ok: true, installedId: plugin.id, plugins: [] };
     },
     send(event) {
@@ -265,12 +269,13 @@ test('安装前版本已经不更高则跳过', async () => {
 
 test('手动安装拿掉推迟后，离开不再静默安装', async () => {
   const installedIds: string[] = [];
+  let version = '1.0.0';
   const updates = createPluginSilentUpdates({
     async fetchCatalog() {
       return { plugins: [release('alpha', '2.0.0')] };
     },
     readInstalled() {
-      return [{ id: 'alpha', version: '1.0.0', source: 'installed' }];
+      return [{ id: 'alpha', version, source: 'installed' }];
     },
     readOrigins() {
       return { alpha: origin('market') };
@@ -284,7 +289,74 @@ test('手动安装拿掉推迟后，离开不再静默安装', async () => {
   updates.setWatching('alpha');
   await updates.runRound();
   updates.noteManualInstall('alpha');
+  // 手动更新已经把本地版本抬上去；离开触发的再查不会重装。
+  version = '2.0.0';
   updates.setWatching(null);
   await updates.whenIdle();
   assert.deepEqual(installedIds, []);
+});
+
+test('离开插件时再查目录，会话中途才变高的版本会装上', async () => {
+  const installedIds: string[] = [];
+  let remoteVersion = '1.0.0';
+  let localVersion = '1.0.0';
+  const updates = createPluginSilentUpdates({
+    async fetchCatalog() {
+      return { plugins: [release('alpha', remoteVersion)] };
+    },
+    readInstalled() {
+      return [{ id: 'alpha', version: localVersion, source: 'installed' }];
+    },
+    readOrigins() {
+      return { alpha: origin('market') };
+    },
+    async installRelease(plugin) {
+      installedIds.push(plugin.id);
+      localVersion = plugin.version;
+      return { ok: true, installedId: plugin.id, plugins: [] };
+    },
+    send() {},
+  }, createInstallLock());
+  updates.setWatching('alpha');
+  await updates.runRound();
+  assert.deepEqual(installedIds, []);
+  remoteVersion = '2.0.0';
+  updates.setWatching(null);
+  await updates.whenIdle();
+  assert.deepEqual(installedIds, ['alpha']);
+});
+
+test('读目录期间离开时，本轮或紧接着的下一轮会装上', async () => {
+  const installedIds: string[] = [];
+  let localVersion = '1.0.0';
+  let releaseCatalog: () => void = () => {};
+  const catalogGate = new Promise<void>((resolve) => {
+    releaseCatalog = resolve;
+  });
+  const updates = createPluginSilentUpdates({
+    async fetchCatalog() {
+      await catalogGate;
+      return { plugins: [release('alpha', '2.0.0')] };
+    },
+    readInstalled() {
+      return [{ id: 'alpha', version: localVersion, source: 'installed' }];
+    },
+    readOrigins() {
+      return { alpha: origin('market') };
+    },
+    async installRelease(plugin) {
+      installedIds.push(plugin.id);
+      localVersion = plugin.version;
+      return { ok: true, installedId: plugin.id, plugins: [] };
+    },
+    send() {},
+  }, createInstallLock());
+  updates.setWatching('alpha');
+  const round = updates.runRound();
+  await Promise.resolve();
+  updates.setWatching(null);
+  releaseCatalog();
+  await round;
+  await updates.whenIdle();
+  assert.deepEqual(installedIds, ['alpha']);
 });
