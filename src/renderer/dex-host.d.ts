@@ -231,6 +231,23 @@ interface LucideIcons {
   [name: string]: unknown;
 }
 
+/** lottie-web UMD；渲染层用脚本标签挂上。 */
+interface LottieAnimationItem {
+  destroy(): void;
+  goToAndStop(value: number, isFrame?: boolean): void;
+}
+
+interface LottiePlayer {
+  loadAnimation(params: {
+    container: Element;
+    renderer?: string;
+    loop?: boolean | number;
+    autoplay?: boolean;
+    animationData?: object;
+    path?: string;
+  }): LottieAnimationItem;
+}
+
 /** 工作台 chrome 会话（仅内存）。surface 运行时是 workspace / settings / plugins。 */
 interface ChromeSession {
   pinned: boolean;
@@ -243,9 +260,11 @@ interface ChromeSession {
 interface Window {
   dex: DexHost;
   lucide?: LucideIcons;
+  lottie?: LottiePlayer;
 }
 
 declare var lucide: LucideIcons | undefined;
+declare var lottie: LottiePlayer | undefined;
 
 /**
  * getElementById 在本仓常直接当按钮 / 输入 / dialog 用。

@@ -1,5 +1,6 @@
 import { mountIcons } from './icons.js';
 import { mountPluginViews } from './plugin-views.js';
+import { mountPluginBoot } from './plugin-boot.js';
 import { showShellToast } from './shell-toast.js';
 
 export function mountPlugins({
@@ -18,10 +19,14 @@ export function mountPlugins({
   const headless = document.getElementById('headless-screen');
   const viewportHost = document.getElementById('viewport-host');
   let openSeq = 0;
+  const boot = mountPluginBoot(viewportHost);
   const views = mountPluginViews({
     viewportHost,
     onReopened() {
       showShellToast('已重新打开', 'ok');
+    },
+    onLoaded(id) {
+      boot.hide(id);
     },
     onFailed(id, message) {
       handleViewFailed(id, message);
@@ -254,6 +259,7 @@ export function mountPlugins({
 
   function showWelcome() {
     openSeq += 1;
+    boot.hide();
     views.parkHot();
     shell.activeId = null;
     welcome.hidden = false;
@@ -285,6 +291,7 @@ export function mountPlugins({
     renderNav();
 
     if (!isUi(plugin)) {
+      boot.hide();
       views.parkHot();
       welcome.hidden = true;
       viewportHost.hidden = true;
@@ -296,6 +303,7 @@ export function mountPlugins({
     }
 
     if (views.isShowing(plugin.id)) {
+      boot.hide();
       revealViewport();
       onWorkspaceChanged();
       return;
@@ -304,6 +312,8 @@ export function mountPlugins({
     views.parkHot();
 
     if (views.has(plugin.id)) {
+      if (views.isLoaded(plugin.id)) boot.hide();
+      else boot.show(plugin.id);
       try {
         await window.dex.preparePlugin(plugin.id);
       } catch {
@@ -317,10 +327,11 @@ export function mountPlugins({
       return;
     }
 
+    boot.show(plugin.id);
+    revealViewport();
     try {
       const prepared = await window.dex.preparePlugin(plugin.id);
       if (seq !== openSeq || !workspaceOpen()) return;
-      revealViewport();
       views.mount(plugin, prepared);
       onWorkspaceChanged();
       await views.enforceQuota(plugin.id);
@@ -333,6 +344,7 @@ export function mountPlugins({
 
   function forgetWorkspacePlugin() {
     openSeq += 1;
+    boot.hide();
     shell.activeId = null;
     welcome.hidden = false;
     headless.hidden = true;
@@ -362,6 +374,7 @@ export function mountPlugins({
   function suspend() {
     const shown = views.parkHot();
     const protectedId = views.has(shell.activeId) ? shell.activeId : shown;
+    boot.hide();
     pluginPane.hidden = true;
     welcome.hidden = true;
     headless.hidden = true;

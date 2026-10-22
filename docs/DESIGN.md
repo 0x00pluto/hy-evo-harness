@@ -79,6 +79,8 @@ macOS 使用隐藏系统标题栏。顶栏是全宽 `#titlebar`：高 `--titleba
 
 颜色过渡约 180ms。浮层侧栏约 120ms：出现时从右侧 16px 滑到原位并淡入，消失时向右滑出并淡出。`prefers-reduced-motion: reduce` 时关掉过渡，也不做这段位移动画。交互控件的焦点环是 2px `--focus`，不能拿掉。
 
+带界面的插件第一次挂上页面、到 webview `did-finish-load` 之前，工作区 `#viewport-host` 可盖一层白底遮罩（`--paper`），中央是约 120px 的 Lottie（`src/renderer/lottie/plugin-boot.json`）。打开后约 300ms 仍未就绪才显示遮罩；更早就绪则不显示，避免快启动闪一下。动画自带彩色圆点，不改成壳的灰阶。已经加载过、还停在内存里的插件切回来不播。重新加载或被内存配额丢掉后再打开会再走这段逻辑。`prefers-reduced-motion: reduce` 时停在第一帧、不自动播放。
+
 ## 禁止
 
 React、Next、shadcn、Alpine、Tailwind、Google Fonts、emoji 当图标，以及另起一套色。

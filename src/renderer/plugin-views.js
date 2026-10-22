@@ -27,7 +27,7 @@ function parked(webview) {
   return webview.classList.contains('is-parked');
 }
 
-export function mountPluginViews({ viewportHost, onReopened, onFailed }) {
+export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed }) {
   const views = new Map();
   const evicted = new Set();
   let quotaSeq = 0;
@@ -76,6 +76,8 @@ export function mountPluginViews({ viewportHost, onReopened, onFailed }) {
     const entry = views.get(id);
     if (!entry) return false;
     entry.webview.classList.remove('is-parked');
+    // 未就绪时藏起 guest，否则 Electron webview 会盖住 Lottie 遮罩。
+    entry.webview.classList.toggle('is-booting', !entry.loaded);
     entry.state = entry.loaded ? 'hot' : 'loading';
     entry.lastHotAt = Date.now();
     void applyThrottle(entry);
@@ -90,6 +92,7 @@ export function mountPluginViews({ viewportHost, onReopened, onFailed }) {
     webview.setAttribute('preload', prepared.preloadUrl);
     webview.setAttribute('webpreferences', 'contextIsolation=yes,nodeIntegration=no,sandbox=yes');
     webview.setAttribute('src', plugin.uiUrl);
+    webview.classList.add('is-booting');
     const entry = {
       id: plugin.id,
       webview,
@@ -111,8 +114,10 @@ export function mountPluginViews({ viewportHost, onReopened, onFailed }) {
       if (entry.closing || views.get(entry.id) !== entry) return;
       const first = !entry.loaded;
       entry.loaded = true;
+      entry.webview.classList.remove('is-booting');
       entry.state = parked(entry.webview) ? 'warm' : 'hot';
       syncThrottle();
+      onLoaded(entry.id);
       if (first && entry.reopen) {
         entry.reopen = false;
         evicted.delete(entry.id);
@@ -155,6 +160,9 @@ export function mountPluginViews({ viewportHost, onReopened, onFailed }) {
     isShowing(id) {
       const entry = views.get(id);
       return !!entry && !parked(entry.webview);
+    },
+    isLoaded(id) {
+      return !!views.get(id)?.loaded;
     },
     ids() {
       return [...views.keys()];
