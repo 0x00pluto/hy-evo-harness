@@ -118,6 +118,7 @@ git diff "${PREV}..HEAD" --stat
 
 - 桌面安装包在 GitHub Release 页，由 Actions 在 tag 推送后上传
 - 不要删除 Release 上的 `latest*.yml` 与 blockmap，否则已安装客户端无法更新
+- 七牛 `dex-buddy/` 上的旧安装包由 CI 只留最近 3 个版本，不必手删
 - 核对 `package.json` 的 `version` 为 `X.Y.Z`（不含 v）
 ```
 

@@ -84,7 +84,7 @@ CI 会上传 Linux 安装包。应用内不检查、不安装更新。
 
 ### Release 资产要求
 
-Release Assets 中的 `latest*.yml`、`.dmg` / `.exe` 与 `*.blockmap` 会同时上传到 GitHub Release 和七牛 `dex-buddy/`。不要删除这些文件，否则已装客户端无法检测或完成更新。`latest.yml` 与 `latest-mac.yml` 每次发版覆盖并刷新 CDN；带版本号的安装包保留。
+Release Assets 中的 `latest*.yml`、`.dmg` / `.exe` 与 `*.blockmap` 会同时上传到 GitHub Release 和七牛 `dex-buddy/`。不要手删七牛上的 `latest*.yml` 和当前仍保留的安装包，否则已装客户端无法检测或完成更新。`latest.yml` 与 `latest-mac.yml` 每次发版覆盖并刷新 CDN。带版本号的安装包在上传成功后由 CI 按 SemVer 只留**最近 3 个版本**的整组（exe / dmg / mac.zip 与对应 blockmap）；更旧的从七牛删除。`plugins/`、`runtimes/` 不动。完整历史仍在 GitHub Release。保留数量可用环境变量 `QINIU_RELEASE_KEEP` 覆盖。
 
 本地开发调试更新流程用根目录 `dev-app-update.yml`。这个文件不会打进安装包。
 

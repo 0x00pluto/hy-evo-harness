@@ -223,3 +223,16 @@ jobs:
             'https://oss.ai.66plat.com/dex-buddy/latest-mac.yml' \
             > /tmp/qiniu-refresh.txt
           qshell cdnrefresh -i /tmp/qiniu-refresh.txt
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Prune old Qiniu installers
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: node --experimental-strip-types scripts/prune-qiniu-releases.ts
