@@ -20,7 +20,7 @@
 | 卸载 | 未写界面 | 只有安装到用户目录的插件可卸载。内置示例和开发路径不能被安装包覆盖 |
 | 在线市场 | 作为商业化扩展写出 | 当前版本不做 |
 | 依赖 | 零框架，示例里出现解压库 | 运行时依赖为 Electron 与 electron-updater。插件后端保持 CommonJS。包管理用 pnpm |
-| 预加载脚本 | 未单列 | 宿主与插件各一份预加载脚本，扩展名 `.cjs`（本仓 `package.json` 为 ESM） |
+| 预加载脚本 | 未单列 | 宿主与插件各一份预加载：源码 `.cts`，编译为 `dist/preload/*.cjs`；通道表在 `src/shared/dex-ipc.ts` |
 | 界面 | `<webview>` + 侧边栏 | 保留。`ui` 插件进独立 `partition`；`headless` 在主区域说明已在后台运行，不用 `alert` |
 | 插件后端进程 | （原稿同主进程加载） | 继续同进程：`index.js` 用 CommonJS 编进主进程；重计算靠清单 `runtime` 拉起 Python / Node。不为现有插件改成 `utilityProcess` |
 | 跨插件服务 | `getService` / 页面 `dex.call` 可调别人 | 保持公开能力。`dex:call-service` 必须认出 `app-plugin://` 调用方；认不出则拒绝。不在清单里加 provides / consumes，默认也不改成只能调自己 |

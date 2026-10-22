@@ -69,10 +69,7 @@ export interface PreparePluginResult {
   preloadUrl: string;
 }
 
-export interface AvailableMemoryResult {
-  ok: boolean;
-  bytes?: number;
-}
+export type AvailableMemoryResult = { ok: true; bytes: number } | { ok: false };
 
 export interface SettingsFieldView {
   key: string;
@@ -195,7 +192,7 @@ export interface DevFlags {
   forceUpdateIcon: boolean;
 }
 
-/** 对照 src/preload/host.cjs 暴露的 window.dex。 */
+/** 对照预加载暴露的 window.dex；底层通道见 dex-ipc.ts。 */
 export interface DexHost {
   devFlags(): Promise<DevFlags>;
   listPlugins(): Promise<PluginSummary[]>;

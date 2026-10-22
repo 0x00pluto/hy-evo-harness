@@ -6,10 +6,9 @@ directories:
 files:
   - dist/**
   - src/renderer/**
-  - src/preload/**
   - '!dev-app-update.yml'
 asarUnpack:
-  - src/preload/**
+  - dist/preload/**
 win:
   executableName: DexBuddy
   target:

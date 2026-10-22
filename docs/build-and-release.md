@@ -110,7 +110,7 @@ gh workflow run publish-runtimes.yml --ref main
 | --- | --- |
 | `appId` / `productName` | `com.huyuan.dexbuddy` / `Dex Buddy` |
 | 输出目录 | `release/`，与 `tsc` 的 `dist/` 分开 |
-| 打包内容 | `dist/`、`src/renderer/`、`src/preload/`、`plugins/`，以及生产依赖 `electron-updater` |
+| 打包内容 | `dist/`（含 `dist/preload/*.cjs`）、`src/renderer/`，以及生产依赖 `electron-updater`；预加载从 asar 解出 `dist/preload/**` |
 | `mac` | 本地与 CI 都产出 dmg 与 zip；签名默认 `identity: null`，`notarize: false` |
 | `win` / `nsis` | 可执行名 `DexBuddy`，安装包名 `dex-buddy-${version}-setup.exe`；`build/installer.nsh` 让更新后直接启动 exe |
 | `linux` | 本地默认含 AppImage / snap / deb；CI 仅打 AppImage + deb |

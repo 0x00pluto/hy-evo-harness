@@ -45,7 +45,7 @@ Electron 宿主扫描插件、注册服务，并用 `app-plugin://` 打开插件
 | 目录 | 用途 | 入库 |
 |---|---|---|
 | `src/main/` | Electron 主进程：注册表、协议、安装 | 是 |
-| `src/preload/` | 宿主与插件的预加载脚本（`.cjs`） | 是 |
+| `src/preload/` | 宿主与插件预加载源码（`.cts`），`tsc` 产出 `dist/preload/*.cjs` | 是 |
 | `src/renderer/` | 工作台界面：原生 HTML / CSS / JS，无前端构建 | 是 |
 | `plugins/` | 内置示例插件，也可放开发软链接 | 是 |
 | `test/` | `node:test`，不依赖 Electron | 是 |

@@ -1,8 +1,9 @@
-import { app, BrowserWindow, ipcMain, net, shell } from 'electron';
+import { app, BrowserWindow, net, shell } from 'electron';
 import { createWriteStream, existsSync, statSync, unlinkSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { UpdateInfo } from 'electron-updater';
+import { handleInvoke } from './ipc.ts';
 import { canStartMacDmgInstall, shouldQuitAfterOpeningMacDmg } from './mac-dmg-install.ts';
 import { extractMacDmgInfo, macDmgFileName } from './update-assets.ts';
 
@@ -376,15 +377,15 @@ function registerAutoUpdaterEvents(): void {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle('updater:get-status', () => ({ ...currentPayload }));
+  handleInvoke('updater:get-status', () => ({ ...currentPayload }));
 
-  ipcMain.handle('updater:retry', async () => {
+  handleInvoke('updater:retry', async () => {
     silentRetryUsed = false;
     setPayload({ status: 'idle', errorMessage: undefined });
     await runCheck();
   });
 
-  ipcMain.handle('updater:install', async (): Promise<InstallUpdateResult> => {
+  handleInvoke('updater:install', async () => {
     if (isWin) return installWinUpdate();
     if (isMac) return installMacUpdate();
     return { ok: false };

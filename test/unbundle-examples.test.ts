@@ -27,7 +27,7 @@ test('安装包文件列表不含示例插件目录', () => {
   assert.equal(block.includes('plugins/**'), false);
   assert.equal(block.includes('dist/**'), true);
   assert.equal(block.includes('src/renderer/**'), true);
-  assert.equal(block.includes('src/preload/**'), true);
+  assert.equal(block.includes('src/preload/**'), false);
 });
 
 test('示例设置只在三条同时成立时删除', () => {

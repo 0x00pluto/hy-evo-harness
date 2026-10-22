@@ -16,7 +16,7 @@
 
 工作台脚本仍是 `.js`，入口仍是 `index.html` 里的 `<script type="module" src="app.js">`。不把渲染层改成 TypeScript，也不加打包器。
 
-`tsconfig.renderer.json` 对 `src/renderer/**/*.js` 做 `checkJs` + `noEmit`，并打开 `strictNullChecks` 与 `noImplicitAny`。壳内固定节点用 `src/renderer/dom.js` 的 `byId` 查询。`window.dex` 与 IPC 返回值写在 `src/shared/dex-bridge.ts`（主进程与渲染层共用）；渲染层全局与 webview 辅助类型在 `src/renderer/dex-host.d.ts`。不要给 `HTMLElement` 整体挂上按钮 / dialog 专用属性来骗过检查。`pnpm build` 会跑 `tsc -p tsconfig.renderer.json --noEmit`。主进程仍用根上的 `tsconfig.json` 产出 `dist/`（并编译 `src/shared/`）。
+`tsconfig.renderer.json` 对 `src/renderer/**/*.js` 做 `checkJs` + `noEmit`，并打开 `"strict": true`。壳内固定节点用 `src/renderer/dom.js` 的 `byId` 查询。IPC 通道的参数与返回值写在 `src/shared/dex-ipc.ts`；`window.dex` 方法面在 `src/shared/dex-bridge.ts`。主进程用 `handleInvoke` / `onSend` 注册，预加载源码是 `src/preload/*.cts`，编译到 `dist/preload/*.cjs`。渲染层全局与 webview 辅助类型在 `src/renderer/dex-host.d.ts`。不要给 `HTMLElement` 整体挂上按钮 / dialog 专用属性来骗过检查。`pnpm build` 会跑主进程 `tsc` 与 `tsc -p tsconfig.renderer.json --noEmit`。
 
 Lucide 与 lottie-web 仍由 `index.html` 引用 `node_modules` 里的 UMD（与 prd-00002 一致），本层不为它们引入打包器，也不把 min.js 拷进 `src/renderer/vendor/`。
 

@@ -1,12 +1,14 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, shell, webContents, type IpcMainInvokeEvent, type NativeImage } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, webContents, type IpcMainInvokeEvent, type NativeImage } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import type { CallServicePayload } from '../shared/dex-ipc.ts';
 import { readAvailableMemory } from './available-memory.ts';
 import { readExtraPluginPaths, readForceUpdateIcon } from './dev-config.ts';
 import { INSTALLED_PLUGINS_DIR_NAME, resolveHostDataPath } from './host-data.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
+import { handleInvoke, onSend } from './ipc.ts';
 import { LocalSession } from './local-session.ts';
 import { isHttpUrl } from './manifest.ts';
 import { pluginInstallPath, type PluginRelease } from './plugin-catalog.ts';
@@ -86,7 +88,11 @@ function pluginIdFromSender(event: IpcMainInvokeEvent): string {
 }
 
 function pluginPreloadFile(): string {
-  return path.join(app.getAppPath(), 'src/preload/plugin.cjs');
+  return path.join(app.getAppPath(), 'dist/preload/plugin.cjs');
+}
+
+function hostPreloadFile(): string {
+  return path.join(app.getAppPath(), 'dist/preload/host.cjs');
 }
 
 async function loadAllPlugins(): Promise<void> {
@@ -199,7 +205,7 @@ function createWindow(icon: NativeImage | null): void {
       contextIsolation: true,
       sandbox: true,
       webviewTag: true,
-      preload: path.join(app.getAppPath(), 'src/preload/host.cjs'),
+      preload: hostPreloadFile(),
     },
   });
 
@@ -215,21 +221,20 @@ function createWindow(icon: NativeImage | null): void {
   void win.loadFile(path.join(app.getAppPath(), 'src/renderer/index.html'));
 }
 
-function readCallPayload(payload: unknown): { serviceName: string; method: string; args: unknown[] } {
+function readCallPayload(payload: CallServicePayload): CallServicePayload {
   if (!payload || typeof payload !== 'object') {
     throw new Error('调用参数无效');
   }
-  const raw = payload as Record<string, unknown>;
-  if (typeof raw.serviceName !== 'string' || typeof raw.method !== 'string') {
+  if (typeof payload.serviceName !== 'string' || typeof payload.method !== 'string') {
     throw new Error('调用参数无效');
   }
-  if (raw.args !== undefined && !Array.isArray(raw.args)) {
+  if (payload.args !== undefined && !Array.isArray(payload.args)) {
     throw new Error('参数 args 必须是数组');
   }
   return {
-    serviceName: raw.serviceName,
-    method: raw.method,
-    args: Array.isArray(raw.args) ? raw.args : [],
+    serviceName: payload.serviceName,
+    method: payload.method,
+    args: Array.isArray(payload.args) ? payload.args : [],
   };
 }
 
@@ -351,11 +356,11 @@ function devFlags(): { forceUpdateIcon: boolean } {
 }
 
 function registerIpc(): void {
-  ipcMain.handle('dex:dev-flags', () => devFlags());
+  handleInvoke('dex:dev-flags', () => devFlags());
 
-  ipcMain.handle('dex:list-plugins', () => registry.getPluginList());
+  handleInvoke('dex:list-plugins', () => registry.getPluginList());
 
-  ipcMain.handle('dex:local-username', () => {
+  handleInvoke('dex:local-username', () => {
     // 读不到账户名时交回空字符串，界面再显示「本地用户」。
     try {
       const name = os.userInfo().username;
@@ -365,8 +370,8 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('dex:prepare-plugin', (_event, id: unknown) => {
-    if (typeof id !== 'string' || !registry.getPlugin(id)) {
+  handleInvoke('dex:prepare-plugin', (_event, id) => {
+    if (!registry.getPlugin(id)) {
       throw new Error('插件不存在');
     }
     const partition = pluginPartition(id);
@@ -377,12 +382,12 @@ function registerIpc(): void {
     };
   });
 
-  ipcMain.handle('dex:available-memory', () => {
+  handleInvoke('dex:available-memory', () => {
     return readAvailableMemory(process.platform, () => process.getSystemMemoryInfo());
   });
 
-  ipcMain.handle('dex:set-view-throttling', (event, webContentsId: unknown, throttle: unknown) => {
-    if (typeof webContentsId !== 'number' || !Number.isInteger(webContentsId) || typeof throttle !== 'boolean') return;
+  handleInvoke('dex:set-view-throttling', (event, webContentsId, throttle) => {
+    if (!Number.isInteger(webContentsId)) return;
     const target = webContents.fromId(webContentsId);
     if (!target || target.isDestroyed()) return;
     const host = target.hostWebContents;
@@ -392,21 +397,16 @@ function registerIpc(): void {
     target.setBackgroundThrottling(throttle);
   });
 
-  ipcMain.handle('dex:call-service', async (event, payload: unknown) => {
+  handleInvoke('dex:call-service', async (event, payload) => {
     const call = readCallPayload(payload);
     // 认不出 app-plugin 页面就拒绝。吞掉错误会让导航离开后的预加载仍能调全局服务。
     const callerId = pluginIdFromSender(event);
     return registry.callService(call.serviceName, call.method, call.args, callerId);
   });
 
-  ipcMain.handle('dex:install-zip', async (_event, zipFilePath: unknown) => {
-    if (typeof zipFilePath !== 'string') {
-      return { ok: false, message: '请选择 .zip 插件包', plugins: registry.getPluginList() };
-    }
-    return installFromZip(zipFilePath);
-  });
+  handleInvoke('dex:install-zip', async (_event, zipFilePath) => installFromZip(zipFilePath));
 
-  ipcMain.handle('dex:pick-and-install', async () => {
+  handleInvoke('dex:pick-and-install', async () => {
     const result = await dialog.showOpenDialog({
       title: '选择插件压缩包',
       properties: ['openFile'],
@@ -419,23 +419,21 @@ function registerIpc(): void {
     return installFromZip(zipFilePath);
   });
 
-  ipcMain.handle('dex:settings-catalog', () => registry.listSettingsViews());
+  handleInvoke('dex:settings-catalog', () => registry.listSettingsViews());
 
-  ipcMain.handle('dex:settings-save', (_event, payload: unknown) => {
-    if (!payload || typeof payload !== 'object') return { ok: false, message: '配置无效' };
-    const raw = payload as { id?: unknown; draft?: unknown };
-    if (typeof raw.id !== 'string') return { ok: false, message: '插件 id 无效' };
-    return registry.savePluginSettings(raw.id, raw.draft);
+  handleInvoke('dex:settings-save', (_event, payload) => {
+    if (!payload || typeof payload.id !== 'string') return { ok: false, message: '插件 id 无效' };
+    return registry.savePluginSettings(payload.id, payload.draft);
   });
 
-  ipcMain.handle('dex:reveal-plugin-secret', (_event, payload: unknown) => {
-    if (!payload || typeof payload !== 'object') return { ok: false };
-    const raw = payload as { id?: unknown; key?: unknown };
-    if (typeof raw.id !== 'string' || typeof raw.key !== 'string') return { ok: false };
-    return registry.revealPluginSecret(raw.id, raw.key);
+  handleInvoke('dex:reveal-plugin-secret', (_event, payload) => {
+    if (!payload || typeof payload.id !== 'string' || typeof payload.key !== 'string') {
+      return { ok: false };
+    }
+    return registry.revealPluginSecret(payload.id, payload.key);
   });
 
-  ipcMain.handle('dex:pick-directory', async () => {
+  handleInvoke('dex:pick-directory', async () => {
     const result = await dialog.showOpenDialog({
       title: '选择目录',
       properties: ['openDirectory'],
@@ -445,14 +443,14 @@ function registerIpc(): void {
     return { cancelled: false, path: picked };
   });
 
-  ipcMain.handle('dex:plugin-settings-get', (event) => registry.settingsView(pluginIdFromSender(event)));
+  handleInvoke('dex:plugin-settings-get', (event) => registry.settingsView(pluginIdFromSender(event)));
 
-  ipcMain.handle('dex:plugin-settings-save', (event, draft: unknown) => {
+  handleInvoke('dex:plugin-settings-save', (event, draft) => {
     return registry.savePluginSettings(pluginIdFromSender(event), draft);
   });
 
-  ipcMain.handle('dex:open-external', async (_event, url: unknown) => {
-    if (typeof url !== 'string' || !isHttpUrl(url)) return { ok: false };
+  handleInvoke('dex:open-external', async (_event, url) => {
+    if (!isHttpUrl(url)) return { ok: false };
     try {
       await shell.openExternal(url);
       return { ok: true };
@@ -461,22 +459,22 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('dex:copy-text', (_event, text: unknown) => {
-    if (typeof text !== 'string' || text === '') return { ok: false };
+  handleInvoke('dex:copy-text', (_event, text) => {
+    if (text === '') return { ok: false };
     clipboard.writeText(text);
     return { ok: true };
   });
 
-  ipcMain.handle('dex:general-settings', () => {
+  handleInvoke('dex:general-settings', () => {
     const userData = app.getPath('userData');
     return {
       version: app.getVersion(),
-      userData: resolveHostDataPath('userData', userData),
-      installedPlugins: resolveHostDataPath('installedPlugins', userData),
+      userData: resolveHostDataPath('userData', userData) ?? '',
+      installedPlugins: resolveHostDataPath('installedPlugins', userData) ?? '',
     };
   });
 
-  ipcMain.handle('dex:open-host-data', async (_event, kind: unknown) => {
+  handleInvoke('dex:open-host-data', async (_event, kind) => {
     const target = resolveHostDataPath(kind, app.getPath('userData'));
     if (!target) return { ok: false, message: '不能打开这个目录' };
     try {
@@ -489,8 +487,8 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('dex:open-plugin-folder', async (_event, rootPath: unknown) => {
-    if (typeof rootPath !== 'string' || rootPath.trim() === '') return { ok: false };
+  handleInvoke('dex:open-plugin-folder', async (_event, rootPath) => {
+    if (rootPath.trim() === '') return { ok: false };
     const target = path.resolve(rootPath);
     const known = registry.getPluginList().some((plugin) => path.resolve(plugin.rootPath) === target);
     if (!known) return { ok: false };
@@ -502,7 +500,7 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('dex:plugin-catalog', async () => {
+  handleInvoke('dex:plugin-catalog', async () => {
     try {
       const catalog = await fetchPluginCatalog();
       const updates = marketUpdates({
@@ -529,15 +527,12 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.on('dex:set-watching-plugin', (_event, id: unknown) => {
+  onSend('dex:set-watching-plugin', (_event, id) => {
     reportedWatchingId = typeof id === 'string' && id.trim() !== '' ? id : null;
     silentUpdates?.setWatching(reportedWatchingId);
   });
 
-  ipcMain.handle('dex:plugin-install-catalog', async (_event, id: unknown) => {
-    if (typeof id !== 'string') {
-      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
-    }
+  handleInvoke('dex:plugin-install-catalog', async (_event, id) => {
     const outcome = await installLock.tryRun(() => {
       silentUpdates?.noteManualInstall(id);
       return installCatalogById(id);
@@ -548,10 +543,7 @@ function registerIpc(): void {
     return outcome;
   });
 
-  ipcMain.handle('dex:retry-plugin-runtime', async (_event, id: unknown) => {
-    if (typeof id !== 'string') {
-      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
-    }
+  handleInvoke('dex:retry-plugin-runtime', async (_event, id) => {
     try {
       const message = await registry.retryRuntime(id);
       if (message) {
@@ -567,10 +559,7 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('dex:uninstall', async (_event, id: unknown) => {
-    if (typeof id !== 'string') {
-      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
-    }
+  handleInvoke('dex:uninstall', async (_event, id) => {
     silentUpdates?.cancel(id);
     return installLock.run(async () => {
       try {
@@ -591,7 +580,7 @@ function registerIpc(): void {
     });
   });
 
-  ipcMain.handle('dex:load-unpacked-directory', async () => {
+  handleInvoke('dex:load-unpacked-directory', async () => {
     const result = await dialog.showOpenDialog({
       title: '加载本地目录',
       properties: ['openDirectory'],
@@ -603,10 +592,7 @@ function registerIpc(): void {
     return session().addDirectory(picked);
   });
 
-  ipcMain.handle('dex:reload-unpacked', async (_event, id: unknown) => {
-    if (typeof id !== 'string') {
-      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
-    }
+  handleInvoke('dex:reload-unpacked', async (_event, id) => {
     try {
       const plugins = await session().reload(id);
       return { ok: true, plugins };
@@ -619,10 +605,7 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('dex:start-preview', async (_event, id: unknown) => {
-    if (typeof id !== 'string') {
-      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
-    }
+  handleInvoke('dex:start-preview', async (_event, id) => {
     try {
       return await session().startPreview(id);
     } catch (err) {
@@ -634,10 +617,7 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('dex:end-preview', async (_event, id: unknown) => {
-    if (typeof id !== 'string') {
-      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
-    }
+  handleInvoke('dex:end-preview', async (_event, id) => {
     try {
       const plugins = await session().endPreview(id);
       return { ok: true, plugins };
@@ -650,10 +630,7 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('dex:remove-unpacked', async (_event, id: unknown) => {
-    if (typeof id !== 'string') {
-      return { ok: false, message: '插件 id 无效', plugins: registry.getPluginList() };
-    }
+  handleInvoke('dex:remove-unpacked', async (_event, id) => {
     try {
       const plugins = await session().remove(id);
       return { ok: true, plugins };

@@ -26,12 +26,12 @@ pnpm start
 
 ```text
 src/main/        主进程：注册表、协议、安装
-src/preload/     宿主与插件的预加载脚本（.cjs）
+src/preload/     宿主与插件预加载源码（.cts → dist/preload/*.cjs）
 src/renderer/    工作台界面
 plugins/         示例插件，只在 pnpm start 扫描；也可放开发软链接
 ```
 
-包类型是 ESM，所以预加载脚本使用 `.cjs`，才能在隔离环境里 `require('electron')`。插件入口 `index.js` 仍按 CommonJS 执行（`module.exports`），不跟随 Dex Buddy 的 `"type": "module"`。插件页面拿不到 Node，只能调用 `window.dex.call`。
+包类型是 ESM，预加载源码是 `.cts`，由 `tsc` 产出 `dist/preload/*.cjs`，才能在隔离环境里 `require('electron')`。IPC 通道参数与返回值见 `src/shared/dex-ipc.ts`。插件入口 `index.js` 仍按 CommonJS 执行（`module.exports`），不跟随 Dex Buddy 的 `"type": "module"`。插件页面拿不到 Node，只能调用 `window.dex.call`。
 
 ## 插件契约
 
