@@ -92,6 +92,7 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
       sidebar.classList.remove('is-open');
     }
     if (!workspace) setPopover(false);
+    plugins.syncPreviewStrip();
     pluginsPage.sync(session);
     reportWatching();
   }

@@ -141,11 +141,17 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       copy.appendChild(title);
       const meta = document.createElement('span');
       meta.className = 'nav-meta';
-      meta.textContent = plugin.runtimeError
-        ? '环境未就绪'
-        : updates.some((item) => item.id === plugin.id)
-          ? '可更新'
-          : sourceLabel(plugin.source);
+      if (plugin.runtimeError || plugin.previewError) {
+        meta.textContent = '环境未就绪';
+        meta.classList.add('is-danger');
+      } else if (plugin.mount === 'preview') {
+        meta.textContent = '预览中';
+        meta.classList.add('is-preview');
+      } else if (updates.some((item) => item.id === plugin.id)) {
+        meta.textContent = '可更新';
+      } else {
+        meta.textContent = sourceLabel(plugin.source);
+      }
       button.append(copy, meta);
       button.addEventListener('click', () => {
         chrome.focusPlugin(plugin.id);

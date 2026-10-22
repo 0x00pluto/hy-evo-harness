@@ -35,9 +35,24 @@ export function mountPlugins({
   const openMarket = document.getElementById('open-market');
   const headlessTitle = document.getElementById('headless-title');
   const pluginPane = document.getElementById('plugin-pane');
+  const previewStrip = document.getElementById('preview-strip');
+  const previewStripEnd = document.getElementById('preview-strip-end');
   let hoverCard = null;
   let hideHoverTimer = null;
   nav.addEventListener('scroll', () => clearHoverCard());
+
+  function isPreviewMount(plugin) {
+    return !!plugin && plugin.mount === 'preview' && !plugin.runtimeError && !plugin.previewError;
+  }
+
+  function syncPreviewStrip() {
+    const plugin = shell.activeId
+      ? shell.plugins.find((item) => item.id === shell.activeId)
+      : null;
+    const show = workspaceOpen() && isPreviewMount(plugin);
+    previewStrip.hidden = !show;
+    if (show) mountIcons(previewStrip);
+  }
 
   function clearHoverCard() {
     if (hideHoverTimer != null) {
@@ -157,7 +172,10 @@ export function mountPlugins({
 
   function hoverSource(plugin) {
     if (plugin.source === 'bundled') return { icon: 'boxes', text: '来自示例' };
-    if (plugin.source === 'local' || plugin.source === 'dev') return { icon: 'code', text: '开发版' };
+    if (plugin.source === 'local' || plugin.source === 'dev') {
+      const text = isPreviewMount(plugin) ? '开发版 · 预览中' : '开发版';
+      return { icon: 'code', text };
+    }
     if (plugin.originChannel === 'market') return { icon: 'store', text: '来自市场' };
     if (plugin.source === 'installed') return { icon: 'file-archive', text: '来自压缩包' };
     return null;
@@ -215,6 +233,9 @@ export function mountPlugins({
       if (plugin.runtimeError || plugin.previewError) {
         meta.textContent = '环境未就绪';
         meta.classList.add('is-danger');
+      } else if (isPreviewMount(plugin)) {
+        meta.textContent = '预览中';
+        meta.classList.add('is-preview');
       } else {
         meta.textContent = plugin.version;
       }
@@ -267,6 +288,7 @@ export function mountPlugins({
     viewportHost.hidden = true;
     settings.dismissSurface();
     renderNav();
+    syncPreviewStrip();
     onWorkspaceChanged();
     void views.enforceQuota(null);
   }
@@ -297,6 +319,7 @@ export function mountPlugins({
       viewportHost.hidden = true;
       headless.hidden = false;
       headlessTitle.textContent = plugin.displayName;
+      syncPreviewStrip();
       onWorkspaceChanged();
       await views.enforceQuota(null);
       return;
@@ -305,6 +328,7 @@ export function mountPlugins({
     if (views.isShowing(plugin.id)) {
       boot.hide();
       revealViewport();
+      syncPreviewStrip();
       onWorkspaceChanged();
       return;
     }
@@ -322,6 +346,7 @@ export function mountPlugins({
       if (seq !== openSeq || !workspaceOpen()) return;
       revealViewport();
       views.present(plugin.id);
+      syncPreviewStrip();
       onWorkspaceChanged();
       await views.enforceQuota(plugin.id);
       return;
@@ -333,6 +358,7 @@ export function mountPlugins({
       const prepared = await window.dex.preparePlugin(plugin.id);
       if (seq !== openSeq || !workspaceOpen()) return;
       views.mount(plugin, prepared);
+      syncPreviewStrip();
       onWorkspaceChanged();
       await views.enforceQuota(plugin.id);
     } catch (err) {
@@ -350,6 +376,7 @@ export function mountPlugins({
     headless.hidden = true;
     viewportHost.hidden = true;
     renderNav();
+    syncPreviewStrip();
     onWorkspaceChanged();
   }
 
@@ -360,6 +387,7 @@ export function mountPlugins({
       if (!live.has(id)) views.drop(id, 'force');
     }
     renderNav();
+    syncPreviewStrip();
     onListChanged();
     if (shell.settingsMode) {
       await settings.onPluginsChanged();
@@ -379,7 +407,30 @@ export function mountPlugins({
     welcome.hidden = true;
     headless.hidden = true;
     viewportHost.hidden = true;
+    syncPreviewStrip();
     void views.enforceQuota(protectedId);
+  }
+
+  async function endActivePreview() {
+    const pluginId = shell.activeId;
+    if (!pluginId) return;
+    const plugin = shell.plugins.find((item) => item.id === pluginId);
+    if (!isPreviewMount(plugin)) return;
+    views.drop(pluginId, 'force');
+    try {
+      const result = await window.dex.endPreview(pluginId);
+      if (result.plugins) await refresh(result.plugins);
+      if (!result.ok) {
+        showShellToast(result.message || '结束预览失败', 'error');
+        reopenIfWatching(pluginId);
+        return;
+      }
+      showShellToast('已回到源码目录', 'ok');
+      reopenIfWatching(pluginId);
+    } catch (err) {
+      showShellToast(err instanceof Error ? err.message : '结束预览失败', 'error');
+      reopenIfWatching(pluginId);
+    }
   }
 
   function resume(pluginId) {
@@ -429,6 +480,9 @@ export function mountPlugins({
   window.addEventListener('dragover', (event) => event.preventDefault());
   window.addEventListener('drop', (event) => event.preventDefault());
   openMarket.addEventListener('click', () => onOpenMarket());
+  previewStripEnd.addEventListener('click', () => {
+    void endActivePreview();
+  });
 
   return {
     refresh,
@@ -439,5 +493,6 @@ export function mountPlugins({
     releaseView,
     reopenIfWatching,
     reloadActive,
+    syncPreviewStrip,
   };
 }
