@@ -1,10 +1,11 @@
 import { mountIcons } from './icons.js';
+import { byId } from './dom.js';
 
 const TOAST_MS = 4000;
 let timer = 0;
 
 export function mountShellToast() {
-  const close = document.getElementById('shell-toast-close');
+  const close = byId('shell-toast-close', 'button');
   close.addEventListener('click', () => {
     hideShellToast();
   });
@@ -15,9 +16,9 @@ export function mountShellToast() {
  * @param {'ok' | 'error' | string} [kind]
  */
 export function showShellToast(message, kind) {
-  const toast = document.getElementById('shell-toast');
-  const toastIcon = document.getElementById('shell-toast-icon');
-  const toastText = document.getElementById('shell-toast-text');
+  const toast = byId('shell-toast', 'div');
+  const toastIcon = byId('shell-toast-icon', 'span');
+  const toastText = byId('shell-toast-text', 'span');
   toastIcon.replaceChildren();
   const icon = document.createElement('i');
   icon.dataset.lucide = kind === 'ok' ? 'circle-check' : 'circle-x';
@@ -32,5 +33,5 @@ export function showShellToast(message, kind) {
 
 export function hideShellToast() {
   window.clearTimeout(timer);
-  document.getElementById('shell-toast').hidden = true;
+  byId('shell-toast', 'div').hidden = true;
 }

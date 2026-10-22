@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
+  SettingsFieldView,
+  SettingsPluginView,
+  SettingsSaveResult,
+} from '../shared/dex-bridge.ts';
+import type {
   AppPlugin,
   ConfigField,
   ConfigSchema,
@@ -11,34 +16,7 @@ import type {
   PluginSource,
 } from './types.ts';
 
-export interface SettingsFieldView {
-  key: string;
-  type: ConfigField['type'];
-  title: string;
-  description?: string;
-  secret?: true;
-  options?: string[];
-  default?: PluginConfigValue;
-  /** 非密钥字段的当前生效值。数字没有默认值且未保存时省略。 */
-  value?: PluginConfigValue;
-  /** 密钥字段是否已有非空生效值。视图里不包含明文。 */
-  secretSet?: boolean;
-  /** 设置页分组。没写的字段由界面归入「通用配置」。 */
-  group?: string;
-}
-
-export interface SettingsPluginView {
-  id: string;
-  displayName: string;
-  source: AppPlugin['source'];
-  settingsEntryUrl: string | null;
-  schemaError: string | null;
-  fields: SettingsFieldView[];
-  /** 与插件列表同一条 app-plugin 地址。没有图标时省略。 */
-  iconUrl?: string;
-}
-
-export type SettingsSaveResult = { ok: true } | { ok: false; message: string };
+export type { SettingsFieldView, SettingsPluginView, SettingsSaveResult };
 
 type SettingsFile = Record<string, Record<string, PluginConfigValue>>;
 

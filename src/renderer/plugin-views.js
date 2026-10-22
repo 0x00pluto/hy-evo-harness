@@ -2,6 +2,19 @@ import { selectEvictions } from './view-quota.js';
 
 const ABORTED = -3;
 
+/**
+ * @typedef {{
+ *   id: string;
+ *   webview: ElectronWebviewElement;
+ *   state: string;
+ *   loaded: boolean;
+ *   lastHotAt: number;
+ *   closing: boolean;
+ *   reopen: boolean;
+ * }} ViewEntry
+ */
+
+/** @param {ElectronWebviewElement} webview */
 function contentsId(webview) {
   if (typeof webview.getWebContentsId !== 'function') return null;
   try {
@@ -23,11 +36,21 @@ async function readAvailableBytes() {
   }
 }
 
+/** @param {ElectronWebviewElement} webview */
 function parked(webview) {
   return webview.classList.contains('is-parked');
 }
 
+/**
+ * @param {{
+ *   viewportHost: HTMLElement;
+ *   onReopened: () => void;
+ *   onLoaded: (id: string) => void;
+ *   onFailed: (id: string, message: string) => void;
+ * }} opts
+ */
 export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed }) {
+  /** @type {Map<string, ViewEntry>} */
   const views = new Map();
   const evicted = new Set();
   let quotaSeq = 0;
@@ -36,6 +59,7 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
     return [...views.values()].map((entry) => ({ id: entry.id, lastHotAt: entry.lastHotAt }));
   }
 
+  /** @param {ViewEntry} entry */
   async function applyThrottle(entry) {
     const id = contentsId(entry.webview);
     if (id == null) return;
@@ -48,6 +72,10 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
     }
   }
 
+  /**
+   * @param {string} id
+   * @param {string} reason
+   */
   function drop(id, reason) {
     const entry = views.get(id);
     if (reason === 'evict') evicted.add(id);
@@ -72,6 +100,7 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
     return parkedId;
   }
 
+  /** @param {string} id */
   function present(id) {
     const entry = views.get(id);
     if (!entry) return false;
@@ -84,6 +113,10 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
     return true;
   }
 
+  /**
+   * @param {PluginSummary} plugin
+   * @param {PreparePluginResult} prepared
+   */
   function mount(plugin, prepared) {
     if (views.has(plugin.id)) drop(plugin.id, 'force');
     const reopen = evicted.has(plugin.id);
@@ -91,8 +124,9 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
     webview.setAttribute('partition', prepared.partition);
     webview.setAttribute('preload', prepared.preloadUrl);
     webview.setAttribute('webpreferences', 'contextIsolation=yes,nodeIntegration=no,sandbox=yes');
-    webview.setAttribute('src', plugin.uiUrl);
+    webview.setAttribute('src', plugin.uiUrl || '');
     webview.classList.add('is-booting');
+    /** @type {ViewEntry} */
     const entry = {
       id: plugin.id,
       webview,
@@ -140,6 +174,7 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
     return entry;
   }
 
+  /** @param {string | null | undefined} protectedId */
   async function enforceQuota(protectedId) {
     const seq = ++quotaSeq;
     const availableBytes = await readAvailableBytes();
@@ -154,13 +189,16 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
   }
 
   return {
+    /** @param {string} id */
     has(id) {
       return views.has(id);
     },
+    /** @param {string} id */
     isShowing(id) {
       const entry = views.get(id);
       return !!entry && !parked(entry.webview);
     },
+    /** @param {string} id */
     isLoaded(id) {
       return !!views.get(id)?.loaded;
     },

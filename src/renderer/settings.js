@@ -8,6 +8,7 @@ import {
   updateDialogInsteadOfCheck,
 } from './general-settings.js';
 import { mountIcons } from './icons.js';
+import { byId } from './dom.js';
 
 const GENERAL_GROUP = '通用配置';
 const SETTINGS_SOURCE = {
@@ -17,8 +18,12 @@ const SETTINGS_SOURCE = {
   installed: '已安装',
 };
 
+/** @param {PluginSource | string} source */
 function settingsSourceLabel(source) {
-  return SETTINGS_SOURCE[source] || '内置';
+  if (source === 'bundled' || source === 'dev' || source === 'local' || source === 'installed') {
+    return SETTINGS_SOURCE[source];
+  }
+  return '内置';
 }
 
 /**
@@ -38,35 +43,51 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
   onStatus() { return () => {}; },
   openInstallDialog() {},
 }) }) {
-  const settingsSearch = document.getElementById('settings-search');
-  const settingsList = document.getElementById('settings-list');
-  const settingsScreen = document.getElementById('settings-screen');
-  const settingsTitle = document.getElementById('settings-plugin-title');
-  const settingsSchemaError = document.getElementById('settings-schema-error');
-  const settingsForm = document.getElementById('settings-form');
-  const settingsActions = document.getElementById('settings-actions');
-  const settingsSave = document.getElementById('settings-save');
-  const settingsEmpty = document.getElementById('settings-empty');
-  const settingsEntryHost = document.getElementById('settings-entry-host');
-  const discardDialog = document.getElementById('settings-discard-dialog');
-  const discardStay = document.getElementById('settings-discard-stay');
-  const discardConfirm = document.getElementById('settings-discard-confirm');
+  const settingsSearch = byId('settings-search', 'input');
+  const settingsList = byId('settings-list', 'div');
+  const settingsScreen = byId('settings-screen', 'section');
+  const settingsTitle = byId('settings-plugin-title', 'h1');
+  const settingsSchemaError = byId('settings-schema-error', 'p');
+  const settingsForm = byId('settings-form', 'div');
+  const settingsActions = byId('settings-actions', 'div');
+  const settingsSave = byId('settings-save', 'button');
+  const settingsEmpty = byId('settings-empty', 'p');
+  const settingsEntryHost = byId('settings-entry-host', 'div');
+  const discardDialog = byId('settings-discard-dialog', 'dialog');
+  const discardStay = byId('settings-discard-stay', 'button');
+  const discardConfirm = byId('settings-discard-confirm', 'button');
 
+  /** @type {SettingsPluginView[]} */
   let settingsCatalog = [];
+  /** @type {string | null} */
   let activeSettingsId = null;
+  /** @type {{ values: Record<string, string | number | boolean>; secrets: Record<string, { action: 'keep' | 'clear' | 'set'; value?: string }> } | null} */
   let settingsDraft = null;
   let settingsBaseline = '';
+  /** @type {string | null} */
   let returnPluginId = null;
   let savingSettings = false;
+  /** @type {((allowed: boolean) => void) | null} */
   let discardResolver = null;
+  /** @type {{ note: HTMLSpanElement; checkBtn: HTMLButtonElement } | null} */
   let generalNodes = null;
   let checkRequested = false;
+  /** @type {(() => void) | null} */
   let stopUpdateWatch = null;
+
+  function activeDraft() {
+    if (!settingsDraft) throw new Error('settings draft missing');
+    return settingsDraft;
+  }
 
   function settingsQueryText() {
     return settingsSearch.value.trim().toLowerCase();
   }
 
+  /**
+   * @param {SettingsPluginView} plugin
+   * @param {string} query
+   */
   function pluginMatchesSettings(plugin, query) {
     if (!query) return true;
     const parts = [plugin.displayName];
@@ -82,8 +103,11 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return settingsCatalog.filter((plugin) => pluginMatchesSettings(plugin, query));
   }
 
+  /** @param {SettingsPluginView} plugin */
   function draftFromPlugin(plugin) {
+    /** @type {Record<string, string | number | boolean>} */
     const values = {};
+    /** @type {Record<string, { action: 'keep' | 'clear' | 'set'; value?: string }>} */
     const secrets = {};
     for (const field of plugin.fields) {
       if (field.secret) {
@@ -101,17 +125,24 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return { values, secrets };
   }
 
+  /**
+   * @param {SettingsPluginView} plugin
+   * @param {{ values: Record<string, string | number | boolean>; secrets: Record<string, { action: 'keep' | 'clear' | 'set'; value?: string }> }} draft
+   */
   function payloadFromDraft(plugin, draft) {
+    /** @type {Record<string, string | number | boolean | null>} */
     const values = {};
+    /** @type {Record<string, { action: 'keep' | 'clear' | 'set'; value?: string }>} */
     const secrets = {};
     for (const field of plugin.fields) {
       if (field.secret) {
         const intent = draft.secrets[field.key] || { action: 'keep' };
-        if (intent.action === 'set') secrets[field.key] = { action: 'set', value: intent.value };
+        if (intent.action === 'set') secrets[field.key] = { action: 'set', value: intent.value || '' };
         else if (intent.action === 'clear') secrets[field.key] = { action: 'clear' };
         else secrets[field.key] = { action: 'keep' };
         continue;
       }
+      /** @type {string | number | boolean | null} */
       let value = draft.values[field.key];
       if (field.type === 'number') {
         value = typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -136,6 +167,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     settingsSave.disabled = savingSettings || !canEdit || !isDirty();
   }
 
+  /** @param {boolean} allowed */
   function finishDiscard(allowed) {
     const resolve = discardResolver;
     discardResolver = null;
@@ -152,21 +184,23 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     });
   }
 
+  /** @param {SettingsFieldView} field */
   function restoreFieldDefault(field) {
+    const draft = activeDraft();
     if (field.secret) {
       const next = typeof field.default === 'string' ? field.default : '';
-      settingsDraft.secrets[field.key] = next === '' ? { action: 'clear' } : { action: 'set', value: next };
+      draft.secrets[field.key] = next === '' ? { action: 'clear' } : { action: 'set', value: next };
       return;
     }
     if (field.type === 'number') {
-      settingsDraft.values[field.key] = typeof field.default === 'number' ? field.default : '';
+      draft.values[field.key] = typeof field.default === 'number' ? field.default : '';
       return;
     }
     if (field.type === 'boolean') {
-      settingsDraft.values[field.key] = field.default === true;
+      draft.values[field.key] = field.default === true;
       return;
     }
-    settingsDraft.values[field.key] = typeof field.default === 'string' ? field.default : '';
+    draft.values[field.key] = typeof field.default === 'string' ? field.default : '';
   }
 
   function renderSettingsNav() {
@@ -192,6 +226,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     mountIcons(settingsList);
   }
 
+  /** @param {string} text */
   function navSectionTitle(text) {
     const title = document.createElement('div');
     title.className = 'section-title settings-nav-section';
@@ -224,6 +259,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return button;
   }
 
+  /** @param {SettingsPluginView} plugin */
   function pluginNavButton(plugin) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -258,6 +294,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return icon;
   }
 
+  /** @param {SettingsPluginView} plugin */
   function pluginMark(plugin) {
     const mark = document.createElement('span');
     mark.className = 'plugin-mark plugin-mark-nav';
@@ -286,6 +323,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     settingsEntryHost.replaceChildren();
   }
 
+  /** @param {string} name */
   function settingsGroup(name) {
     const section = document.createElement('section');
     section.className = 'settings-group';
@@ -298,6 +336,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return { section, body };
   }
 
+  /** @param {string} text */
   function hostValue(text) {
     const value = document.createElement('span');
     value.className = 'settings-host-value';
@@ -305,6 +344,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return value;
   }
 
+  /** @param {string} label */
   function secondaryButton(label) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -318,6 +358,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     stopUpdateWatch = updater.onStatus(onUpdaterStatus);
   }
 
+  /** @param {UpdaterStatusPayload | null | undefined} payload */
   function syncGeneralUpdate(payload) {
     if (!generalNodes || activeSettingsId !== GENERAL_NAV_ID) return;
     const status = payload && payload.status;
@@ -328,6 +369,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     generalNodes.checkBtn.disabled = status === 'checking';
   }
 
+  /** @param {UpdaterStatusPayload} payload */
   function onUpdaterStatus(payload) {
     syncGeneralUpdate(payload);
     if (!checkRequested || !payload) return;
@@ -364,11 +406,19 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     }
   }
 
+  /**
+   * @param {HTMLElement} errorEl
+   * @param {string} message
+   */
   function showHostError(errorEl, message) {
     errorEl.hidden = !message;
     errorEl.textContent = message || '';
   }
 
+  /**
+   * @param {string} kind
+   * @param {HTMLElement} errorEl
+   */
   async function openHostData(kind, errorEl) {
     showHostError(errorEl, '');
     try {
@@ -382,6 +432,10 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     }
   }
 
+  /**
+   * @param {string} title
+   * @param {string} kind
+   */
   function hostPathRow(title, kind) {
     const row = document.createElement('div');
     row.className = 'settings-row settings-host-row';
@@ -485,6 +539,11 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     }
   }
 
+  /**
+   * @param {HTMLElement} parent
+   * @param {SettingsFieldView} field
+   * @param {SettingsPluginView} plugin
+   */
   function appendReset(parent, field, plugin) {
     const reset = document.createElement('button');
     reset.type = 'button';
@@ -498,6 +557,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     parent.appendChild(reset);
   }
 
+  /** @param {SettingsFieldView[]} fields */
   function fieldGroups(fields) {
     const groups = [];
     const index = new Map();
@@ -514,6 +574,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return groups;
   }
 
+  /** @param {SettingsPluginView} plugin */
   function renderSettingsForm(plugin) {
     settingsForm.replaceChildren();
     if (!settingsDraft || plugin.schemaError || plugin.fields.length === 0) return;
@@ -551,6 +612,10 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     mountIcons(settingsForm);
   }
 
+  /**
+   * @param {SettingsFieldView} field
+   * @param {SettingsPluginView} plugin
+   */
   function renderFieldControl(field, plugin) {
     if (field.type === 'boolean') return renderSwitch(field);
     if (field.type === 'select') return renderSelect(field);
@@ -559,15 +624,17 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return renderText(field, field.type === 'number' ? 'number' : 'text');
   }
 
+  /** @param {SettingsFieldView} field */
   function renderSwitch(field) {
+    const draft = activeDraft();
     const label = document.createElement('label');
     label.className = 'settings-switch';
     const input = document.createElement('input');
     input.type = 'checkbox';
-    input.checked = settingsDraft.values[field.key] === true;
+    input.checked = draft.values[field.key] === true;
     input.setAttribute('aria-label', field.title);
     input.addEventListener('change', () => {
-      settingsDraft.values[field.key] = input.checked;
+      activeDraft().values[field.key] = input.checked;
       syncSaveButton();
     });
     const track = document.createElement('span');
@@ -575,7 +642,9 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return label;
   }
 
+  /** @param {SettingsFieldView} field */
   function renderSelect(field) {
+    const draft = activeDraft();
     const select = document.createElement('select');
     select.className = 'settings-select';
     select.setAttribute('aria-label', field.title);
@@ -585,36 +654,47 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
       item.textContent = option;
       select.appendChild(item);
     }
-    select.value = typeof settingsDraft.values[field.key] === 'string' ? settingsDraft.values[field.key] : '';
+    const selected = draft.values[field.key];
+    select.value = typeof selected === 'string' ? selected : '';
     select.addEventListener('change', () => {
-      settingsDraft.values[field.key] = select.value;
+      activeDraft().values[field.key] = select.value;
       syncSaveButton();
     });
     return select;
   }
 
+  /**
+   * @param {SettingsFieldView} field
+   * @param {string} type
+   */
   function renderText(field, type) {
+    const draft = activeDraft();
     const input = document.createElement('input');
     input.className = 'settings-input';
     input.type = type;
     input.setAttribute('aria-label', field.title);
     if (type === 'number') {
-      const current = settingsDraft.values[field.key];
+      const current = draft.values[field.key];
       input.value = typeof current === 'number' && Number.isFinite(current) ? String(current) : '';
       input.addEventListener('input', () => {
-        settingsDraft.values[field.key] = input.value === '' ? '' : input.valueAsNumber;
+        activeDraft().values[field.key] = input.value === '' ? '' : input.valueAsNumber;
         syncSaveButton();
       });
     } else {
-      input.value = typeof settingsDraft.values[field.key] === 'string' ? settingsDraft.values[field.key] : '';
+      const current = draft.values[field.key];
+      input.value = typeof current === 'string' ? current : '';
       input.addEventListener('input', () => {
-        settingsDraft.values[field.key] = input.value;
+        activeDraft().values[field.key] = input.value;
         syncSaveButton();
       });
     }
     return input;
   }
 
+  /**
+   * @param {SettingsFieldView} field
+   * @param {SettingsPluginView} plugin
+   */
   function renderSecret(field, plugin) {
     const mask = '••••••••';
     const wrap = document.createElement('div');
@@ -624,10 +704,11 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     input.autocomplete = 'new-password';
     input.spellcheck = false;
     input.setAttribute('aria-label', field.title);
-    const intent = settingsDraft.secrets[field.key] || { action: 'keep' };
+    const intent = activeDraft().secrets[field.key] || { action: 'keep' };
     let revealed = false;
+    /** @type {string | null} */
     let revealedKeep = null;
-    const currentIntent = () => settingsDraft.secrets[field.key] || { action: 'keep' };
+    const currentIntent = () => activeDraft().secrets[field.key] || { action: 'keep' };
     const syncPlaceholder = () => {
       const current = currentIntent();
       const masked = field.secretSet === true && current.action === 'keep' && !revealed;
@@ -652,7 +733,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
       revealedKeep = null;
       input.type = 'text';
       const current = currentIntent();
-      input.value = current.action === 'set' ? current.value : '';
+      input.value = current.action === 'set' ? (current.value || '') : '';
       syncPlaceholder();
       syncEye();
     };
@@ -682,16 +763,16 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     input.addEventListener('input', () => {
       const current = currentIntent();
       if (revealedKeep !== null && input.value === revealedKeep && current.action === 'keep') {
-        settingsDraft.secrets[field.key] = { action: 'keep' };
+        activeDraft().secrets[field.key] = { action: 'keep' };
       } else if (input.value === '') {
         revealedKeep = null;
         revealed = false;
-        if (current.action !== 'clear') settingsDraft.secrets[field.key] = { action: 'keep' };
+        if (current.action !== 'clear') activeDraft().secrets[field.key] = { action: 'keep' };
       } else {
         revealedKeep = null;
         revealed = false;
         input.type = 'text';
-        settingsDraft.secrets[field.key] = { action: 'set', value: input.value };
+        activeDraft().secrets[field.key] = { action: 'set', value: input.value };
       }
       syncPlaceholder();
       syncEye();
@@ -718,7 +799,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     clear.className = 'settings-text-btn';
     clear.textContent = '清除';
     clear.addEventListener('click', () => {
-      settingsDraft.secrets[field.key] = { action: 'clear' };
+      activeDraft().secrets[field.key] = { action: 'clear' };
       showMasked();
       syncSaveButton();
     });
@@ -726,12 +807,14 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return wrap;
   }
 
+  /** @param {SettingsFieldView} field */
   function renderPath(field) {
     const wrap = document.createElement('div');
     wrap.className = 'settings-control';
     const value = document.createElement('span');
     value.className = 'settings-path-value';
-    const current = typeof settingsDraft.values[field.key] === 'string' ? settingsDraft.values[field.key] : '';
+    const raw = activeDraft().values[field.key];
+    const current = typeof raw === 'string' ? raw : '';
     value.textContent = current || '未选择';
     value.title = current;
     const change = document.createElement('button');
@@ -741,7 +824,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     change.addEventListener('click', async () => {
       const picked = await window.dex.pickDirectory();
       if (!picked || picked.cancelled || !picked.path) return;
-      settingsDraft.values[field.key] = picked.path;
+      activeDraft().values[field.key] = picked.path;
       value.textContent = picked.path;
       value.title = picked.path;
       syncSaveButton();
@@ -750,6 +833,10 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return wrap;
   }
 
+  /**
+   * @param {SettingsPluginView} plugin
+   * @param {boolean} mountEntry
+   */
   async function renderSettingsMain(plugin, mountEntry) {
     settingsTitle.textContent = plugin.displayName;
     settingsSchemaError.hidden = !plugin.schemaError;
@@ -763,6 +850,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     if (mountEntry) await mountSettingsEntry(plugin);
   }
 
+  /** @param {SettingsPluginView} plugin */
   async function mountSettingsEntry(plugin) {
     settingsEntryHost.replaceChildren();
     if (!plugin.settingsEntryUrl) {
@@ -794,6 +882,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return settingsCatalog.map((item) => item.id);
   }
 
+  /** @param {string} id */
   async function selectSettings(id) {
     if (id === activeSettingsId) return;
     const plugin = id === GENERAL_NAV_ID ? null : settingsCatalog.find((item) => item.id === id);
@@ -811,6 +900,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
       }
       return;
     }
+    if (!plugin) return;
     generalNodes = null;
     activeSettingsId = id;
     settingsDraft = draftFromPlugin(plugin);
@@ -823,6 +913,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     }
   }
 
+  /** @param {string} [pluginId] */
   async function enterSettings(pluginId) {
     if (shell.settingsMode) {
       if (typeof pluginId === 'string') await selectSettings(preferredSettingsId(pluginId, catalogIds()));
@@ -839,6 +930,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     await selectSettings(preferredSettingsId(pluginId, catalogIds()));
   }
 
+  /** @param {{ resume?: boolean }} [options] */
   function leaveSettings(options = {}) {
     const backTo = returnPluginId;
     shell.settingsMode = false;

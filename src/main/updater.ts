@@ -13,32 +13,18 @@ const { autoUpdater } = require('electron-updater') as typeof import('electron-u
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const SILENT_RETRY_DELAY_MS = 5_000;
 
-export type UpdateStatus =
-  | 'idle'
-  | 'checking'
-  | 'upToDate'
-  | 'downloading'
-  | 'readyToInstall'
-  | 'installing'
-  | 'error'
-  | 'unsupported';
+export type {
+  UpdateStatus,
+  PlatformFlow,
+  UpdaterStatusPayload,
+  InstallUpdateResult,
+} from '../shared/dex-bridge.ts';
 
-export type PlatformFlow = 'win-auto' | 'mac-dmg';
-
-export interface UpdaterStatusPayload {
-  status: UpdateStatus;
-  platformFlow: PlatformFlow;
-  currentVersion: string;
-  availableVersion?: string;
-  errorMessage?: string;
-  lastCheckedAt?: string;
-  progressPercent?: number;
-}
-
-export interface InstallUpdateResult {
-  ok: boolean;
-  blockedByTask?: boolean;
-}
+import type {
+  PlatformFlow,
+  UpdaterStatusPayload,
+  InstallUpdateResult,
+} from '../shared/dex-bridge.ts';
 
 const isWin = process.platform === 'win32';
 const isMac = process.platform === 'darwin';

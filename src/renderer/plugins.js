@@ -2,22 +2,36 @@ import { mountIcons } from './icons.js';
 import { mountPluginViews } from './plugin-views.js';
 import { mountPluginBoot } from './plugin-boot.js';
 import { showShellToast } from './shell-toast.js';
+import { byId } from './dom.js';
 
+/**
+ * @param {{
+ *   shell: { plugins: PluginSummary[]; activeId: string | null; settingsMode: boolean };
+ *   setStatus: (message: string, kind?: string) => void;
+ *   settings: { dismissSurface: () => void; onPluginsChanged: () => Promise<void> | void };
+ *   onClearNavigation?: () => void;
+ *   onOpenPluginSettings?: (pluginId: string) => void;
+ *   onOpenMarket?: () => void;
+ *   onWorkspaceChanged?: () => void;
+ *   onListChanged?: () => void;
+ *   onUnavailable?: (pluginId: string) => void;
+ * }} opts
+ */
 export function mountPlugins({
   shell,
   setStatus,
   settings,
   onClearNavigation = () => {},
-  onOpenPluginSettings = (_pluginId) => {},
+  onOpenPluginSettings = (/** @type {string} */ _pluginId) => {},
   onOpenMarket = () => {},
   onWorkspaceChanged = () => {},
   onListChanged = () => {},
-  onUnavailable = (_pluginId) => {},
+  onUnavailable = (/** @type {string} */ _pluginId) => {},
 }) {
-  const nav = document.getElementById('plugin-nav');
-  const welcome = document.getElementById('welcome-screen');
-  const headless = document.getElementById('headless-screen');
-  const viewportHost = document.getElementById('viewport-host');
+  const nav = byId('plugin-nav', 'nav');
+  const welcome = byId('welcome-screen', 'section');
+  const headless = byId('headless-screen', 'section');
+  const viewportHost = byId('viewport-host', 'div');
   let openSeq = 0;
   const boot = mountPluginBoot(viewportHost);
   const views = mountPluginViews({
@@ -32,22 +46,25 @@ export function mountPlugins({
       handleViewFailed(id, message);
     },
   });
-  const openMarket = document.getElementById('open-market');
-  const headlessTitle = document.getElementById('headless-title');
-  const pluginPane = document.getElementById('plugin-pane');
-  const previewStrip = document.getElementById('preview-strip');
-  const previewStripEnd = document.getElementById('preview-strip-end');
+  const openMarket = byId('open-market', 'button');
+  const headlessTitle = byId('headless-title', 'h1');
+  const pluginPane = byId('plugin-pane', 'div');
+  const previewStrip = byId('preview-strip', 'div');
+  const previewStripEnd = byId('preview-strip-end', 'button');
+  /** @type {HTMLElement | null} */
   let hoverCard = null;
+  /** @type {ReturnType<typeof setTimeout> | null} */
   let hideHoverTimer = null;
   nav.addEventListener('scroll', () => clearHoverCard());
 
+  /** @param {PluginSummary | null | undefined} plugin */
   function isPreviewMount(plugin) {
     return !!plugin && plugin.mount === 'preview' && !plugin.runtimeError && !plugin.previewError;
   }
 
   function syncPreviewStrip() {
     const plugin = shell.activeId
-      ? shell.plugins.find((item) => item.id === shell.activeId)
+      ? shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === shell.activeId)
       : null;
     const show = workspaceOpen() && isPreviewMount(plugin);
     previewStrip.hidden = !show;
@@ -68,6 +85,7 @@ export function mountPlugins({
     hideHoverTimer = setTimeout(clearHoverCard, 80);
   }
 
+  /** @param {HTMLElement} anchor */
   function placeHoverCard(anchor) {
     if (!hoverCard) return;
     const rect = anchor.getBoundingClientRect();
@@ -81,6 +99,7 @@ export function mountPlugins({
     hoverCard.style.top = `${top}px`;
   }
 
+  /** @param {string | undefined} rootPath */
   function displayPath(rootPath) {
     if (!rootPath) return '';
     const home = rootPath.match(/^\/Users\/[^/]+/);
@@ -88,12 +107,17 @@ export function mountPlugins({
     return rootPath;
   }
 
+  /** @param {string} name */
   function hoverIcon(name) {
     const icon = document.createElement('i');
     icon.dataset.lucide = name;
     return icon;
   }
 
+  /**
+   * @param {string} iconName
+   * @param {string} text
+   */
   function hoverRow(iconName, text) {
     const row = document.createElement('div');
     row.className = 'nav-hover-row';
@@ -110,6 +134,10 @@ export function mountPlugins({
     return rule;
   }
 
+  /**
+   * @param {HTMLElement} anchor
+   * @param {PluginSummary} plugin
+   */
   function showHoverCard(anchor, plugin) {
     clearHoverCard();
     const card = document.createElement('div');
@@ -170,6 +198,7 @@ export function mountPlugins({
     placeHoverCard(anchor);
   }
 
+  /** @param {PluginSummary} plugin */
   function hoverSource(plugin) {
     if (plugin.source === 'bundled') return { icon: 'boxes', text: '来自示例' };
     if (plugin.source === 'local' || plugin.source === 'dev') {
@@ -187,6 +216,7 @@ export function mountPlugins({
     return icon;
   }
 
+  /** @param {PluginSummary} plugin */
   function navMark(plugin) {
     const mark = document.createElement('span');
     mark.className = 'plugin-mark plugin-mark-nav';
@@ -268,6 +298,7 @@ export function mountPlugins({
     return document.body.dataset.surface === 'workspace' && !pluginPane.hidden;
   }
 
+  /** @param {PluginSummary} plugin */
   function isUi(plugin) {
     return plugin.type === 'ui' && !!plugin.uiUrl;
   }
@@ -293,12 +324,17 @@ export function mountPlugins({
     void views.enforceQuota(null);
   }
 
+  /**
+   * @param {string} id
+   * @param {string} message
+   */
   function handleViewFailed(id, message) {
     if (shell.activeId !== id || !workspaceOpen()) return;
     showWelcome();
     setStatus(message || '打开插件失败', 'error');
   }
 
+  /** @param {PluginSummary} plugin */
   async function openPlugin(plugin) {
     if (plugin.runtimeError || plugin.previewError) {
       setStatus('');
@@ -380,9 +416,10 @@ export function mountPlugins({
     onWorkspaceChanged();
   }
 
+  /** @param {PluginSummary[]} [nextPlugins] */
   async function refresh(nextPlugins) {
     shell.plugins = nextPlugins || (await window.dex.listPlugins());
-    const live = new Set(shell.plugins.map((plugin) => plugin.id));
+    const live = new Set(shell.plugins.map((/** @type {PluginSummary} */ plugin) => plugin.id));
     for (const id of views.ids()) {
       if (!live.has(id)) views.drop(id, 'force');
     }
@@ -393,7 +430,7 @@ export function mountPlugins({
       await settings.onPluginsChanged();
       return;
     }
-    if (shell.activeId && !shell.plugins.some((plugin) => plugin.id === shell.activeId)) {
+    if (shell.activeId && !shell.plugins.some((/** @type {PluginSummary} */ plugin) => plugin.id === shell.activeId)) {
       if (document.body.dataset.surface === 'workspace') showWelcome();
       else forgetWorkspacePlugin();
     }
@@ -401,7 +438,7 @@ export function mountPlugins({
 
   function suspend() {
     const shown = views.parkHot();
-    const protectedId = views.has(shell.activeId) ? shell.activeId : shown;
+    const protectedId = views.has(shell.activeId || '') ? shell.activeId : shown;
     boot.hide();
     pluginPane.hidden = true;
     welcome.hidden = true;
@@ -414,7 +451,7 @@ export function mountPlugins({
   async function endActivePreview() {
     const pluginId = shell.activeId;
     if (!pluginId) return;
-    const plugin = shell.plugins.find((item) => item.id === pluginId);
+    const plugin = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === pluginId);
     if (!isPreviewMount(plugin)) return;
     views.drop(pluginId, 'force');
     try {
@@ -433,27 +470,30 @@ export function mountPlugins({
     }
   }
 
+  /** @param {string | null | undefined} pluginId */
   function resume(pluginId) {
     pluginPane.hidden = false;
-    const plugin = shell.plugins.find((item) => item.id === pluginId);
+    const plugin = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === pluginId);
     if (plugin) void openPlugin(plugin);
     else showWelcome();
   }
 
+  /** @param {string} id */
   function releaseView(id) {
     views.drop(id, 'force');
   }
 
+  /** @param {string | null | undefined} id */
   function reopenIfWatching(id) {
     if (!id || !workspaceOpen() || shell.activeId !== id) return;
-    const plugin = shell.plugins.find((item) => item.id === id);
+    const plugin = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === id);
     if (!plugin) return;
     void openPlugin(plugin);
   }
 
   async function reloadActive() {
     if (!workspaceOpen()) return;
-    const plugin = shell.plugins.find((item) => item.id === shell.activeId);
+    const plugin = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === shell.activeId);
     if (!plugin || !isUi(plugin)) return;
     if (plugin.source === 'local') {
       try {
@@ -469,7 +509,7 @@ export function mountPlugins({
         return;
       }
       views.drop(plugin.id, 'force');
-      const next = shell.plugins.find((item) => item.id === plugin.id);
+      const next = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === plugin.id);
       if (next) await openPlugin(next);
       return;
     }

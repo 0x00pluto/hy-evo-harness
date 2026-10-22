@@ -1,10 +1,22 @@
-export type PluginKind = 'ui' | 'headless';
+export type {
+  PluginKind,
+  PluginSource,
+  LocalFrom,
+  LocalMountMode,
+  PluginSummary,
+  DexResult,
+  PluginConfigValue,
+  ConfigFieldType,
+} from '../shared/dex-bridge.ts';
 
-export type PluginSource = 'bundled' | 'dev' | 'installed' | 'local';
-
-export type LocalFrom = 'page' | 'config';
-
-export type LocalMountMode = 'source' | 'preview' | 'preview-failed';
+import type {
+  PluginKind,
+  PluginSource,
+  LocalFrom,
+  LocalMountMode,
+  PluginConfigValue,
+  ConfigFieldType,
+} from '../shared/dex-bridge.ts';
 
 export type RuntimeLayout = 'repo' | 'published';
 
@@ -12,10 +24,6 @@ export interface Logger {
   info: (msg: string) => void;
   error: (msg: string) => void;
 }
-
-export type ConfigFieldType = 'string' | 'boolean' | 'number' | 'select' | 'path';
-
-export type PluginConfigValue = string | number | boolean;
 
 export type PluginConfig = Record<string, PluginConfigValue>;
 
@@ -148,52 +156,4 @@ export interface LocalRecord {
   from: LocalFrom;
   mount: LocalMountMode;
   previewError?: string;
-}
-
-export interface PluginSummary {
-  id: string;
-  /** 清单 id。已安装和内置插件与 id 相同；本地实例是另一把钥匙。 */
-  manifestId: string;
-  /** 仅本地实例。形式是 dev- 加 32 位十六进制。 */
-  instanceId?: string;
-  localFrom?: LocalFrom;
-  mount?: LocalMountMode;
-  /** 发布预览没准备好。插件未执行 apply。 */
-  previewError?: string;
-  displayName: string;
-  version: string;
-  type: PluginKind;
-  uiUrl: string | null;
-  source: PluginSource;
-  /** 仅已安装插件。市场或压缩包。没有记录时界面按压缩包显示。 */
-  originChannel?: 'market' | 'file';
-  /** 插件目录的绝对路径，用于首页悬停卡片和详情里的目录提示。本地实例是源码目录。 */
-  rootPath: string;
-  /** 有 configSchema 或 settingsEntry 时，首页悬停卡片可以进入它的设置。 */
-  hasSettings: boolean;
-  description?: string;
-  iconUrl?: string;
-  developer?: string;
-  category?: string;
-  website?: string;
-  privacyPolicy?: string;
-  termsOfService?: string;
-  catalogError?: string;
-  /** 运行环境没准备好。插件未执行 apply。 */
-  runtimeError?: string;
-  /** 外部命令不在 PATH 里。详情可复制给编程助手，由助手安装。 */
-  installPrompt?: string;
-}
-
-export interface DexResult {
-  ok: boolean;
-  cancelled?: boolean;
-  message?: string;
-  plugins: PluginSummary[];
-  /** 本次安装成功的插件 id。覆盖安装同一个 id 时界面靠它打开详情。 */
-  installedId?: string;
-  /** 本地目录加载后要定位的实例 id。 */
-  focusedId?: string;
-  /** 安装锁被占用。点击被忽略，界面不要当成失败 toast。 */
-  ignored?: boolean;
 }

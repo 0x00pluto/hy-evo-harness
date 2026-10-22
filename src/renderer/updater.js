@@ -1,39 +1,50 @@
 import { showUpdateDot, updateRowMode } from './chrome-state.js';
+import { byId } from './dom.js';
 
+/**
+ * @param {{ setStatus: (message: string, kind?: string) => void }} opts
+ */
 export function mountUpdater({ setStatus }) {
-  const updateBtn = document.getElementById('update-btn');
-  const updateLabel = document.getElementById('update-label');
-  const updateRetry = document.getElementById('update-retry');
-  const updateRail = document.getElementById('rail-update');
-  const updateDialog = document.getElementById('update-dialog');
-  const updateDialogTitle = document.getElementById('update-dialog-title');
-  const updateDialogBody = document.getElementById('update-dialog-body');
-  const updateLater = document.getElementById('update-later');
-  const updateConfirm = document.getElementById('update-confirm');
-  const updateProgress = document.getElementById('update-progress');
-  const updateProgressFill = document.getElementById('update-progress-fill');
+  const updateBtn = byId('update-btn', 'button');
+  const updateLabel = byId('update-label', 'span');
+  const updateRetry = byId('update-retry', 'button');
+  const updateRail = byId('rail-update', 'button');
+  const updateDialog = byId('update-dialog', 'dialog');
+  const updateDialogTitle = byId('update-dialog-title', 'h2');
+  const updateDialogBody = byId('update-dialog-body', 'p');
+  const updateLater = byId('update-later', 'button');
+  const updateConfirm = byId('update-confirm', 'button');
+  const updateProgress = byId('update-progress', 'div');
+  const updateProgressFill = byId('update-progress-fill', 'span');
 
+  /** @type {UpdaterStatusPayload | null} */
   let updateState = null;
   let forceUpdateIcon = false;
   let previewDialog = false;
+  /** @type {ReturnType<typeof setInterval> | null} */
   let previewTimer = null;
   let updaterOwnsStatus = false;
+  /** @type {Set<(payload: UpdaterStatusPayload) => void>} */
   const statusListeners = new Set();
 
+  /** @param {string | undefined} version */
   function versionLabel(version) {
     return version ? `v${version}` : '新版本';
   }
 
+  /** @param {UpdaterStatusPayload | null | undefined} payload */
   function isMacUpdate(payload) {
-    return payload && payload.platformFlow === 'mac-dmg';
+    return Boolean(payload && payload.platformFlow === 'mac-dmg');
   }
 
+  /** @param {UpdaterStatusPayload | null | undefined} payload */
   function knownPercent(payload) {
     const percent = payload && payload.progressPercent;
     if (typeof percent !== 'number' || !Number.isFinite(percent)) return null;
     return Math.max(0, Math.min(100, Math.round(percent)));
   }
 
+  /** @param {UpdaterStatusPayload} payload */
   function showProgress(payload) {
     const downloading = payload.status === 'downloading';
     if (!downloading) {
@@ -59,6 +70,7 @@ export function mountUpdater({ setStatus }) {
     }
   }
 
+  /** @param {UpdaterStatusPayload} payload */
   function fillUpdateDialog(payload) {
     const version = versionLabel(payload.availableVersion);
     const downloading = payload.status === 'downloading';
@@ -114,11 +126,15 @@ export function mountUpdater({ setStatus }) {
     }, 50);
   }
 
+  /** @param {UpdateStatus} [status] */
   function previewPayload(status = 'readyToInstall') {
     return {
       status,
       availableVersion: '0.0.0',
-      platformFlow: updateState && updateState.platformFlow ? updateState.platformFlow : 'mac-dmg',
+      currentVersion: updateState?.currentVersion || '',
+      platformFlow: /** @type {'win-auto' | 'mac-dmg'} */ (
+        updateState && updateState.platformFlow ? updateState.platformFlow : 'mac-dmg'
+      ),
     };
   }
 
@@ -145,6 +161,7 @@ export function mountUpdater({ setStatus }) {
     updateBtn.setAttribute('aria-label', isMacUpdate(preview) ? '下载新版本' : '重启并安装更新');
   }
 
+  /** @param {UpdaterStatusPayload | null | undefined} payload */
   function renderUpdate(payload) {
     if (!payload) return;
     const previous = updateState;
@@ -246,6 +263,7 @@ export function mountUpdater({ setStatus }) {
     status() {
       return updateState;
     },
+    /** @param {(payload: UpdaterStatusPayload) => void} listener */
     onStatus(listener) {
       statusListeners.add(listener);
       if (updateState) listener(updateState);

@@ -28,5 +28,5 @@
 - `docs/workflows/publish-plugin.md`: 维护者把插件仓库写入授权名单后，同步工作流拉取最高 vX.Y.Z 上传七牛；版本说明可带 category 和 iconUrl，已有 zip 不补传图标；仓库里若还有 dex-buddy-plugin-pack.json 则失败；同事机器上的市场插件在启动和每 6 小时静默更新，正在看的离开时再查目录并安装
 - `specs/prds/prd-wiki-index.md`: PRD 索引；正文为 `specs/prds/prd-{五位序号}-{feature-slug}.md`，本索引不计入序号
 - `.cursor/commands/team/`: 团队命令（产品经理、工程验收官、前端工程师、测试工程师、自主交付工程师）；母版在 Obsidian，不在此复制全文
-- `docs/renderer-layout.md`: 设置页和插件页共用一份 #split-layout；渲染层 checkJs（tsconfig.renderer.json + dex-host.d.ts）挂进 build，仍不打包；以后在第四个分栏表面把间距改散，或单页拼 DOM 超过约 800 行时，再引入 Lit 具名插槽，本次不安装
+- `docs/renderer-layout.md`: 设置页和插件页共用一份 #split-layout；渲染层 checkJs 开严格空值与禁隐式 any（shared/dex-bridge + byId），挂进 build，仍不打包；Lucide/lottie 继续 node_modules UMD；以后在第四个分栏表面把间距改散，或单页拼 DOM 超过约 800 行时，再引入 Lit 具名插槽，本次不安装
 - `docs/faqs/how-to-prevent-popup-clipping.md`: 工作台弹出层不要绝对定位在 overflow 容器里；用 fixed 按按钮摆放，否则只剩一条

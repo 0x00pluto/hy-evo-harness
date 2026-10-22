@@ -12,44 +12,72 @@ import {
   togglePin,
   usePlugin as usePluginState,
 } from './chrome-state.js';
+import { byId } from './dom.js';
 
 const LOCAL_USER_LABEL = '本地用户';
 
+/**
+ * @param {{
+ *   settings: {
+ *     enterSettings: (pluginId?: string) => Promise<void>;
+ *     confirmDiscard: () => Promise<boolean>;
+ *     leaveSettings: (opts: { resume: boolean }) => void;
+ *   };
+ *   plugins: {
+ *     syncPreviewStrip: () => void;
+ *     resume: (pluginId?: string | null) => void;
+ *     suspend: () => void;
+ *     reloadActive: () => Promise<void> | void;
+ *     openPlugin: (plugin: PluginSummary) => Promise<void>;
+ *   };
+ *   pluginsPage: {
+ *     sync: (session: ChromeSession) => void;
+ *     clearStatus: () => void;
+ *     refreshCatalog: () => Promise<void> | void;
+ *   };
+ *   shell: { plugins: PluginSummary[]; activeId: string | null; settingsMode: boolean };
+ *   setStatus: (message: string, kind?: string) => void;
+ *   applySplitWidth?: () => void;
+ * }} opts
+ */
 export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, applySplitWidth = () => {} }) {
-  const backBtn = document.getElementById('history-back');
-  const forwardBtn = document.getElementById('history-forward');
-  const reloadBtn = document.getElementById('history-reload');
-  const collapseBtn = document.getElementById('sidebar-toggle');
-  const gearBtn = document.getElementById('rail-settings');
-  const popover = document.getElementById('gear-popover');
-  const usernameEl = document.getElementById('gear-username');
-  const splitLayout = document.getElementById('split-layout');
+  const backBtn = byId('history-back', 'button');
+  const forwardBtn = byId('history-forward', 'button');
+  const reloadBtn = byId('history-reload', 'button');
+  const collapseBtn = byId('sidebar-toggle', 'button');
+  const gearBtn = byId('rail-settings', 'button');
+  const popover = byId('gear-popover', 'div');
+  const usernameEl = byId('gear-username', 'div');
+  const splitLayout = byId('split-layout', 'div');
   const settingsSlots = [
-    'settings-heading',
-    'settings-search',
-    'settings-section',
-    'settings-list',
-    'settings-screen',
-  ].map((id) => document.getElementById(id));
+    byId('settings-heading', 'h2'),
+    byId('settings-search', 'input'),
+    byId('settings-section', 'div'),
+    byId('settings-list', 'div'),
+    byId('settings-screen', 'section'),
+  ];
   const pluginsSlots = [
-    'plugins-heading',
-    'plugins-search-toggle',
-    'plugins-market-entry',
-    'plugins-section',
-    'plugins-list',
-    'plugins-screen',
-  ].map((id) => document.getElementById(id));
-  const titleName = document.getElementById('titlebar-plugin-name');
-  const homeBtn = document.getElementById('rail-home');
-  const pluginsBtn = document.getElementById('rail-plugins');
-  const sidebar = document.getElementById('sidebar');
-  const shortcutEl = document.getElementById('settings-shortcut');
+    byId('plugins-heading', 'h2'),
+    byId('plugins-search-toggle', 'button'),
+    byId('plugins-market-entry', 'button'),
+    byId('plugins-section', 'div'),
+    byId('plugins-list', 'div'),
+    byId('plugins-screen', 'section'),
+  ];
+  const titleName = byId('titlebar-plugin-name', 'div');
+  const homeBtn = byId('rail-home', 'button');
+  const pluginsBtn = byId('rail-plugins', 'button');
+  const sidebar = byId('sidebar', 'aside');
+  const shortcutEl = byId('settings-shortcut', 'span');
+  const pluginsSearch = byId('plugins-search', 'input');
+  const pluginsSearchToggle = byId('plugins-search-toggle', 'button');
   const usesCommand = document.documentElement.classList.contains('is-mac');
   shortcutEl.textContent = usesCommand ? '⌘,' : 'Ctrl+,';
 
   let session = createChromeSession();
   let popoverOpen = false;
   let closeTimer = 0;
+  /** @type {string | null | undefined} */
   let reportedWatching;
 
   function reportWatching() {
@@ -74,8 +102,8 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     for (const slot of settingsSlots) slot.hidden = !settingsOpen;
     for (const slot of pluginsSlots) slot.hidden = !pluginsOpen;
     if (!pluginsOpen) {
-      document.getElementById('plugins-search').hidden = true;
-      document.getElementById('plugins-search-toggle').setAttribute('aria-expanded', 'false');
+      pluginsSearch.hidden = true;
+      pluginsSearchToggle.setAttribute('aria-expanded', 'false');
     }
     if (!workspace) applySplitWidth();
     backBtn.disabled = !canGoBack(session);
@@ -99,13 +127,15 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
 
   function workspacePluginName() {
     if (!shell.activeId) return '';
-    const plugin = shell.plugins.find((item) => item.id === shell.activeId);
+    /** @type {PluginSummary | undefined} */
+    const plugin = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === shell.activeId);
     return plugin ? plugin.displayName : '';
   }
 
   function showingUiPlugin() {
     if (session.surface !== 'workspace' || !shell.activeId) return false;
-    const plugin = shell.plugins.find((item) => item.id === shell.activeId);
+    /** @type {PluginSummary | undefined} */
+    const plugin = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === shell.activeId);
     return Boolean(plugin && plugin.type === 'ui' && plugin.uiUrl);
   }
 
@@ -122,6 +152,7 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     closeTimer = window.setTimeout(() => sidebar.classList.remove('is-open'), 60);
   }
 
+  /** @param {boolean} open */
   function setPopover(open) {
     popoverOpen = open;
     popover.hidden = !open;
@@ -139,6 +170,7 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     }
   }
 
+  /** @param {string} [pluginId] */
   async function openSettings(pluginId) {
     const next = enterSettingsState(session);
     if (next !== session) {
@@ -194,10 +226,10 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
   forwardBtn.addEventListener('click', () => {
     const next = goForward(session);
     if (next === session) return;
-    session = next;
+    session = /** @type {ChromeSession} */ (next);
     if (session.surface === 'settings') {
       apply();
-      void settings.enterSettings().catch((err) => {
+      void settings.enterSettings().catch((/** @type {unknown} */ err) => {
         setStatus(err instanceof Error ? err.message : '无法打开设置', 'error');
       });
       return;
@@ -263,14 +295,16 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
       apply();
     },
     enterPlugins: openPlugins,
+    /** @param {string} pluginId */
     focusPlugin(pluginId) {
       const next = selectPluginsFocus(session, pluginId);
       if (next === session) return;
       session = next;
       apply();
     },
+    /** @param {string} pluginId */
     async usePlugin(pluginId) {
-      const plugin = shell.plugins.find((item) => item.id === pluginId);
+      const plugin = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === pluginId);
       if (!plugin) return;
       shell.activeId = pluginId;
       session = usePluginState(session, pluginId);

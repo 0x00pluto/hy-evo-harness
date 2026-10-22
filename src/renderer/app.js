@@ -6,6 +6,7 @@ import { mountSettings } from './settings.js';
 import { mountChrome } from './chrome.js';
 import { mountIcons } from './icons.js';
 import { mountShellToast } from './shell-toast.js';
+import { byId } from './dom.js';
 
 /** @type {{ plugins: PluginSummary[]; activeId: string | null; settingsMode: boolean }} */
 const shell = {
@@ -14,7 +15,7 @@ const shell = {
   settingsMode: false,
 };
 
-const statusEl = document.getElementById('status');
+const statusEl = byId('status', 'p');
 
 /**
  * @param {string} message

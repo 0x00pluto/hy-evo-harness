@@ -1,5 +1,6 @@
 import { mountIcons } from './icons.js';
 import { showShellToast as showToast } from './shell-toast.js';
+import { byId } from './dom.js';
 
 const SOURCE_LABEL = {
   bundled: '示例',
@@ -10,30 +11,50 @@ const SOURCE_LABEL = {
 const CATALOG_SOURCE = '插件中心';
 const OTHER_CATEGORY = '其他';
 
+/**
+ * @typedef {{ label: string; icon: string; run: () => void; danger?: boolean }} PluginMenuItem
+ */
+
+/**
+ * @param {{
+ *   shell: { plugins: PluginSummary[]; activeId: string | null; settingsMode: boolean };
+ *   plugins: {
+ *     refresh: (list?: PluginSummary[]) => Promise<void>;
+ *     releaseView: (id: string) => void;
+ *     reopenIfWatching: (id: string | null | undefined) => void;
+ *   };
+ *   chrome: ChromeBridge;
+ * }} opts
+ */
 export function mountPluginsPage({ shell, plugins, chrome }) {
-  const search = document.getElementById('plugins-search');
-  const marketSearch = document.getElementById('plugins-market-search');
-  const searchToggle = document.getElementById('plugins-search-toggle');
-  const list = document.getElementById('plugins-list');
-  const statusEl = document.getElementById('plugins-status');
-  const detail = document.getElementById('plugins-detail');
-  const refreshBtn = document.getElementById('plugins-refresh');
-  const addBtn = document.getElementById('plugins-add');
-  const marketPane = document.getElementById('plugins-market');
-  const marketList = document.getElementById('plugins-market-list');
-  const marketEntry = document.getElementById('plugins-market-entry');
-  const installDialog = document.getElementById('tool-install-dialog');
-  const installTitle = document.getElementById('tool-install-title');
-  const installBody = document.getElementById('tool-install-body');
-  const installLater = document.getElementById('tool-install-later');
-  const installCopy = document.getElementById('tool-install-copy');
+  const search = byId('plugins-search', 'input');
+  const marketSearch = byId('plugins-market-search', 'input');
+  const searchToggle = byId('plugins-search-toggle', 'button');
+  const list = byId('plugins-list', 'div');
+  const statusEl = byId('plugins-status', 'p');
+  const detail = byId('plugins-detail', 'div');
+  const refreshBtn = byId('plugins-refresh', 'button');
+  const addBtn = byId('plugins-add', 'button');
+  const marketPane = byId('plugins-market', 'div');
+  const marketList = byId('plugins-market-list', 'div');
+  const marketEntry = byId('plugins-market-entry', 'button');
+  const installDialog = byId('tool-install-dialog', 'dialog');
+  const installTitle = byId('tool-install-title', 'h2');
+  const installBody = byId('tool-install-body', 'pre');
+  const installLater = byId('tool-install-later', 'button');
+  const installCopy = byId('tool-install-copy', 'button');
 
   let busy = false;
+  /** @type {string | null} */
   let installPromptShownFor = null;
   let silentBusy = false;
+  /** @type {string | null} */
   let busyId = null;
+  /** @type {HTMLElement | null} */
   let menuHost = null;
+  /** @type {CatalogPlugin[]} */
   let catalogPlugins = [];
+  /** @type {PluginUpdateNotice[]} */
   let updates = [];
   let marketError = '';
 
@@ -48,14 +69,22 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     addBtn.disabled = false;
   }
 
+  /**
+   * @param {string} message
+   * @param {string} [kind]
+   */
   function setStatus(message, kind) {
     statusEl.textContent = message || '';
     if (kind) statusEl.dataset.kind = kind;
     else delete statusEl.dataset.kind;
   }
 
+  /** @param {PluginSource | string} source */
   function sourceLabel(source) {
-    return SOURCE_LABEL[source] || '内置';
+    if (source === 'bundled' || source === 'dev' || source === 'local' || source === 'installed') {
+      return SOURCE_LABEL[source];
+    }
+    return '内置';
   }
 
   function query() {
@@ -72,22 +101,26 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     return shell.plugins.filter((plugin) => plugin.displayName.toLowerCase().includes(q));
   }
 
+  /** @param {string} id */
   function localPlugin(id) {
     return shell.plugins.find((plugin) => plugin.id === id) || null;
   }
 
+  /** @param {string} catalogId */
   function installedPlugin(catalogId) {
     return shell.plugins.find((plugin) =>
       plugin.source === 'installed' && (plugin.manifestId || plugin.id) === catalogId,
     ) || null;
   }
 
+  /** @param {PluginSummary} plugin */
   function mountLabel(plugin) {
     if (plugin.mount === 'preview') return '发布预览';
     if (plugin.mount === 'preview-failed') return '预览失败';
     return '源码目录';
   }
 
+  /** @param {PluginSummary} plugin */
   function localMenuItems(plugin) {
     if (plugin.source !== 'local' || plugin.localFrom === 'config') return [];
     if (plugin.mount === 'preview' || plugin.mount === 'preview-failed') {
@@ -104,6 +137,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     ];
   }
 
+  /** @param {ChromeSession} session */
   function renderList(session) {
     const focus = session.pluginsFocus;
     const marketOn = focus == null;
@@ -167,6 +201,10 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     return icon;
   }
 
+  /**
+   * @param {{ iconUrl?: string | null; displayName?: string }} plugin
+   * @param {string} kind
+   */
   function pluginMark(plugin, kind) {
     const mark = document.createElement('span');
     mark.className = kind === 'detail'
@@ -193,6 +231,10 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     document.querySelectorAll('.plugin-folder-tip').forEach((node) => node.remove());
   }
 
+  /**
+   * @param {HTMLElement} button
+   * @param {HTMLElement} tip
+   */
   function placeFolderTip(button, tip) {
     tip.hidden = false;
     const anchor = button.getBoundingClientRect();
@@ -206,6 +248,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     tip.style.left = `${left}px`;
   }
 
+  /** @param {string | { path?: string; sourceLabel?: string; openable?: boolean }} options */
   function folderButton(options) {
     const rootPath = typeof options === 'string' ? options : options.path;
     const label = typeof options === 'string' ? '' : (options.sourceLabel || '');
@@ -227,7 +270,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       pathLine.textContent = rootPath || '';
       tip.append(source, pathLine);
     } else {
-      tip.textContent = rootPath;
+      tip.textContent = rootPath || '';
     }
     tip.hidden = true;
     document.body.appendChild(tip);
@@ -247,13 +290,17 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
 
   function closeMenu() {
     if (!menuHost) return;
-    const menu = menuHost.querySelector('.plugin-menu');
+    const menu = /** @type {HTMLElement | null} */ (menuHost.querySelector('.plugin-menu'));
     const button = menuHost.querySelector('[aria-haspopup="menu"]');
     if (menu) menu.hidden = true;
     if (button) button.setAttribute('aria-expanded', 'false');
     menuHost = null;
   }
 
+  /**
+   * @param {HTMLElement} button
+   * @param {HTMLElement} menu
+   */
   function placeMenu(button, menu) {
     menu.hidden = false;
     const anchor = button.getBoundingClientRect();
@@ -268,6 +315,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     menu.style.left = `${left}px`;
   }
 
+  /** @param {PluginMenuItem} item */
   function menuItem(item) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -285,6 +333,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     return button;
   }
 
+  /** @param {PluginMenuItem[]} items */
   function moreMenu(items) {
     const moreWrap = document.createElement('div');
     moreWrap.className = 'plugin-more-wrap';
@@ -314,6 +363,10 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     return moreWrap;
   }
 
+  /**
+   * @param {string} label
+   * @param {string | Node} value
+   */
   function infoRow(label, value) {
     const rowLabel = document.createElement('div');
     rowLabel.className = 'plugin-info-label';
@@ -325,6 +378,10 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     return [rowLabel, rowValue];
   }
 
+  /**
+   * @param {string} label
+   * @param {string} url
+   */
   function linkButton(label, url) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -348,6 +405,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     return button;
   }
 
+  /** @param {PluginSummary} plugin */
   function renderDetail(plugin) {
     closeMenu();
     clearFolderTips();
@@ -427,7 +485,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
         copy.className = 'plugin-install-copy';
         copy.textContent = '一键复制给大模型安装环境';
         copy.addEventListener('click', () => {
-          void copyInstallPrompt(plugin.installPrompt);
+          void copyInstallPrompt(installPromptOf(plugin));
         });
         note.append(error, copy);
         detail.appendChild(note);
@@ -472,14 +530,17 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       ['隐私政策', plugin.privacyPolicy],
       ['服务条款', plugin.termsOfService],
     ];
-    for (const [label, url] of links) {
-      if (!url) continue;
+    for (const link of links) {
+      const label = link[0];
+      const url = link[1];
+      if (!label || !url) continue;
       table.append(...infoRow(label, linkButton(label, url)));
     }
     detail.appendChild(table);
     mountIcons(detail);
   }
 
+  /** @param {ChromeSession} session */
   function sync(session) {
     const onPlugins = session.surface === 'plugins';
     if (!onPlugins) return;
@@ -505,7 +566,9 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     renderMarket();
   }
 
+  /** @param {CatalogPlugin[]} items */
   function groupByCategory(items) {
+    /** @type {Map<string, CatalogPlugin[]>} */
     const groups = new Map();
     for (const item of items) {
       const category = item.category && item.category !== OTHER_CATEGORY ? item.category : OTHER_CATEGORY;
@@ -519,7 +582,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     const names = Array.from(groups.keys()).filter((name) => name !== OTHER_CATEGORY);
     names.sort((left, right) => left.localeCompare(right, 'zh-CN'));
     if (groups.has(OTHER_CATEGORY)) names.push(OTHER_CATEGORY);
-    return names.map((category) => ({ category, plugins: groups.get(category) }));
+    return names.map((category) => ({ category, plugins: groups.get(category) || [] }));
   }
 
   function renderMarket() {
@@ -557,6 +620,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     mountIcons(marketList);
   }
 
+  /** @param {CatalogPlugin} plugin */
   function marketCard(plugin) {
     const local = installedPlugin(plugin.id);
     const card = document.createElement('article');
@@ -589,6 +653,11 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     return card;
   }
 
+  /**
+   * @param {CatalogPlugin} plugin
+   * @param {PluginSummary | null} local
+   * @param {boolean} installing
+   */
   function marketAction(plugin, local, installing) {
     if (installing) {
       const wrap = document.createElement('div');
@@ -616,7 +685,9 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     return button;
   }
 
+  /** @param {PluginSummary} local */
   function installedMenu(local) {
+    /** @type {PluginMenuItem[]} */
     const items = [
       { label: '立即使用', icon: 'play', run: () => { void chrome.usePlugin(local.id); } },
       { label: '详情', icon: 'info', run: () => { chrome.focusPlugin(local.id); } },
@@ -639,6 +710,10 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     return moreMenu(items);
   }
 
+  /**
+   * @param {string} pluginId
+   * @param {'install' | 'update' | string} kind
+   */
   async function installFromCatalog(pluginId, kind) {
     if (isBusy()) return;
     busy = true;
@@ -681,6 +756,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     if (session && session.surface === 'plugins') sync(session);
   }
 
+  /** @param {string} pluginId */
   async function uninstallPlugin(pluginId) {
     const plugin = localPlugin(pluginId);
     const name = plugin ? plugin.displayName : pluginId;
@@ -698,6 +774,10 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     await refreshCatalog();
   }
 
+  /**
+   * @param {DexResult} result
+   * @param {string} kind
+   */
   async function finishInstall(result, kind) {
     if (result.cancelled || result.ignored) return;
     if (!result.ok) {
@@ -717,6 +797,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     showToast(kind === 'update' ? `「${name}」已更新` : `「${name}」已安装`, 'ok');
   }
 
+  /** @param {import('../shared/dex-bridge.ts').SilentUpdateEvent} event */
   async function onSilentUpdate(event) {
     if (!event || typeof event !== 'object') return;
     if (event.phase === 'start') {
@@ -732,7 +813,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       await finishInstall({
         ok: event.ok,
         message: event.message,
-        plugins: event.plugins,
+        plugins: event.plugins || [],
         installedId: event.installedId,
         ignored: false,
       }, 'update');
@@ -751,12 +832,14 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     }
   }
 
+  /** @param {PluginSummary | null | undefined} plugin */
   function installPromptOf(plugin) {
     return plugin && typeof plugin.installPrompt === 'string' && plugin.installPrompt !== ''
       ? plugin.installPrompt
       : '';
   }
 
+  /** @param {PluginSummary} plugin */
   function openInstallDialog(plugin) {
     const prompt = installPromptOf(plugin);
     if (!prompt || !installDialog || !installTitle || !installBody) return;
@@ -765,6 +848,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     if (!installDialog.open) installDialog.showModal();
   }
 
+  /** @param {string | null} text */
   async function copyInstallPrompt(text) {
     if (typeof text !== 'string' || text === '' || !window.dex.copyText) {
       setStatus('无法复制', 'error');
@@ -778,6 +862,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     }
   }
 
+  /** @param {string} pluginId */
   async function retryRuntime(pluginId) {
     setStatus('正在准备运行环境');
     try {
@@ -786,7 +871,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
         setStatus(result.message || '运行环境未就绪', 'error');
         if (result.plugins) await plugins.refresh(result.plugins);
         const plugin = (result.plugins || shell.plugins).find((item) => item.id === pluginId);
-        if (installPromptOf(plugin)) openInstallDialog(plugin);
+        if (plugin && installPromptOf(plugin)) openInstallDialog(plugin);
         return;
       }
       setStatus('运行环境已就绪', 'ok');
@@ -851,18 +936,22 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     });
   }
 
+  /** @param {string} pluginId */
   async function reloadUnpacked(pluginId) {
     await runLocal(pluginId, (id) => window.dex.reloadUnpacked(id), '已重新加载');
   }
 
+  /** @param {string} pluginId */
   async function startPreview(pluginId) {
     await runLocal(pluginId, (id) => window.dex.startPreview(id), '已按发布预览');
   }
 
+  /** @param {string} pluginId */
   async function endPreview(pluginId) {
     await runLocal(pluginId, (id) => window.dex.endPreview(id), '已回到源码目录');
   }
 
+  /** @param {string} pluginId */
   async function removeUnpacked(pluginId) {
     const plugin = localPlugin(pluginId);
     const name = plugin ? plugin.displayName : pluginId;
@@ -879,6 +968,11 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     chrome.enterPlugins();
   }
 
+  /**
+   * @param {string} pluginId
+   * @param {(id: string) => Promise<DexResult>} invoke
+   * @param {string} okText
+   */
   async function runLocal(pluginId, invoke, okText) {
     plugins.releaseView(pluginId);
     try {
@@ -942,7 +1036,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
 
   const addWrap = document.createElement('div');
   addWrap.className = 'plugin-more-wrap';
-  addBtn.parentNode.insertBefore(addWrap, addBtn);
+  addBtn.parentElement?.insertBefore(addWrap, addBtn);
   addWrap.appendChild(addBtn);
   addBtn.setAttribute('aria-haspopup', 'menu');
   addBtn.setAttribute('aria-expanded', 'false');

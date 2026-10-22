@@ -16,7 +16,9 @@
 
 工作台脚本仍是 `.js`，入口仍是 `index.html` 里的 `<script type="module" src="app.js">`。不把渲染层改成 TypeScript，也不加打包器。
 
-`tsconfig.renderer.json` 对 `src/renderer/**/*.js` 做 `checkJs` + `noEmit`（关掉 `strictNullChecks` / `noImplicitAny`，避免一次改遍 DOM 查询）。`window.dex` 的形状写在 `src/renderer/dex-host.d.ts`，对照 `src/preload/host.cjs`。`pnpm build` 会跑 `tsc -p tsconfig.renderer.json --noEmit`。主进程仍只用根上的 `tsconfig.json` 产出 `dist/`。
+`tsconfig.renderer.json` 对 `src/renderer/**/*.js` 做 `checkJs` + `noEmit`，并打开 `strictNullChecks` 与 `noImplicitAny`。壳内固定节点用 `src/renderer/dom.js` 的 `byId` 查询。`window.dex` 与 IPC 返回值写在 `src/shared/dex-bridge.ts`（主进程与渲染层共用）；渲染层全局与 webview 辅助类型在 `src/renderer/dex-host.d.ts`。不要给 `HTMLElement` 整体挂上按钮 / dialog 专用属性来骗过检查。`pnpm build` 会跑 `tsc -p tsconfig.renderer.json --noEmit`。主进程仍用根上的 `tsconfig.json` 产出 `dist/`（并编译 `src/shared/`）。
+
+Lucide 与 lottie-web 仍由 `index.html` 引用 `node_modules` 里的 UMD（与 prd-00002 一致），本层不为它们引入打包器，也不把 min.js 拷进 `src/renderer/vendor/`。
 
 ## 以后：Lit 具名插槽
 

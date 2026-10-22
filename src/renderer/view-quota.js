@@ -2,7 +2,7 @@
 const GIB = 1024 ** 3;
 const HARD_CAP = 5;
 
-/** @param {number} bytes */
+/** @param {number | null | undefined} bytes */
 export function memoryAllowance(bytes) {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return HARD_CAP;
   if (bytes >= 4 * GIB) return HARD_CAP;
@@ -14,7 +14,7 @@ export function memoryAllowance(bytes) {
  * @param {{
  *   residents: Array<{ id: string; lastHotAt: number }>;
  *   protectedId: string | null | undefined;
- *   availableBytes: number | undefined;
+ *   availableBytes: number | null | undefined;
  * }} input
  */
 export function selectEvictions({ residents, protectedId, availableBytes }) {

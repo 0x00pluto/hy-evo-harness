@@ -39,8 +39,8 @@ export function localUserLabel(name) {
 }
 
 /**
- * @param {UpdateStatus | string | undefined} status
- * @param {string | undefined} [errorMessage]
+ * @param {UpdateStatus | string | null | undefined} status
+ * @param {string | null | undefined} [errorMessage]
  */
 export function updateCheckNote(status, errorMessage) {
   if (status === 'checking') return '正在检查…';
@@ -52,7 +52,7 @@ export function updateCheckNote(status, errorMessage) {
   return '';
 }
 
-/** @param {UpdateStatus | string | undefined} status */
+/** @param {UpdateStatus | string | null | undefined} status */
 export function updateDialogInsteadOfCheck(status) {
   return status === 'readyToInstall' || status === 'downloading' || status === 'installing';
 }

@@ -1,14 +1,25 @@
 import { splitWidthKey } from './chrome-state.js';
+import { byId } from './dom.js';
 
 const COLUMN_DEFAULT = 292;
 const COLUMN_MIN = 220;
 const COLUMN_MAX = 480;
 
+/** @param {number} width */
 function clampColumn(width) {
   return Math.min(COLUMN_MAX, Math.max(COLUMN_MIN, Math.round(width)));
 }
 
+/**
+ * @param {{
+ *   column: HTMLElement;
+ *   splitter: HTMLElement;
+ *   storageKey: string | (() => string | null);
+ *   cssVariable: string;
+ * }} opts
+ */
 function mountResizableColumn({ column, splitter, storageKey, cssVariable }) {
+  /** @param {number} width */
   function applyWidth(width) {
     const next = clampColumn(width);
     document.documentElement.style.setProperty(cssVariable, `${next}px`);
@@ -34,6 +45,7 @@ function mountResizableColumn({ column, splitter, storageKey, cssVariable }) {
     }
   }
 
+  /** @param {number} width */
   function storeWidth(width) {
     const key = currentKey();
     if (!key) return;
@@ -54,10 +66,12 @@ function mountResizableColumn({ column, splitter, storageKey, cssVariable }) {
     const startX = event.clientX;
     const startWidth = column.getBoundingClientRect().width;
 
+    /** @param {PointerEvent} ev */
     function move(ev) {
       applyWidth(startWidth + (ev.clientX - startX));
     }
 
+    /** @param {PointerEvent} ev */
     function up(ev) {
       try { splitter.releasePointerCapture(ev.pointerId); } catch { /* 捕获已结束 */ }
       splitter.removeEventListener('pointermove', move);
@@ -89,16 +103,16 @@ function mountResizableColumn({ column, splitter, storageKey, cssVariable }) {
 
 export function mountSidebar() {
   mountResizableColumn({
-    column: document.getElementById('sidebar'),
-    splitter: document.getElementById('splitter'),
+    column: byId('sidebar', 'aside'),
+    splitter: byId('splitter', 'div'),
     storageKey: 'dex.sidebarWidth',
     cssVariable: '--sidebar-width',
   });
   // 画面上只有一条分隔。拖的时候按当前表面写入对应的宽度键，避免改一边带掉另一边。
   const split = mountResizableColumn({
-    column: document.getElementById('split-nav'),
-    splitter: document.getElementById('split-splitter'),
-    storageKey: () => splitWidthKey(document.body.dataset.surface),
+    column: byId('split-nav', 'aside'),
+    splitter: byId('split-splitter', 'div'),
+    storageKey: () => splitWidthKey(document.body.dataset.surface || 'workspace'),
     cssVariable: '--split-nav-width',
   });
   return { applySplitWidth: split.applyStoredWidth };

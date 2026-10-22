@@ -121,10 +121,11 @@ export function goBack(session) {
 export function goForward(session) {
   if (!canGoForward(session)) return session;
   const forward = session.forward;
+  if (!forward) return session;
   return {
     ...session,
     surface: forward.surface,
-    pluginsFocus: forward.surface === 'plugins' ? forward.pluginsFocus : null,
+    pluginsFocus: forward.surface === 'plugins' ? (forward.pluginsFocus ?? null) : null,
     back: null,
     forward: null,
   };
