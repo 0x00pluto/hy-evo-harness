@@ -78,7 +78,7 @@ tts_engine = os.getenv("TTS_ENGINE", "edge-tts")
 
 1. 在 `plugin.manifest.json` 写 `configSchema`。键名必须和脚本里 `os.getenv` 或 `process.env` 的名字一致。
 2. 改了 manifest 要重启 Dex Buddy。重启后，从图标轨齿轮弹出层进入「设置」，就会看到这个插件。
-3. 在设置页填完，点「保存」。之后新拉起的进程会拿到新值，不用为了改一项再重启 Dex Buddy。`apply` 里一直活着的子进程还拿着启动时的环境，要自己把它停掉再拉起。
+3. 在设置页填完，点「保存」。宿主只写入 `plugin-settings.json`，**不发保存事件，也不重跑 `apply`**。之后再调 `ctx.pluginEnv()` 或 `getPluginConfig()` 就是新值，不用为了改一项再重启 Dex Buddy。不要在 `apply` 里把返回值抄进变量或闭包后一直用；要新值就在真正用到密钥或选项时再读一次。`apply` 里一直活着的子进程还拿着启动时传入的环境，要自己把它停掉再拉起，并在拉起时再传一次环境。
 4. 声明了 `runtime` 时，`execFile` 或 `spawn` 用 `ctx.runtime.python` 或 `ctx.runtime.node`，并传入 `{ env: ctx.runtime.env }`。没有声明运行时，才传入 `{ env: ctx.pluginEnv() }`。漏传时，脚本只能看到 Dex Buddy 进程自己的环境，看不到设置页里的值，也找不到装进去的包。写法见 [运行](runtime.md)。
 5. 日志里不要打印密钥。
 
