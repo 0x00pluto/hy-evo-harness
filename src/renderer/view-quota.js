@@ -2,6 +2,7 @@
 const GIB = 1024 ** 3;
 const HARD_CAP = 5;
 
+/** @param {number} bytes */
 export function memoryAllowance(bytes) {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return HARD_CAP;
   if (bytes >= 4 * GIB) return HARD_CAP;
@@ -9,6 +10,13 @@ export function memoryAllowance(bytes) {
   return 1;
 }
 
+/**
+ * @param {{
+ *   residents: Array<{ id: string; lastHotAt: number }>;
+ *   protectedId: string | null | undefined;
+ *   availableBytes: number | undefined;
+ * }} input
+ */
 export function selectEvictions({ residents, protectedId, availableBytes }) {
   const quota = Math.min(HARD_CAP, memoryAllowance(availableBytes));
   const overflow = residents.length - quota;
@@ -23,6 +31,7 @@ export function selectEvictions({ residents, protectedId, availableBytes }) {
     return 0;
   });
 
+  /** @type {string[]} */
   const evict = [];
   for (const resident of ranked) {
     if (evict.length >= overflow) break;

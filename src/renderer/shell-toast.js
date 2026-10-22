@@ -10,6 +10,10 @@ export function mountShellToast() {
   });
 }
 
+/**
+ * @param {string} message
+ * @param {'ok' | 'error' | string} [kind]
+ */
 export function showShellToast(message, kind) {
   const toast = document.getElementById('shell-toast');
   const toastIcon = document.getElementById('shell-toast-icon');

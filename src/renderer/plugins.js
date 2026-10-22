@@ -7,11 +7,11 @@ export function mountPlugins({
   setStatus,
   settings,
   onClearNavigation = () => {},
-  onOpenPluginSettings = () => {},
+  onOpenPluginSettings = (_pluginId) => {},
   onOpenMarket = () => {},
   onWorkspaceChanged = () => {},
   onListChanged = () => {},
-  onUnavailable = () => {},
+  onUnavailable = (_pluginId) => {},
 }) {
   const nav = document.getElementById('plugin-nav');
   const welcome = document.getElementById('welcome-screen');

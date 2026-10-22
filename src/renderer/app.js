@@ -7,6 +7,7 @@ import { mountChrome } from './chrome.js';
 import { mountIcons } from './icons.js';
 import { mountShellToast } from './shell-toast.js';
 
+/** @type {{ plugins: PluginSummary[]; activeId: string | null; settingsMode: boolean }} */
 const shell = {
   plugins: [],
   activeId: null,
@@ -15,6 +16,10 @@ const shell = {
 
 const statusEl = document.getElementById('status');
 
+/**
+ * @param {string} message
+ * @param {string} [kind]
+ */
 function setStatus(message, kind) {
   statusEl.textContent = message || '';
   if (kind) statusEl.dataset.kind = kind;
@@ -32,20 +37,22 @@ const settingsBridge = {
   dismissSurface() {},
 };
 
+/** @type {ChromeBridge} */
 const chromeBridge = {
   session() {
     return null;
   },
   refresh() {},
   enterPlugins() {},
-  focusPlugin() {},
-  async usePlugin() {},
+  focusPlugin(_pluginId) {},
+  async usePlugin(_pluginId) {},
   clearNavigation() {},
-  async openSettings() {},
+  async openSettings(_pluginId) {},
 };
 
+/** @type {{ sync: (session: ChromeSession) => void; clearStatus: () => void }} */
 const pluginsPageBridge = {
-  sync() {},
+  sync(_session) {},
   clearStatus() {},
 };
 
@@ -72,11 +79,12 @@ const pluginsPage = mountPluginsPage({ shell, plugins, chrome: chromeBridge });
 pluginsPageBridge.sync = pluginsPage.sync;
 pluginsPageBridge.clearStatus = pluginsPage.clearStatus;
 
+/** @type {UpdaterBridge} */
 const updaterBridge = {
   status() {
     return null;
   },
-  onStatus() {
+  onStatus(_callback) {
     return () => {};
   },
   openInstallDialog() {},

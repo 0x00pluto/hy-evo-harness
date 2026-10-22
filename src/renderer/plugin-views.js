@@ -119,7 +119,8 @@ export function mountPluginViews({ viewportHost, onReopened, onFailed }) {
         onReopened();
       }
     });
-    webview.addEventListener('did-fail-load', (event) => {
+    webview.addEventListener('did-fail-load', (raw) => {
+      const event = /** @type {ElectronDidFailLoadEvent} */ (raw);
       if (entry.closing || views.get(entry.id) !== entry) return;
       if (event.isMainFrame === false) return;
       if (event.errorCode === ABORTED) return;

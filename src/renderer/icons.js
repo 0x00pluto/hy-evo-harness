@@ -37,14 +37,18 @@ const ICON_NAMES = [
   'X',
 ];
 
+/**
+ * @param {ParentNode} [root]
+ */
 export function mountIcons(root = document) {
-  const lucide = globalThis.lucide;
-  if (!lucide || typeof lucide.createIcons !== 'function') return;
+  const api = typeof lucide !== 'undefined' ? lucide : undefined;
+  if (!api || typeof api.createIcons !== 'function') return;
+  /** @type {Record<string, unknown>} */
   const icons = {};
   for (const name of ICON_NAMES) {
-    if (lucide[name]) icons[name] = lucide[name];
+    if (api[name]) icons[name] = api[name];
   }
-  lucide.createIcons({
+  api.createIcons({
     icons,
     attrs: {
       width: 16,

@@ -12,6 +12,12 @@
 
 渲染层继续是现有的 HTML、CSS 和 JavaScript，没有打包器，也不引入组件库。
 
+## 类型检查
+
+工作台脚本仍是 `.js`，入口仍是 `index.html` 里的 `<script type="module" src="app.js">`。不把渲染层改成 TypeScript，也不加打包器。
+
+`tsconfig.renderer.json` 对 `src/renderer/**/*.js` 做 `checkJs` + `noEmit`（关掉 `strictNullChecks` / `noImplicitAny`，避免一次改遍 DOM 查询）。`window.dex` 的形状写在 `src/renderer/dex-host.d.ts`，对照 `src/preload/host.cjs`。`pnpm build` 会跑 `tsc -p tsconfig.renderer.json --noEmit`。主进程仍只用根上的 `tsconfig.json` 产出 `dist/`。
+
 ## 以后：Lit 具名插槽
 
 具名插槽是 HTML 标准：`<slot name="nav">` 放在阴影树里，页面用 `slot="nav"` 填进去。Chrome、Firefox、Safari 都已支持多年，Electron 44 的 Chromium 可以直接用。Lit 是在这层标准上写组件的薄库，由 Google 维护，现行稳定线是 Lit 3，用在生产环境的组件系统里。样式写在组件内部之后，页面改自己的标题间距时碰不到骨架的内边距。

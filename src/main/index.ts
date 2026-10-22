@@ -394,12 +394,8 @@ function registerIpc(): void {
 
   ipcMain.handle('dex:call-service', async (event, payload: unknown) => {
     const call = readCallPayload(payload);
-    let callerId: string | undefined;
-    try {
-      callerId = pluginIdFromSender(event);
-    } catch {
-      callerId = undefined;
-    }
+    // 认不出 app-plugin 页面就拒绝。吞掉错误会让导航离开后的预加载仍能调全局服务。
+    const callerId = pluginIdFromSender(event);
     return registry.callService(call.serviceName, call.method, call.args, callerId);
   });
 

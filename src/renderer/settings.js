@@ -21,7 +21,23 @@ function settingsSourceLabel(source) {
   return SETTINGS_SOURCE[source] || '内置';
 }
 
-export function mountSettings({ shell, setStatus, plugins, updater = {} }) {
+/**
+ * @param {{
+ *   shell: { plugins: PluginSummary[]; activeId: string | null; settingsMode: boolean };
+ *   setStatus: (message: string, kind?: string) => void;
+ *   plugins: {
+ *     refresh: (list?: PluginSummary[]) => Promise<void>;
+ *     suspend: () => void;
+ *     resume: (pluginId?: string | null) => void;
+ *   };
+ *   updater?: UpdaterBridge;
+ * }} opts
+ */
+export function mountSettings({ shell, setStatus, plugins, updater = /** @type {UpdaterBridge} */ ({
+  status() { return null; },
+  onStatus() { return () => {}; },
+  openInstallDialog() {},
+}) }) {
   const settingsSearch = document.getElementById('settings-search');
   const settingsList = document.getElementById('settings-list');
   const settingsScreen = document.getElementById('settings-screen');
@@ -765,7 +781,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = {} }) {
   }
 
   function reloadSettingsWebview() {
-    const webview = settingsEntryHost.querySelector('webview');
+    const webview = /** @type {ElectronWebviewElement | null} */ (settingsEntryHost.querySelector('webview'));
     if (webview && typeof webview.reload === 'function') webview.reload();
   }
 
