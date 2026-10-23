@@ -111,7 +111,20 @@ gh workflow run publish-runtimes.yml --ref main
 | `appId` / `productName` | `com.huyuan.dexbuddy` / `Dex Buddy` |
 | 输出目录 | `release/`，与 `tsc` 的 `dist/` 分开 |
 | 打包内容 | `dist/`（含 `dist/preload/*.cjs`）、`src/renderer/`，以及生产依赖 `electron-updater`；预加载从 asar 解出 `dist/preload/**` |
-| `mac` | 本地与 CI 都产出 dmg 与 zip；签名默认 `identity: null`，`notarize: false` |
+| `mac` | 本地与 CI 都产出 dmg 与 zip；`icon: icon.icns`（见下）；签名默认 `identity: null`，`notarize: false` |
 | `win` / `nsis` | 可执行名 `DexBuddy`，安装包名 `dex-buddy-${version}-setup.exe`；`build/installer.nsh` 让更新后直接启动 exe |
 | `linux` | 本地默认含 AppImage / snap / deb；CI 仅打 AppImage + deb |
 | `publish` | 七牛 `https://oss.ai.66plat.com/dex-buddy/`（generic）；构建仍用 `--publish never`，由 release job 用 qshell 上传 |
+
+### macOS 应用图标
+
+Finder / dmg 列表里的应用图标来自 [`build/icon.icns`](../build/icon.icns)，由 `electron-builder.yml` 的 `mac.icon` 原样打进 `.app`。不要只放 `build/icon.png` 让 26.15.x 的 icons 工具现转：它会写出 `icp4` / `icp5` / `icp6`，在较新的 macOS Finder 里会显示成噪点；程序坞用更大尺寸所以看起来仍正常。
+
+设计源仍是 [`build/icon.png`](../build/icon.png)（见 [DESIGN.md](./DESIGN.md)）。改完 png 后在本机重生成 icns（需 8-bit 各尺寸；源图若是 16-bit，先缩到各边长再交给 `iconutil`）：
+
+```bash
+# 在 temp/icon.iconset/ 放齐 icon_16x16.png … walt.e@example.net（均为 8-bit RGBA）
+iconutil --convert icns --output build/icon.icns temp/icon.iconset
+```
+
+用 `test/mac-icon.test.ts` 检查产物：须含 `ic04` / `ic05`，且没有 `icp4` / `icp5` / `icp6`。
