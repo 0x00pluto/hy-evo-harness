@@ -1,11 +1,25 @@
-import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, webContents, type IpcMainInvokeEvent, type NativeImage } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  nativeImage,
+  safeStorage,
+  shell,
+  webContents,
+  type IpcMainInvokeEvent,
+  type NativeImage,
+} from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { CallServicePayload } from '../shared/dex-ipc.ts';
+import type { GatewaySessionView } from '../shared/dex-bridge.ts';
 import { readAvailableMemory } from './available-memory.ts';
-import { readExtraPluginPaths, readForceUpdateIcon } from './dev-config.ts';
+import { readExtraPluginPaths, readForceUpdateIcon, readGatewayBaseUrl } from './dev-config.ts';
+import { GATEWAY_ENV_KEY, resolveGatewayBaseUrl } from './gateway-config.ts';
+import { createFileSecureStore, GatewaySession, parseAuthCallback } from './gateway-session.ts';
 import { INSTALLED_PLUGINS_DIR_NAME, resolveHostDataPath } from './host-data.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
 import { handleInvoke, onSend } from './ipc.ts';
@@ -30,12 +44,19 @@ import { initUpdater } from './updater.ts';
 
 registerPluginScheme();
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
 const registry = new ServiceRegistry();
 let localSession: LocalSession | null = null;
+let gatewaySession: GatewaySession | null = null;
 const installLock = createInstallLock();
 let silentUpdates: PluginSilentUpdates | null = null;
 let silentTimer: ReturnType<typeof setInterval> | null = null;
 let reportedWatchingId: string | null = null;
+let pendingAuthUrl: string | null = null;
 
 function session(): LocalSession {
   if (!localSession) throw new Error('本地目录还没准备好');
@@ -349,6 +370,100 @@ function devConfigPath(): string {
   return path.join(app.getAppPath(), 'config.dev.json');
 }
 
+function gatewayRefreshFile(): string {
+  return path.join(app.getPath('userData'), 'gateway-refresh.bin');
+}
+
+function broadcastSession(view: GatewaySessionView): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('dex:session', view);
+  }
+}
+
+function focusMainWindow(): void {
+  const win = BrowserWindow.getAllWindows().find((item) => !item.isDestroyed());
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+function registerDexbuddyProtocolClient(): void {
+  // 未打包时必须带上入口脚本，否则系统只会唤起 Electron 本体。
+  if (process.defaultApp) {
+    const entry = path.resolve(process.argv[1] ?? '.');
+    app.setAsDefaultProtocolClient('dexbuddy', process.execPath, [entry]);
+    return;
+  }
+  app.setAsDefaultProtocolClient('dexbuddy');
+}
+
+function findAuthUrlInArgv(argv: string[]): string | null {
+  for (const arg of argv) {
+    if (typeof arg === 'string' && parseAuthCallback(arg)) return arg;
+  }
+  return null;
+}
+
+async function handleIncomingAuthUrl(rawUrl: string): Promise<void> {
+  if (!gatewaySession) {
+    pendingAuthUrl = rawUrl;
+    return;
+  }
+  const ok = await gatewaySession.handleAuthUrl(rawUrl);
+  focusMainWindow();
+  if (!ok && parseAuthCallback(rawUrl)) {
+    registry.logger.error('网关登录回调未能完成兑换，请重新点登录');
+  }
+}
+
+function createGatewaySession(): GatewaySession {
+  const configValue = app.isPackaged ? null : readGatewayBaseUrl(devConfigPath(), registry.logger);
+  const baseUrl = resolveGatewayBaseUrl({
+    envValue: process.env[GATEWAY_ENV_KEY],
+    configValue,
+    isPackaged: app.isPackaged,
+  });
+  const storePath = gatewayRefreshFile();
+  const store = createFileSecureStore({
+    isAvailable: () => safeStorage.isEncryptionAvailable(),
+    encryptString: (plain) => safeStorage.encryptString(plain),
+    decryptString: (blob) => safeStorage.decryptString(blob),
+    readFile: () => {
+      try {
+        if (!fs.existsSync(storePath)) return null;
+        return fs.readFileSync(storePath);
+      } catch {
+        return null;
+      }
+    },
+    writeFile: (blob) => {
+      fs.writeFileSync(storePath, blob);
+    },
+    removeFile: () => {
+      try {
+        if (fs.existsSync(storePath)) fs.unlinkSync(storePath);
+      } catch {
+        // 清不掉密文文件时仍清内存；下次启动会再试。
+      }
+    },
+  });
+  return new GatewaySession({
+    baseUrl,
+    fetch: globalThis.fetch.bind(globalThis),
+    openExternal: async (url) => {
+      await shell.openExternal(url);
+    },
+    store,
+    onChange: broadcastSession,
+  });
+}
+
+function sessionGateway(): GatewaySession {
+  if (!gatewaySession) throw new Error('网关会话还没准备好');
+  return gatewaySession;
+}
+
 function devFlags(): { forceUpdateIcon: boolean } {
   // 打包后固定关闭，避免安装包里的开发配置把下载图标留在界面上。
   if (app.isPackaged) return { forceUpdateIcon: false };
@@ -369,6 +484,15 @@ function registerIpc(): void {
       return '';
     }
   });
+
+  handleInvoke('dex:gateway-session', () => sessionGateway().view());
+  handleInvoke('dex:gateway-login-pkce', () => sessionGateway().startPkce());
+  handleInvoke('dex:gateway-login-device', () => sessionGateway().startDevice());
+  handleInvoke('dex:gateway-login-cancel', () => sessionGateway().cancelLogin());
+  handleInvoke('dex:gateway-submit-code', (_event, code) => sessionGateway().submitAuthCode(code));
+  handleInvoke('dex:gateway-reopen-login', () => sessionGateway().reopenLogin());
+  handleInvoke('dex:gateway-refresh', () => sessionGateway().refreshSummary());
+  handleInvoke('dex:gateway-logout', () => sessionGateway().logout());
 
   handleInvoke('dex:prepare-plugin', (_event, id) => {
     if (!registry.getPlugin(id)) {
@@ -644,9 +768,25 @@ function registerIpc(): void {
   });
 }
 
+if (gotSingleInstanceLock) {
+  app.on('second-instance', (_event, argv) => {
+    focusMainWindow();
+    const url = findAuthUrlInArgv(argv);
+    if (url) void handleIncomingAuthUrl(url);
+  });
+
+  // macOS：协议唤起可能在 ready 之前到达。
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    void handleIncomingAuthUrl(url);
+  });
+}
+
 app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) return;
   // 从 Dock 打开时 PATH 里没有登录 shell 配好的 Homebrew 等命令。先补上，再让插件子进程继承。
   await applyUserSearchPath(process.env);
+  registerDexbuddyProtocolClient();
   registry.setSettings(new PluginSettingsStore(pluginSettingsFile(), registry.logger));
   registry.setOriginLookup((id) => readOrigins(pluginOriginsFile())[id]?.channel);
   registry.setRuntimeHost({
@@ -662,16 +802,22 @@ app.whenReady().then(async () => {
     userData: app.getPath('userData'),
     unpackedFile: path.join(app.getPath('userData'), 'unpacked-plugins.json'),
   });
+  gatewaySession = createGatewaySession();
   const icon = loadAppIcon();
   applyDockIcon(icon);
   attachWebviewGuard();
   registerIpc();
   initUpdater();
   await loadAllPlugins();
+  await gatewaySession.start();
   createWindow(icon);
+  const coldUrl = pendingAuthUrl ?? findAuthUrlInArgv(process.argv);
+  pendingAuthUrl = null;
+  if (coldUrl) void handleIncomingAuthUrl(coldUrl);
 });
 
 app.on('activate', () => {
+  if (!gotSingleInstanceLock) return;
   if (BrowserWindow.getAllWindows().length === 0) createWindow(loadAppIcon());
 });
 

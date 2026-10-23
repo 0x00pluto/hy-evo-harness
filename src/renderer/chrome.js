@@ -12,9 +12,19 @@ import {
   togglePin,
   usePlugin as usePluginState,
 } from './chrome-state.js';
+import { accountHeadline, isLoginPending, renderAccountPanel } from './account-session.js';
 import { byId } from './dom.js';
 
-const LOCAL_USER_LABEL = '本地用户';
+/** @returns {GatewaySessionView} */
+function emptySessionView() {
+  return {
+    signedIn: false,
+    phoneMasked: null,
+    balance: null,
+    currency: null,
+    login: { phase: 'idle' },
+  };
+}
 
 /**
  * @param {{
@@ -67,6 +77,8 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
   const titleName = byId('titlebar-plugin-name', 'div');
   const homeBtn = byId('rail-home', 'button');
   const pluginsBtn = byId('rail-plugins', 'button');
+  const accountBtn = byId('rail-account', 'button');
+  const accountPopover = byId('account-popover', 'div');
   const sidebar = byId('sidebar', 'aside');
   const shortcutEl = byId('settings-shortcut', 'span');
   const pluginsSearch = byId('plugins-search', 'input');
@@ -76,9 +88,12 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
 
   let session = createChromeSession();
   let popoverOpen = false;
+  let accountOpen = false;
   let closeTimer = 0;
   /** @type {string | null | undefined} */
   let reportedWatching;
+  /** @type {GatewaySessionView} */
+  let gatewayView = emptySessionView();
 
   function reportWatching() {
     const watching = session.surface === 'workspace' && shell.activeId ? shell.activeId : null;
@@ -119,7 +134,10 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
       window.clearTimeout(closeTimer);
       sidebar.classList.remove('is-open');
     }
-    if (!workspace) setPopover(false);
+    if (!workspace) {
+      setPopover(false);
+      setAccountOpen(false);
+    }
     plugins.syncPreviewStrip();
     pluginsPage.sync(session);
     reportWatching();
@@ -157,17 +175,87 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     popoverOpen = open;
     popover.hidden = !open;
     gearBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) void refreshUsername();
+    if (open) {
+      setAccountOpen(false);
+      paintGearAccount();
+    }
   }
 
-  async function refreshUsername() {
-    try {
-      const name = await window.dex.localUsername();
-      const text = typeof name === 'string' ? name.trim() : '';
-      usernameEl.textContent = text || LOCAL_USER_LABEL;
-    } catch {
-      usernameEl.textContent = LOCAL_USER_LABEL;
+  /** @param {boolean} open */
+  function setAccountOpen(open) {
+    accountOpen = open;
+    accountPopover.hidden = !open;
+    accountBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      setPopover(false);
+      paintAccountPopover();
     }
+  }
+
+  function paintGearAccount() {
+    usernameEl.textContent = accountHeadline(gatewayView);
+    const clickable = !gatewayView.signedIn;
+    usernameEl.classList.toggle('is-clickable', clickable);
+    usernameEl.setAttribute('role', clickable ? 'button' : 'presentation');
+    usernameEl.tabIndex = clickable ? 0 : -1;
+  }
+
+  function paintAccountPopover() {
+    renderAccountPanel(accountPopover, {
+      view: gatewayView,
+      onLogout: () => {
+        void runGateway(() => window.dex.logoutGateway());
+        setAccountOpen(false);
+      },
+      onContinue: () => {
+        void runGateway(() => window.dex.reopenGatewayLogin());
+        setAccountOpen(false);
+      },
+    });
+  }
+
+  /**
+   * @param {() => Promise<{ ok: boolean; message?: string }>} action
+   */
+  async function runGateway(action) {
+    try {
+      const result = await action();
+      if (result && result.ok === false && result.message) setStatus(result.message, 'error');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : '操作失败', 'error');
+    }
+  }
+
+  /** 未登录 / 登录中：直接打开或继续浏览器登录。 */
+  function startOrContinueLogin() {
+    if (gatewayView.signedIn) return;
+    if (isLoginPending(gatewayView)) {
+      void runGateway(() => window.dex.reopenGatewayLogin());
+      return;
+    }
+    void runGateway(() => window.dex.startGatewayLogin());
+  }
+
+  function watchGatewaySession() {
+    if (!window.dex.onGatewaySession) return;
+    window.dex.onGatewaySession((/** @type {GatewaySessionView} */ view) => {
+      gatewayView = view || emptySessionView();
+      paintGearAccount();
+      if (accountOpen) {
+        if (!gatewayView.signedIn && !isLoginPending(gatewayView)) setAccountOpen(false);
+        else paintAccountPopover();
+      }
+    });
+    void window.dex
+      .gatewaySession()
+      .then((/** @type {GatewaySessionView} */ view) => {
+        gatewayView = view || emptySessionView();
+        paintGearAccount();
+        if (accountOpen) paintAccountPopover();
+      })
+      .catch(() => {
+        paintGearAccount();
+      });
   }
 
   /** @param {string} [pluginId] */
@@ -258,6 +346,28 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     setPopover(!popoverOpen);
   });
 
+  accountBtn.addEventListener('click', () => {
+    if (!gatewayView.signedIn) {
+      setAccountOpen(false);
+      startOrContinueLogin();
+      return;
+    }
+    setAccountOpen(!accountOpen);
+  });
+
+  usernameEl.addEventListener('click', (event) => {
+    if (gatewayView.signedIn) return;
+    event.stopPropagation();
+    startOrContinueLogin();
+  });
+
+  usernameEl.addEventListener('keydown', (event) => {
+    if (gatewayView.signedIn) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    startOrContinueLogin();
+  });
+
   popover.addEventListener('click', (event) => {
     const button = event.target instanceof Element ? event.target.closest('button') : null;
     if (!button) return;
@@ -266,7 +376,10 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
   });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && popoverOpen) setPopover(false);
+    if (event.key === 'Escape') {
+      if (popoverOpen) setPopover(false);
+      if (accountOpen) setAccountOpen(false);
+    }
     if (event.key !== ',' || event.shiftKey || event.altKey) return;
     const modified = usesCommand ? event.metaKey : event.ctrlKey;
     if (!modified) return;
@@ -274,17 +387,22 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select'))) return;
     event.preventDefault();
     setPopover(false);
+    setAccountOpen(false);
     void openSettings();
   });
 
   document.addEventListener('pointerdown', (event) => {
-    if (!popoverOpen) return;
     const target = event.target;
     if (!(target instanceof Node)) return;
-    if (popover.contains(target) || gearBtn.contains(target)) return;
-    setPopover(false);
+    if (popoverOpen && !popover.contains(target) && !gearBtn.contains(target)) {
+      setPopover(false);
+    }
+    if (accountOpen && !accountPopover.contains(target) && !accountBtn.contains(target)) {
+      setAccountOpen(false);
+    }
   });
 
+  watchGatewaySession();
   apply();
 
   return {

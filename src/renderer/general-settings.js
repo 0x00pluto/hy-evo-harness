@@ -7,6 +7,9 @@ export const LOCAL_USER_LABEL = '本地用户';
 
 const GENERAL_SEARCH_LABELS = [
   '通用设置',
+  '账号',
+  '登录',
+  '退出',
   '产品名称',
   '版本',
   '当前用户',

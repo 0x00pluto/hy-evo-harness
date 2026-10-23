@@ -7,6 +7,7 @@ import type {
   AvailableMemoryResult,
   DevFlags,
   DexResult,
+  GatewaySessionView,
   GeneralSettings,
   InstallUpdateResult,
   OkResult,
@@ -73,6 +74,14 @@ export type DexInvokeMap = {
   'updater:get-status': { args: []; result: UpdaterStatusPayload };
   'updater:retry': { args: []; result: void };
   'updater:install': { args: []; result: InstallUpdateResult };
+  'dex:gateway-session': { args: []; result: GatewaySessionView };
+  'dex:gateway-login-pkce': { args: []; result: OkResult };
+  'dex:gateway-login-device': { args: []; result: OkResult };
+  'dex:gateway-login-cancel': { args: []; result: OkResult };
+  'dex:gateway-submit-code': { args: [code: string]; result: OkResult };
+  'dex:gateway-reopen-login': { args: []; result: OkResult };
+  'dex:gateway-refresh': { args: []; result: OkResult };
+  'dex:gateway-logout': { args: []; result: OkResult };
 };
 
 /** 渲染层 → 主进程 send（无返回值）。 */
@@ -85,6 +94,7 @@ export type DexPushMap = {
   'dex:runtime-progress': RuntimeProgress;
   'dex:plugin-silent-update': SilentUpdateEvent;
   'updater:status': UpdaterStatusPayload;
+  'dex:session': GatewaySessionView;
 };
 
 export type DexInvokeChannel = keyof DexInvokeMap;

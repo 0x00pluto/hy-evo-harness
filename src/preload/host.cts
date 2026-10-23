@@ -125,6 +125,33 @@ const dex: DexHost = {
   installUpdate() {
     return invoke('updater:install');
   },
+  gatewaySession() {
+    return invoke('dex:gateway-session');
+  },
+  startGatewayLogin() {
+    return invoke('dex:gateway-login-pkce');
+  },
+  startGatewayDeviceLogin() {
+    return invoke('dex:gateway-login-device');
+  },
+  cancelGatewayLogin() {
+    return invoke('dex:gateway-login-cancel');
+  },
+  submitGatewayAuthCode(code) {
+    return invoke('dex:gateway-submit-code', code);
+  },
+  reopenGatewayLogin() {
+    return invoke('dex:gateway-reopen-login');
+  },
+  refreshGatewaySession() {
+    return invoke('dex:gateway-refresh');
+  },
+  logoutGateway() {
+    return invoke('dex:gateway-logout');
+  },
+  onGatewaySession(callback) {
+    return onPush('dex:session', callback);
+  },
 };
 
 contextBridge.exposeInMainWorld('dex', dex);

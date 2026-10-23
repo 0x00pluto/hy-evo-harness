@@ -1,4 +1,11 @@
 import {
+  POINTS_NAV_ID,
+  accountHeadline,
+  balanceLabel,
+  isLoginPending,
+  pointsNavMatches,
+} from './account-session.js';
+import {
   GENERAL_NAV_ID,
   PRODUCT_NAME,
   generalNavMatches,
@@ -71,9 +78,26 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
   let discardResolver = null;
   /** @type {{ note: HTMLSpanElement; checkBtn: HTMLButtonElement } | null} */
   let generalNodes = null;
+  /** @type {{
+   *   accountStatus: HTMLElement;
+   *   accountLead: HTMLDivElement;
+   *   accountActions: HTMLDivElement;
+   * } | null} */
+  let accountNodes = null;
+  /** @type {{
+   *   pointsValue: HTMLSpanElement;
+   *   pointsLead: HTMLDivElement;
+   *   pointsSync: HTMLButtonElement;
+   *   pointsActions: HTMLDivElement;
+   * } | null} */
+  let pointsNodes = null;
   let checkRequested = false;
   /** @type {(() => void) | null} */
   let stopUpdateWatch = null;
+  /** @type {(() => void) | null} */
+  let stopSessionWatch = null;
+  /** @type {GatewaySessionView | null} */
+  let accountView = null;
 
   function activeDraft() {
     if (!settingsDraft) throw new Error('settings draft missing');
@@ -207,17 +231,19 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     settingsList.replaceChildren();
     const query = settingsQueryText();
     const showGeneral = generalNavMatches(query);
+    const showPoints = pointsNavMatches(query);
     const visible = visibleSettings();
-    if (!showGeneral && visible.length === 0) {
+    if (!showGeneral && !showPoints && visible.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-nav';
       empty.textContent = '没有结果';
       settingsList.appendChild(empty);
       return;
     }
-    if (showGeneral) {
+    if (showGeneral || showPoints) {
       settingsList.appendChild(navSectionTitle('个人设置'));
-      settingsList.appendChild(generalNavButton());
+      if (showGeneral) settingsList.appendChild(generalNavButton());
+      if (showPoints) settingsList.appendChild(pointsNavButton());
     }
     if (visible.length > 0) {
       settingsList.appendChild(navSectionTitle('插件'));
@@ -255,6 +281,31 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     button.appendChild(copy);
     button.addEventListener('click', () => {
       void selectSettings(GENERAL_NAV_ID);
+    });
+    return button;
+  }
+
+  function pointsNavButton() {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'nav-item plugin-row';
+    const selected = activeSettingsId === POINTS_NAV_ID;
+    if (selected) button.classList.add('active');
+    button.setAttribute('aria-current', selected ? 'true' : 'false');
+    const copy = document.createElement('span');
+    copy.className = 'plugin-row-copy';
+    const mark = document.createElement('span');
+    mark.className = 'plugin-mark plugin-mark-nav';
+    const icon = document.createElement('i');
+    icon.dataset.lucide = 'coins';
+    mark.appendChild(icon);
+    const title = document.createElement('span');
+    title.className = 'nav-title';
+    title.textContent = '积分';
+    copy.append(mark, title);
+    button.appendChild(copy);
+    button.addEventListener('click', () => {
+      void selectSettings(POINTS_NAV_ID);
     });
     return button;
   }
@@ -460,12 +511,142 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return { row, value, error };
   }
 
+  function stopAccountWatch() {
+    if (stopSessionWatch) {
+      stopSessionWatch();
+      stopSessionWatch = null;
+    }
+  }
+
+  /**
+   * @param {() => Promise<{ ok: boolean; message?: string }>} action
+   */
+  async function runAccountAction(action) {
+    try {
+      const result = await action();
+      if (result && result.ok === false && result.message) setStatus(result.message, 'error');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : '操作失败', 'error');
+    }
+  }
+
+  /** @returns {GatewaySessionView} */
+  function currentAccountView() {
+    return (
+      accountView || {
+        signedIn: false,
+        phoneMasked: null,
+        balance: null,
+        currency: null,
+        login: { phase: /** @type {GatewayLoginPhase} */ ('idle') },
+      }
+    );
+  }
+
+  function syncAccountSections() {
+    if (accountNodes && activeSettingsId === GENERAL_NAV_ID) {
+      const view = currentAccountView();
+      const { accountStatus, accountLead, accountActions } = accountNodes;
+      accountLead.replaceChildren(accountStatus);
+      accountActions.replaceChildren();
+      accountStatus.textContent = accountHeadline(view);
+
+      if (view.signedIn) {
+        const logout = secondaryButton('退出');
+        logout.classList.add('settings-text-btn-danger');
+        logout.addEventListener('click', () => {
+          void runAccountAction(() => window.dex.logoutGateway());
+        });
+        accountActions.appendChild(logout);
+      } else if (isLoginPending(view)) {
+        const cont = secondaryButton('继续登录');
+        cont.addEventListener('click', () => {
+          void runAccountAction(() => window.dex.reopenGatewayLogin());
+        });
+        accountLead.appendChild(cont);
+      } else {
+        const login = secondaryButton('登录');
+        login.addEventListener('click', () => {
+          void runAccountAction(() => window.dex.startGatewayLogin());
+        });
+        accountLead.appendChild(login);
+      }
+    }
+
+    if (pointsNodes && activeSettingsId === POINTS_NAV_ID) {
+      const view = currentAccountView();
+      const { pointsValue, pointsLead, pointsSync, pointsActions } = pointsNodes;
+      pointsLead.replaceChildren(pointsValue);
+      pointsActions.replaceChildren();
+      if (view.signedIn) {
+        pointsValue.textContent = balanceLabel(view.balance);
+        pointsSync.hidden = false;
+        pointsSync.disabled = false;
+      } else if (isLoginPending(view)) {
+        pointsValue.textContent = '登录中';
+        pointsSync.hidden = true;
+        const cont = secondaryButton('继续登录');
+        cont.addEventListener('click', () => {
+          void runAccountAction(() => window.dex.reopenGatewayLogin());
+        });
+        pointsLead.appendChild(cont);
+      } else {
+        pointsValue.textContent = '未登录';
+        pointsSync.hidden = true;
+        const login = secondaryButton('登录');
+        login.addEventListener('click', () => {
+          void runAccountAction(() => window.dex.startGatewayLogin());
+        });
+        pointsLead.appendChild(login);
+      }
+    }
+  }
+
+  function watchAccountSession() {
+    stopAccountWatch();
+    if (!window.dex.onGatewaySession) return;
+    stopSessionWatch = window.dex.onGatewaySession((/** @type {GatewaySessionView} */ view) => {
+      accountView = view;
+      syncAccountSections();
+    });
+    void window.dex
+      .gatewaySession()
+      .then((/** @type {GatewaySessionView} */ view) => {
+        accountView = view;
+        syncAccountSections();
+      })
+      .catch(() => {});
+  }
+
   async function renderGeneralSettings() {
+    stopAccountWatch();
+    accountNodes = null;
+    pointsNodes = null;
     settingsTitle.textContent = '通用设置';
     hidePluginSettingsChrome();
     settingsForm.replaceChildren();
+
+    const account = settingsGroup('账号');
     const about = settingsGroup('关于');
     const data = settingsGroup('本机数据');
+
+    const accountRow = document.createElement('div');
+    accountRow.className = 'settings-row settings-host-row';
+    const accountCopy = document.createElement('div');
+    accountCopy.className = 'settings-card-copy';
+    const accountLead = document.createElement('div');
+    accountLead.className = 'settings-account-lead';
+    const accountStatus = document.createElement('h3');
+    accountStatus.textContent = '未登录';
+    accountLead.appendChild(accountStatus);
+    accountCopy.appendChild(accountLead);
+    const accountControl = document.createElement('div');
+    accountControl.className = 'settings-control settings-row-cluster';
+    const accountActions = document.createElement('div');
+    accountActions.className = 'settings-account-actions';
+    accountControl.appendChild(accountActions);
+    accountRow.append(accountCopy, accountControl);
+    account.body.appendChild(accountRow);
 
     const nameRow = document.createElement('div');
     nameRow.className = 'settings-row';
@@ -517,10 +698,13 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     const installed = hostPathRow('已安装插件目录', 'installedPlugins');
     about.body.append(nameRow, versionRow, userRow);
     data.body.append(userData.row, installed.row);
-    settingsForm.append(about.section, data.section);
+    settingsForm.append(account.section, about.section, data.section);
 
     generalNodes = { note, checkBtn };
+    accountNodes = { accountStatus, accountLead, accountActions };
     watchUpdates();
+    watchAccountSession();
+    syncAccountSections();
     syncGeneralUpdate(typeof updater.status === 'function' ? updater.status() : null);
 
     try {
@@ -537,6 +721,45 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
       if (activeSettingsId !== GENERAL_NAV_ID) return;
       setStatus(err instanceof Error ? err.message : '无法读取通用设置', 'error');
     }
+  }
+
+  async function renderPointsSettings() {
+    stopAccountWatch();
+    accountNodes = null;
+    pointsNodes = null;
+    generalNodes = null;
+    settingsTitle.textContent = '积分';
+    hidePluginSettingsChrome();
+    settingsForm.replaceChildren();
+
+    const points = settingsGroup('积分');
+    const pointsRow = document.createElement('div');
+    pointsRow.className = 'settings-row settings-host-row';
+    const pointsCopy = document.createElement('div');
+    pointsCopy.className = 'settings-card-copy';
+    const pointsHeading = document.createElement('h3');
+    pointsHeading.textContent = '当前积分';
+    const pointsLead = document.createElement('div');
+    pointsLead.className = 'settings-account-lead';
+    const pointsValue = hostValue('未登录');
+    pointsLead.appendChild(pointsValue);
+    pointsCopy.append(pointsHeading, pointsLead);
+    const pointsControl = document.createElement('div');
+    pointsControl.className = 'settings-control settings-row-cluster';
+    const pointsSync = secondaryButton('重新同步');
+    pointsSync.addEventListener('click', () => {
+      void runAccountAction(() => window.dex.refreshGatewaySession());
+    });
+    const pointsActions = document.createElement('div');
+    pointsActions.className = 'settings-account-actions';
+    pointsControl.append(pointsSync, pointsActions);
+    pointsRow.append(pointsCopy, pointsControl);
+    points.body.appendChild(pointsRow);
+    settingsForm.appendChild(points.section);
+
+    pointsNodes = { pointsValue, pointsLead, pointsSync, pointsActions };
+    watchAccountSession();
+    syncAccountSections();
   }
 
   /**
@@ -882,11 +1105,16 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     return settingsCatalog.map((item) => item.id);
   }
 
+  /** @param {string | null | undefined} id */
+  function isHostSettingsId(id) {
+    return id === GENERAL_NAV_ID || id === POINTS_NAV_ID;
+  }
+
   /** @param {string} id */
   async function selectSettings(id) {
     if (id === activeSettingsId) return;
-    const plugin = id === GENERAL_NAV_ID ? null : settingsCatalog.find((item) => item.id === id);
-    if (id !== GENERAL_NAV_ID && !plugin) return;
+    const plugin = isHostSettingsId(id) ? null : settingsCatalog.find((item) => item.id === id);
+    if (!isHostSettingsId(id) && !plugin) return;
     if (activeSettingsId && !(await confirmDiscard())) return;
     if (id === GENERAL_NAV_ID) {
       activeSettingsId = GENERAL_NAV_ID;
@@ -900,7 +1128,22 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
       }
       return;
     }
+    if (id === POINTS_NAV_ID) {
+      activeSettingsId = POINTS_NAV_ID;
+      settingsDraft = null;
+      settingsBaseline = '';
+      renderSettingsNav();
+      try {
+        await renderPointsSettings();
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : '打开设置页失败', 'error');
+      }
+      return;
+    }
     if (!plugin) return;
+    stopAccountWatch();
+    accountNodes = null;
+    pointsNodes = null;
     generalNodes = null;
     activeSettingsId = id;
     settingsDraft = draftFromPlugin(plugin);
@@ -936,6 +1179,10 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     shell.settingsMode = false;
     activeSettingsId = null;
     generalNodes = null;
+    accountNodes = null;
+    pointsNodes = null;
+    stopAccountWatch();
+    accountView = null;
     settingsDraft = null;
     settingsBaseline = '';
     settingsScreen.hidden = true;
@@ -982,7 +1229,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
 
   async function onPluginsChanged() {
     await reloadSettingsCatalog();
-    if (!activeSettingsId || activeSettingsId === GENERAL_NAV_ID) return;
+    if (!activeSettingsId || isHostSettingsId(activeSettingsId)) return;
     if (settingsCatalog.some((plugin) => plugin.id === activeSettingsId)) return;
     activeSettingsId = null;
     settingsDraft = null;

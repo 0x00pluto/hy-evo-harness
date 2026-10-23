@@ -49,13 +49,16 @@
         <i data-lucide="ellipsis"></i>
       </button>
       <div class="rail-rule" role="separator"></div>
-      <button id="rail-account" class="rail-btn" type="button" aria-label="用户">
-        <i data-lucide="circle-user"></i>
-      </button>
+      <div class="rail-account-wrap">
+        <div id="account-popover" class="account-popover" role="dialog" aria-label="账号" hidden></div>
+        <button id="rail-account" class="rail-btn" type="button" aria-label="用户" aria-haspopup="dialog" aria-expanded="false">
+          <i data-lucide="circle-user"></i>
+        </button>
+      </div>
     </div>
     <div class="rail-bottom">
       <div id="gear-popover" role="menu" hidden>
-        <div id="gear-username">本地用户</div>
+        <div id="gear-username">未登录</div>
         <div class="gear-rule" role="separator"></div>
         <button id="update-btn" class="gear-row" type="button" role="menuitem" hidden>
           <i data-lucide="download"></i>

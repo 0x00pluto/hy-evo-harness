@@ -11,6 +11,7 @@ const ICON_NAMES = [
   'CircleUser',
   'Settings',
   'SlidersHorizontal',
+  'Coins',
   'CircleHelp',
   'ChevronRight',
   'Download',

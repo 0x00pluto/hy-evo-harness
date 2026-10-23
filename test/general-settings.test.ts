@@ -23,7 +23,16 @@ test('指定了目录里的插件时选中该插件', () => {
 test('搜索命中通用设置的标题时保留该项', () => {
   assert.equal(generalNavMatches(''), true);
   assert.equal(generalNavMatches('  '), true);
-  for (const label of ['通用设置', '产品名称', '版本', '当前用户', '用户数据目录', '已安装插件目录']) {
+  for (const label of [
+    '通用设置',
+    '账号',
+    '登录',
+    '产品名称',
+    '版本',
+    '当前用户',
+    '用户数据目录',
+    '已安装插件目录',
+  ]) {
     assert.equal(generalNavMatches(label), true, label);
     assert.equal(generalNavMatches(label.slice(0, 2)), true, label);
   }
@@ -32,6 +41,7 @@ test('搜索命中通用设置的标题时保留该项', () => {
 test('搜索都不命中时藏起通用设置', () => {
   assert.equal(generalNavMatches('不存在的插件字段'), false);
   assert.equal(generalNavMatches('个人设置'), false);
+  assert.equal(generalNavMatches('积分'), false);
 });
 
 test('读不到本机账户名时显示本地用户', () => {

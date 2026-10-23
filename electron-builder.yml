@@ -1,5 +1,9 @@
 appId: com.huyuan.dexbuddy
 productName: Dex Buddy
+protocols:
+  - name: Dex Buddy
+    schemes:
+      - dexbuddy
 directories:
   output: release
   buildResources: build

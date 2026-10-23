@@ -109,7 +109,7 @@ const result = await window.dex.call('aiComicService', 'renderVideo', [
 
 改完代码后，在该插件详情的「…」里选「重新加载」，不用退出 Dex Buddy。上线前可以选「按发布预览」：文件集和依赖安装与插件中心相同，仍然用这份实例的设置。结束预览后回到源码目录。
 
-维护者用未打包的 `pnpm start` 时，还可以把绝对路径写进已忽略的 `config.dev.json` → `extraPluginPaths`。这些路径同样用实例 id，界面里不能移除；要停用就改 JSON 后重启。打包后的 Dex Buddy 不读这个文件。`forceUpdateIcon` 设为 `true` 时，开发版会显示下载图标并打开和线上一样的确认框；确认不会下载或安装。打包后这个开关无效。
+维护者用未打包的 `pnpm start` 时，还可以把绝对路径写进已忽略的 `config.dev.json` → `extraPluginPaths`。这些路径同样用实例 id，界面里不能移除；要停用就改 JSON 后重启。打包后的 Dex Buddy 不读这个文件。`forceUpdateIcon` 设为 `true` 时，开发版会显示下载图标并打开和线上一样的确认框；确认不会下载或安装。打包后这个开关无效。`gatewayBaseUrl` 可指向本地或其它网关（例如 `http://localhost:3000`）；也可用环境变量 `DEX_GATEWAY_BASE_URL`（优先于配置文件）。未设置时，开发默认 `http://localhost:3000`，安装包默认 `https://app.dexbuddy.xds365.com`。登录走系统浏览器与 `dexbuddy://auth/callback`；凭证只留在主进程（refresh 经 `safeStorage`），界面只看到脱敏手机号与余额。
 
 软链接仍然可以放进 `plugins/`，但只有未打包运行会扫到，并用清单 id，和已安装插件共用设置。要隔离就改用插件页加载。
 

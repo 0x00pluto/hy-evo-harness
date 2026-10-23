@@ -15,3 +15,4 @@
 - `specs/prds/prd-00009-plugin-view-keepalive.md`：00009，侧栏互切以及从插件页或设置页回来时保持插件界面；隐藏页降频，硬上限 5 再按可用内存缩到 3 或 1，最久未用的隐藏页被拆掉。工程 accepted
 - `specs/prds/prd-00010-plugin-silent-update.md`：00010，从插件市场安装的插件在启动时和每 6 小时静默更新；正在看的那个离开后再装。手动更新仍留在市场菜单。工程 accepted
 - `specs/prds/prd-00011-plugin-external-tools.md`：00011，插件用 externalTools 声明本机 CLI；修订后宿主只查 PATH，缺了弹出可复制给编程助手的安装说明（初稿曾写静默代装）。工程 backlog
+- `specs/prds/prd-00012-host-gateway-session.md`：00012，宿主对接网关登录：dexbuddy:// PKCE、设备码、safeStorage、图标轨与设置账号页展示 whoami/wallet 与退出。工程 partial

@@ -192,6 +192,33 @@ export interface DevFlags {
   forceUpdateIcon: boolean;
 }
 
+/** 登录进度；不含任何 token。 */
+export type GatewayLoginPhase =
+  | 'idle'
+  | 'opening_browser'
+  | 'waiting_callback'
+  | 'device_pending'
+  | 'exchanging'
+  | 'failed';
+
+export interface GatewayLoginProgress {
+  phase: GatewayLoginPhase;
+  message?: string;
+  userCode?: string;
+  canPasteCode?: boolean;
+  canReopenLogin?: boolean;
+  canCancel?: boolean;
+}
+
+/** 渲染层可见的会话摘要；不含 access / refresh。 */
+export interface GatewaySessionView {
+  signedIn: boolean;
+  phoneMasked: string | null;
+  balance: number | null;
+  currency: string | null;
+  login: GatewayLoginProgress;
+}
+
 /** 对照预加载暴露的 window.dex；底层通道见 dex-ipc.ts。 */
 export interface DexHost {
   devFlags(): Promise<DevFlags>;
@@ -229,4 +256,13 @@ export interface DexHost {
   onUpdateStatus(callback: (payload: UpdaterStatusPayload) => void): () => void;
   retryUpdateCheck(): Promise<void>;
   installUpdate(): Promise<InstallUpdateResult>;
+  gatewaySession(): Promise<GatewaySessionView>;
+  startGatewayLogin(): Promise<OkResult>;
+  startGatewayDeviceLogin(): Promise<OkResult>;
+  cancelGatewayLogin(): Promise<OkResult>;
+  submitGatewayAuthCode(code: string): Promise<OkResult>;
+  reopenGatewayLogin(): Promise<OkResult>;
+  refreshGatewaySession(): Promise<OkResult>;
+  logoutGateway(): Promise<OkResult>;
+  onGatewaySession(callback: (payload: GatewaySessionView) => void): () => void;
 }

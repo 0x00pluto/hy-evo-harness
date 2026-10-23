@@ -227,6 +227,113 @@ button, .nav-item { font: inherit; }
   line-height: 18px;
 }
 
+.rail-account-wrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+#account-popover,
+.account-popover {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 0;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  z-index: 5;
+  color: var(--ink);
+  font-size: var(--text-ui);
+  font-weight: 400;
+  line-height: 18px;
+}
+
+#account-popover[hidden],
+.account-popover[hidden] {
+  display: none;
+}
+
+.account-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px;
+}
+
+.account-phone {
+  padding: 6px 8px 0;
+  color: var(--ink);
+  font-size: var(--text-ui);
+  font-weight: 400;
+}
+
+.account-balance,
+.account-status {
+  padding: 0 8px 4px;
+  color: var(--muted);
+  font-size: var(--text-ui);
+}
+
+.account-status.is-error {
+  color: var(--danger);
+}
+
+.account-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.account-action {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--text-ui);
+  font-weight: 400;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+
+.account-action:hover {
+  background: var(--hover);
+}
+
+.account-action-danger {
+  color: var(--danger);
+}
+
+.settings-account-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.settings-text-btn-danger {
+  color: var(--danger);
+}
+
 #gear-username {
   padding: 6px 8px;
   overflow: hidden;
@@ -235,6 +342,15 @@ button, .nav-item { font: inherit; }
   color: var(--muted);
   font-weight: 400;
   cursor: default;
+  border-radius: 8px;
+}
+
+#gear-username.is-clickable {
+  cursor: pointer;
+}
+
+#gear-username.is-clickable:hover {
+  background: var(--hover);
 }
 
 .gear-rule {
@@ -480,8 +596,12 @@ body[data-surface="settings"] .split-section {
   display: none;
 }
 
+#settings-list {
+  gap: 8px;
+}
+
 #settings-list .settings-nav-section {
-  padding: 8px 8px 2px;
+  padding: 8px 8px 0;
   line-height: 16px;
 }
 

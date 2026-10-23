@@ -16,6 +16,9 @@ import type {
   DexResult,
   PreparePluginResult,
   PluginSource,
+  GatewaySessionView,
+  GatewayLoginProgress,
+  GatewayLoginPhase,
 } from '../shared/dex-bridge.ts';
 
 export type {
@@ -31,6 +34,9 @@ export type {
   DexResult,
   PreparePluginResult,
   PluginSource,
+  GatewaySessionView,
+  GatewayLoginProgress,
+  GatewayLoginPhase,
 };
 
 interface LucideIcons {
@@ -74,6 +80,9 @@ declare global {
   type DexResult = import('../shared/dex-bridge.ts').DexResult;
   type PreparePluginResult = import('../shared/dex-bridge.ts').PreparePluginResult;
   type PluginSource = import('../shared/dex-bridge.ts').PluginSource;
+  type GatewaySessionView = import('../shared/dex-bridge.ts').GatewaySessionView;
+  type GatewayLoginProgress = import('../shared/dex-bridge.ts').GatewayLoginProgress;
+  type GatewayLoginPhase = import('../shared/dex-bridge.ts').GatewayLoginPhase;
 
   /** 工作台 chrome 会话（仅内存）。surface 运行时是 workspace / settings / plugins。 */
   interface ChromeSession {
