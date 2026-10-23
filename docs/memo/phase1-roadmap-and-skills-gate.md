@@ -1,6 +1,6 @@
 # 第一期之后：Roadmap 与技能中心可借鉴路线
 
-第一期「做什么」见 [phase1-billing.md](phase1-billing.md)。本文只记两件事：上线之后怎么分期走，以及兄弟仓 `huyuan-ai-skills-gate` 哪些能抄、哪些别整仓搬。
+第一期「做什么」见 [phase1-billing.md](phase1-billing.md)。仓库划分与登录 / 会话见 [phase1-repos-and-auth.md](phase1-repos-and-auth.md)。本文只记两件事：上线之后怎么分期走，以及兄弟仓 `huyuan-ai-skills-gate` 哪些能抄、哪些别整仓搬。
 
 **仅备忘，不是已排期承诺，也未在本仓实现。**
 

@@ -7,6 +7,7 @@
 - `docs/build-and-release.md`: 桌面安装包、三端 CI、GitHub Release 页，以及从七牛下载的应用内自动更新；macOS Finder 图标来自 build/icon.icns（勿让 26.15.x 从 png 现转）；七牛 dex-buddy/ 安装包只留最近 3 个版本；解释器单独用 publish-runtimes 传到 dex-buddy/runtimes/，不打进安装包
 - `docs/hub-plugin-architecture.md`: Dex Buddy 插件化技术选型与方案原文备份：注册表、app-plugin 协议、开发挂载、ZIP 安装；预加载编到 dist/preload；后端同主进程、跨插件调用保持公开；第一期插件中心见 publish-plugin 工作流，不改技能中心
 - `docs/memo/phase1-billing.md`: 第一期收费备忘（未上线）：登录与买断、额度充值包、网关转发模型并扣费；提示词仍本机拼；破解靠服务端校验；Chat 对齐 OpenAI 形态、生图包一层不透传 Replicate
+- `docs/memo/phase1-repos-and-auth.md`: 第一期仓库与登录备忘（未上线）：两仓划分、三种页面、PKCE/设备码交接、Bearer 与 refresh 用法；给接手开工用
 - `docs/memo/phase1-roadmap-and-skills-gate.md`: 第一期之后备忘：上线门槛与 P1.5–P5 Roadmap；huyuan-ai-skills-gate 可借鉴（登录/支付/权益门禁）与勿照搬（无用量钱包、勿整仓 fork）
 - `docs/plugin-development.md`: 插件开发说明已拆到 `docs/plugin-development/`，本文件只保留入口
 - `docs/plugin-development/README.md`: 可单独转发的插件开发目录：交什么、两种插件，以及清单、设置、数据、运行、后端 JavaScript、打包、发布、插件中心、配色的入口
