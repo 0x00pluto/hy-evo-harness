@@ -3,6 +3,9 @@ import test from 'node:test';
 import {
   GatewayError,
   parseCreditsBalance,
+  parseEntitlements,
+  parseModelsList,
+  parseShopCatalog,
   parseWallet,
   parseWhoami,
 } from '../src/main/gateway-client.ts';
@@ -51,4 +54,41 @@ test('parseWhoami / parseWallet 在余额非法时抛 BAD_RESPONSE', () => {
     () => parseWallet({ balance: 'abc', currency: 'credits' }),
     (err: unknown) => err instanceof GatewayError && err.message.includes('wallet'),
   );
+});
+
+test('parseEntitlements / parseModelsList / parseShopCatalog', () => {
+  assert.deepEqual(
+    parseEntitlements({
+      entitlements: [
+        { pluginId: 'ai-comic-master', status: 'active' },
+        { pluginId: 'gone', status: 'revoked' },
+      ],
+    }),
+    {
+      entitlements: [
+        { pluginId: 'ai-comic-master', status: 'active' },
+        { pluginId: 'gone', status: 'revoked' },
+      ],
+    },
+  );
+  const models = parseModelsList({
+    object: 'list',
+    data: [{ id: 'dexbuddy-chat', object: 'model', kind: 'chat', display_name: '文案' }],
+  });
+  assert.equal(models.data[0]?.id, 'dexbuddy-chat');
+  const shop = parseShopCatalog({
+    ok: true,
+    catalog: {
+      plugins: [{ pluginId: 'ai-comic-master', name: 'AI 漫画大师' }],
+      ownedPluginIds: ['ai-comic-master'],
+    },
+  });
+  assert.equal(shop.plugins[0]?.name, 'AI 漫画大师');
+  assert.deepEqual(shop.ownedPluginIds, ['ai-comic-master']);
+  const titled = parseShopCatalog({
+    catalog: {
+      plugins: [{ pluginId: 'manju-studio', displayName: '漫剧工作室' }],
+    },
+  });
+  assert.equal(titled.plugins[0]?.name, '漫剧工作室');
 });

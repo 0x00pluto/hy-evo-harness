@@ -4,6 +4,8 @@
 
 ## 开发时挂到 Dex Buddy
 
+日常改模型调用不必先克隆宿主仓。按 [模型](models.md) 五步：拷 `dex-models.js` / `dex_models.py`，本机填 `DEX_BUDDY_API_KEY`，`index.js` 用 `bindModels(ctx)`，Python 子进程用 `childEnv`。装进 Dex Buddy 验收时走下面这条路，业务代码不用改。不要把 Key 打进 zip。
+
 不要把源码复制进 Dex Buddy 的 `plugins/` 目录，否则改一处、另一处还是旧的。
 
 打开已经装好的 Dex Buddy，进入插件页，点加号，选「加载本地目录」。选中的文件夹可以是插件根（里面直接有 `plugin.manifest.json`），也可以是一个父目录，里面每个子目录是一个插件。父目录只登记一次。取消选择不会改列表。

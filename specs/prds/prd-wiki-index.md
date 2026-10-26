@@ -17,6 +17,4 @@
 - `specs/prds/prd-00011-plugin-external-tools.md`：00011，插件用 externalTools 声明本机 CLI；修订后宿主只查 PATH，缺了弹出可复制给编程助手的安装说明（初稿曾写静默代装）。工程 backlog
 - `specs/prds/prd-00012-host-gateway-session.md`：00012，宿主对接网关登录：dexbuddy:// PKCE、设备码、safeStorage、图标轨与设置账号页展示 whoami/wallet 与退出。工程 partial
 - `specs/prds/prd-00013-prod-gateway-base.md`：00013，线上默认域名与会话复验：未打包与安装包默认 `https://www.dexbuddy.app`，退役旧域名，用线上复验现有 PKCE。工程 accepted
-- `specs/prds/prd-00014-host-chat-egress.md`：00014，插件经宿主调用线上模型目录、报价与文案补全。功能清单，落地前须技术讨论。工程 backlog
-- `specs/prds/prd-00015-host-buyout-shop.md`：00015，登录后看出买断了哪些插件，并从工作台打开线上商城。功能清单，落地前须技术讨论。工程 backlog
-- `specs/prds/prd-00016-host-image-generate.md`：00016，插件经宿主上传参考图并按张生图，结果落到本地文件。功能清单，落地前须技术讨论。工程 backlog
+- `specs/prds/prd-00014-host-chat-egress.md`：00014，插件经宿主调用线上模型：OpenAI 文案、Replicate input 生图、清单 id 盖章与有限买断拦截；积分页已购插件与购买积分。工程 accepted

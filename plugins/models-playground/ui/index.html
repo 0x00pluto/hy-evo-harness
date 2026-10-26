@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>模型试玩</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #171717;
+      --muted: #6b6b6b;
+      --paper: #ffffff;
+      --line: #ececec;
+      --hover: #f3f3f3;
+      --danger: #8d3a2f;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+    h1 {
+      font-weight: 600;
+      margin: 0 0 8px;
+    }
+    p { color: var(--muted); }
+    label { display: block; font-size: 14px; margin-bottom: 8px; }
+    textarea {
+      width: 100%;
+      min-height: 96px;
+      box-sizing: border-box;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      font: inherit;
+      background: var(--paper);
+      color: var(--ink);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 16px;
+      background: var(--hover);
+      color: var(--ink);
+      font: inherit;
+      cursor: pointer;
+    }
+    pre {
+      margin-top: 18px;
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    img {
+      display: block;
+      max-width: 100%;
+      margin-top: 18px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+    }
+    .error { color: var(--danger); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>模型试玩</h1>
+    <p>装进 Dex Buddy 后走宿主登录会话。独立跑时把 DEX_BUDDY_API_KEY 写进本机环境变量，不要打进 zip。</p>
+    <label for="prompt">提示词</label>
+    <textarea id="prompt">用一句话介绍 Dex Buddy</textarea>
+    <div class="actions">
+      <button id="chat" type="button">生成文案</button>
+      <button id="image" type="button">生成图片</button>
+      <button id="python" type="button">用 Python 生成文案</button>
+    </div>
+    <pre id="result">等待生成</pre>
+    <img id="preview" alt="" hidden>
+  </main>
+  <script>
+    const result = document.getElementById('result');
+    const preview = document.getElementById('preview');
+
+    async function run(method) {
+      const prompt = document.getElementById('prompt').value;
+      result.className = '';
+      result.textContent = '正在生成…';
+      preview.hidden = true;
+      try {
+        const payload = await window.dex.call('modelsPlayground', method, [{ prompt }]);
+        result.textContent = JSON.stringify(payload, null, 2);
+        if (payload && typeof payload.output === 'string' && payload.output) {
+          preview.src = 'file://' + payload.output;
+          preview.hidden = false;
+        }
+      } catch (err) {
+        result.className = 'error';
+        result.textContent = err && err.message ? err.message : '生成失败';
+      }
+    }
+
+    document.getElementById('chat').onclick = () => run('chat');
+    document.getElementById('image').onclick = () => run('image');
+    document.getElementById('python').onclick = () => run('pythonChat');
+  </script>
+</body>
+</html>

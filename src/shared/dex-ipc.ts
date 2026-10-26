@@ -81,6 +81,7 @@ export type DexInvokeMap = {
   'dex:gateway-submit-code': { args: [code: string]; result: OkResult };
   'dex:gateway-reopen-login': { args: []; result: OkResult };
   'dex:gateway-refresh': { args: []; result: OkResult };
+  'dex:gateway-open-shop': { args: []; result: OkResult };
   'dex:gateway-logout': { args: []; result: OkResult };
 };
 

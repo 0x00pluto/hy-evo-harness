@@ -210,12 +210,19 @@ export interface GatewayLoginProgress {
   canCancel?: boolean;
 }
 
+/** 渲染层可见的买断项；不含 token。 */
+export interface GatewayBuyoutView {
+  pluginId: string;
+  displayName: string;
+}
+
 /** 渲染层可见的会话摘要；不含 access / refresh。 */
 export interface GatewaySessionView {
   signedIn: boolean;
   phoneMasked: string | null;
   balance: number | null;
   currency: string | null;
+  buyouts: GatewayBuyoutView[];
   login: GatewayLoginProgress;
 }
 
@@ -263,6 +270,7 @@ export interface DexHost {
   submitGatewayAuthCode(code: string): Promise<OkResult>;
   reopenGatewayLogin(): Promise<OkResult>;
   refreshGatewaySession(): Promise<OkResult>;
+  openGatewayShop(): Promise<OkResult>;
   logoutGateway(): Promise<OkResult>;
   onGatewaySession(callback: (payload: GatewaySessionView) => void): () => void;
 }

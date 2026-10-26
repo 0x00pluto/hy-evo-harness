@@ -13,7 +13,8 @@ import {
 } from './plugin-runtime.ts';
 import { PluginSettingsStore, isSettingsCandidate, type SettingsPluginView, type SettingsSaveResult } from './plugin-settings.ts';
 import { resolvePluginFile } from './protocol.ts';
-import type { AppContext, AppPlugin, LocalMountMode, LocalRecord, Logger, PluginManifest, PluginSource, PluginSummary, RuntimeLayout } from './types.ts';
+import { unavailableHostModels } from './host-egress.ts';
+import type { AppContext, AppPlugin, HostModels, LocalMountMode, LocalRecord, Logger, PluginManifest, PluginSource, PluginSummary, RuntimeLayout } from './types.ts';
 
 interface CommonJsModule {
   filename: string;
@@ -102,6 +103,7 @@ export class ServiceRegistry {
   private onRuntimeProgress: RuntimeHost['onProgress'];
   private lookupTool: RuntimeHost['lookup'];
   private originChannel: (id: string) => 'market' | 'file' | undefined = () => undefined;
+  private modelsForPlugin: ((pluginId: string) => HostModels) | null = null;
   readonly logger: Logger;
 
   constructor(logger: Logger = defaultLogger, settings?: PluginSettingsStore) {
@@ -117,6 +119,11 @@ export class ServiceRegistry {
   /** 已安装插件的市场或压缩包记录。列表返回时按清单 id 查。 */
   setOriginLookup(lookup: (id: string) => 'market' | 'file' | undefined): void {
     this.originChannel = lookup;
+  }
+
+  /** 按清单 id 创建 ctx.models。未设置时调用会报网关未就绪。 */
+  setHostModels(factory: (pluginId: string) => HostModels): void {
+    this.modelsForPlugin = factory;
   }
 
   setRuntimeHost(host: RuntimeHost): void {
@@ -522,6 +529,9 @@ export class ServiceRegistry {
       on: (event, handler) => {
         this.trackListener(owned, event, handler);
       },
+      models: this.modelsForPlugin
+        ? this.modelsForPlugin(plugin.manifest.id)
+        : unavailableHostModels(),
       getPluginConfig: () => this.settings.getPluginConfig(plugin.manifest, id),
       pluginEnv: () => {
         const configEnv = this.settings.pluginEnv(plugin.manifest, process.env, id);

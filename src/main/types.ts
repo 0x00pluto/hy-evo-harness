@@ -41,12 +41,53 @@ export interface ConfigField {
 
 export type ConfigSchema = Record<string, ConfigField>;
 
+export interface HostModelsCallOptions {
+  idempotencyKey?: string;
+}
+
+export interface HostImageGenerateInput {
+  model: string;
+  input: {
+    prompt: string;
+    aspect_ratio?: string;
+    input_images?: string[];
+  };
+  outputPath: string;
+}
+
+export interface HostImageGenerateResult {
+  status: 'succeeded';
+  output: string;
+  model: string;
+}
+
+/** 插件经宿主调用网关。id 由宿主盖上，参数里没有 pluginId。 */
+export interface HostModels {
+  list: () => Promise<unknown>;
+  billing: {
+    quote: (body: unknown, options?: HostModelsCallOptions) => Promise<unknown>;
+  };
+  chat: {
+    completions: {
+      create: (body: unknown, options?: HostModelsCallOptions) => Promise<unknown>;
+    };
+  };
+  images: {
+    generate: (
+      input: HostImageGenerateInput,
+      options?: HostModelsCallOptions,
+    ) => Promise<HostImageGenerateResult>;
+  };
+}
+
 export interface AppContext {
   registerService: <T = unknown>(name: string, service: T) => void;
   getService: <T = unknown>(name: string) => T | undefined;
   logger: Logger;
   emit: (event: string, ...args: unknown[]) => void;
   on: (event: string, handler: (...args: unknown[]) => void) => void;
+  /** 经宿主调用线上模型。清单 id 由宿主盖上。 */
+  models: HostModels;
   /** 默认值与已保存值合并后的本插件配置。声明非法时为空对象。 */
   getPluginConfig: () => PluginConfig;
   /**

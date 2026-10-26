@@ -104,6 +104,25 @@ test('PKCE exchange 成功后摘要不含 token，refresh 只进密文', async (
       if (url.endsWith('/v1/wallet')) {
         return jsonResponse({ balance: '3.0000', currency: 'credits' });
       }
+      if (url.endsWith('/v1/entitlements')) {
+        return jsonResponse({
+          entitlements: [{ pluginId: 'ai-comic-master', status: 'active' }],
+        });
+      }
+      if (url.endsWith('/api/shop/catalog')) {
+        return jsonResponse({
+          ok: true,
+          catalog: {
+            plugins: [{ pluginId: 'ai-comic-master', name: 'AI 漫画大师' }],
+            packages: [],
+            custom: { yuanMin: 10, yuanStep: 5, yuanMax: 10_000, creditsPerYuan: 100 },
+            signedIn: true,
+            ownedPluginIds: ['ai-comic-master'],
+            balance: '3.0000',
+            phoneMasked: '138****0000',
+          },
+        });
+      }
       return jsonResponse({ ok: false, code: 'SERVER_ERROR', error: 'unexpected' }, 500);
     },
   });
@@ -119,6 +138,8 @@ test('PKCE exchange 成功后摘要不含 token，refresh 只进密文', async (
   assert.equal(view.signedIn, true);
   assert.equal(view.phoneMasked, '138****0000');
   assert.equal(view.balance, 3);
+  assert.deepEqual(view.buyouts, [{ pluginId: 'ai-comic-master', displayName: 'AI 漫画大师' }]);
+  assert.equal(session.shopUrl(), 'http://localhost:3000/shop');
   const serialized = JSON.stringify(view);
   assert.equal(serialized.includes('dbh_at_'), false);
   assert.equal(serialized.includes('dbh_rt_'), false);

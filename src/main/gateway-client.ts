@@ -14,14 +14,25 @@ export type GatewayErrorCode =
   | 'EXPIRED_TOKEN'
   | 'SERVER_ERROR'
   | 'NETWORK_ERROR'
-  | 'BAD_RESPONSE';
+  | 'BAD_RESPONSE'
+  | 'NOT_ENTITLED'
+  | 'INSUFFICIENT_CREDITS'
+  | 'IDEMPOTENCY_CONFLICT'
+  | 'MODEL_NOT_ALLOWED'
+  | 'CHANNEL_NOT_READY'
+  | 'UPSTREAM_ERROR'
+  | 'FILE_QUOTA'
+  | 'FILE_NOT_USABLE'
+  | 'OUTPUT_EXPIRED'
+  | 'KEY_LIMIT'
+  | 'KEY_NOT_FOUND';
 
 export class GatewayError extends Error {
-  readonly code: GatewayErrorCode;
+  readonly code: string;
   readonly retryAfter?: number;
   readonly status: number;
 
-  constructor(code: GatewayErrorCode, message: string, status = 0, retryAfter?: number) {
+  constructor(code: string, message: string, status = 0, retryAfter?: number) {
     super(message);
     this.name = 'GatewayError';
     this.code = code;
@@ -58,6 +69,63 @@ export interface WalletBody {
   currency: string;
 }
 
+export interface EntitlementItem {
+  pluginId: string;
+  status: 'active' | 'revoked';
+}
+
+export interface EntitlementsBody {
+  entitlements: EntitlementItem[];
+}
+
+export interface PublicModel {
+  id: string;
+  object: 'model';
+  kind?: 'chat' | 'image';
+  display_name?: string;
+}
+
+export interface ModelsList {
+  object: 'list';
+  data: PublicModel[];
+}
+
+export interface BillingQuote {
+  kind: 'chat' | 'image';
+  estimate: string;
+  enough: boolean;
+  balance: string;
+  model: string;
+  maxTokens?: number;
+  promptTokensEstimate?: number;
+  creditsPerImage?: string;
+}
+
+export interface FilesIssue {
+  id: string;
+  key: string;
+  uploadUrl: string;
+  token: string;
+  expiresAt: string;
+}
+
+export interface ImageGenerate {
+  downloadUrl: string;
+  mediaType: string;
+  expiresAt: string;
+  model: string;
+}
+
+export interface ShopPluginProduct {
+  pluginId: string;
+  name?: string;
+}
+
+export interface ShopCatalog {
+  plugins: ShopPluginProduct[];
+  ownedPluginIds: string[];
+}
+
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -89,8 +157,13 @@ export function parseCreditsBalance(value: unknown): number {
 
 function readError(body: unknown, status: number): GatewayError {
   const record = asRecord(body);
+  const nested = record ? asRecord(record.error) : null;
+  if (nested && typeof nested.message === 'string' && nested.message.trim() !== '') {
+    const code = typeof nested.code === 'string' && nested.code.trim() !== '' ? nested.code : 'BAD_RESPONSE';
+    return new GatewayError(code, nested.message, status);
+  }
   const codeRaw = record && typeof record.code === 'string' ? record.code : 'BAD_RESPONSE';
-  const code = (codeRaw as GatewayErrorCode) || 'BAD_RESPONSE';
+  const code = codeRaw || 'BAD_RESPONSE';
   const error =
     record && typeof record.error === 'string' && record.error.trim() !== ''
       ? record.error
@@ -120,11 +193,13 @@ export async function gatewayRequest(
     method: 'GET' | 'POST';
     body?: unknown;
     accessToken?: string;
+    headers?: Record<string, string>;
   },
 ): Promise<unknown> {
   const url = `${baseUrl.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
   const headers: Record<string, string> = {
     Accept: 'application/json',
+    ...init.headers,
   };
   if (init.body !== undefined) headers['Content-Type'] = 'application/json';
   if (init.accessToken) headers.Authorization = `Bearer ${init.accessToken}`;
@@ -244,4 +319,149 @@ export function parseWallet(body: unknown): WalletBody {
     throw new GatewayError('BAD_RESPONSE', '网关 wallet 无效');
   }
   return { balance, currency: record.currency };
+}
+
+export function parseEntitlements(body: unknown): EntitlementsBody {
+  const record = asRecord(body);
+  if (!record || !Array.isArray(record.entitlements)) {
+    throw new GatewayError('BAD_RESPONSE', '网关 entitlements 无效');
+  }
+  const entitlements: EntitlementItem[] = [];
+  for (const item of record.entitlements) {
+    const row = asRecord(item);
+    if (!row || typeof row.pluginId !== 'string' || row.pluginId.trim() === '') continue;
+    const status = row.status === 'revoked' ? 'revoked' : row.status === 'active' ? 'active' : null;
+    if (!status) continue;
+    entitlements.push({ pluginId: row.pluginId.trim(), status });
+  }
+  return { entitlements };
+}
+
+export function parseModelsList(body: unknown): ModelsList {
+  const record = asRecord(body);
+  if (!record || record.object !== 'list' || !Array.isArray(record.data)) {
+    throw new GatewayError('BAD_RESPONSE', '网关 models 无效');
+  }
+  const data: PublicModel[] = [];
+  for (const item of record.data) {
+    const row = asRecord(item);
+    if (!row || typeof row.id !== 'string' || row.id.trim() === '') continue;
+    const model: PublicModel = { id: row.id.trim(), object: 'model' };
+    if (row.kind === 'chat' || row.kind === 'image') model.kind = row.kind;
+    if (typeof row.display_name === 'string' && row.display_name.trim() !== '') {
+      model.display_name = row.display_name.trim();
+    }
+    data.push(model);
+  }
+  return { object: 'list', data };
+}
+
+export function parseBillingQuote(body: unknown): BillingQuote {
+  const record = asRecord(body);
+  if (
+    !record ||
+    (record.kind !== 'chat' && record.kind !== 'image') ||
+    typeof record.estimate !== 'string' ||
+    typeof record.enough !== 'boolean' ||
+    typeof record.balance !== 'string' ||
+    typeof record.model !== 'string'
+  ) {
+    throw new GatewayError('BAD_RESPONSE', '网关 quote 无效');
+  }
+  const quote: BillingQuote = {
+    kind: record.kind,
+    estimate: record.estimate,
+    enough: record.enough,
+    balance: record.balance,
+    model: record.model,
+  };
+  if (typeof record.maxTokens === 'number' && Number.isFinite(record.maxTokens)) {
+    quote.maxTokens = record.maxTokens;
+  }
+  if (typeof record.promptTokensEstimate === 'number' && Number.isFinite(record.promptTokensEstimate)) {
+    quote.promptTokensEstimate = record.promptTokensEstimate;
+  }
+  if (typeof record.creditsPerImage === 'string') quote.creditsPerImage = record.creditsPerImage;
+  return quote;
+}
+
+export function parseFilesIssue(body: unknown): FilesIssue {
+  const record = asRecord(body);
+  if (
+    !record ||
+    typeof record.id !== 'string' ||
+    typeof record.key !== 'string' ||
+    typeof record.uploadUrl !== 'string' ||
+    typeof record.token !== 'string' ||
+    typeof record.expiresAt !== 'string'
+  ) {
+    throw new GatewayError('BAD_RESPONSE', '网关 files 凭证无效');
+  }
+  if (
+    record.id.trim() === '' ||
+    record.key.trim() === '' ||
+    record.uploadUrl.trim() === '' ||
+    record.token.trim() === ''
+  ) {
+    throw new GatewayError('BAD_RESPONSE', '网关 files 凭证无效');
+  }
+  return {
+    id: record.id,
+    key: record.key,
+    uploadUrl: record.uploadUrl,
+    token: record.token,
+    expiresAt: record.expiresAt,
+  };
+}
+
+export function parseImageGenerate(body: unknown): ImageGenerate {
+  const record = asRecord(body);
+  if (
+    !record ||
+    typeof record.downloadUrl !== 'string' ||
+    record.downloadUrl.trim() === '' ||
+    typeof record.mediaType !== 'string' ||
+    typeof record.expiresAt !== 'string' ||
+    typeof record.model !== 'string'
+  ) {
+    throw new GatewayError('BAD_RESPONSE', '网关生图结果无效');
+  }
+  return {
+    downloadUrl: record.downloadUrl,
+    mediaType: record.mediaType,
+    expiresAt: record.expiresAt,
+    model: record.model,
+  };
+}
+
+function shopPluginName(row: Record<string, unknown>): string | undefined {
+  for (const key of ['name', 'displayName', 'title'] as const) {
+    const value = row[key];
+    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+  }
+  return undefined;
+}
+
+export function parseShopCatalog(body: unknown): ShopCatalog {
+  const record = asRecord(body);
+  const catalog = record ? asRecord(record.catalog) : record;
+  if (!catalog || !Array.isArray(catalog.plugins)) {
+    throw new GatewayError('BAD_RESPONSE', '网关商城目录无效');
+  }
+  const plugins: ShopPluginProduct[] = [];
+  for (const item of catalog.plugins) {
+    const row = asRecord(item);
+    if (!row || typeof row.pluginId !== 'string' || row.pluginId.trim() === '') continue;
+    const product: ShopPluginProduct = { pluginId: row.pluginId.trim() };
+    const name = shopPluginName(row);
+    if (name) product.name = name;
+    plugins.push(product);
+  }
+  const ownedPluginIds: string[] = [];
+  if (Array.isArray(catalog.ownedPluginIds)) {
+    for (const id of catalog.ownedPluginIds) {
+      if (typeof id === 'string' && id.trim() !== '') ownedPluginIds.push(id.trim());
+    }
+  }
+  return { plugins, ownedPluginIds };
 }

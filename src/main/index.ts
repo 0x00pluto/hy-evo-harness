@@ -20,6 +20,7 @@ import { readAvailableMemory } from './available-memory.ts';
 import { readExtraPluginPaths, readForceUpdateIcon, readGatewayBaseUrl } from './dev-config.ts';
 import { GATEWAY_ENV_KEY, resolveGatewayBaseUrl } from './gateway-config.ts';
 import { createFileSecureStore, GatewaySession, parseAuthCallback } from './gateway-session.ts';
+import { createHostModels } from './host-egress.ts';
 import { INSTALLED_PLUGINS_DIR_NAME, resolveHostDataPath } from './host-data.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
 import { handleInvoke, onSend } from './ipc.ts';
@@ -44,6 +45,9 @@ import { initUpdater } from './updater.ts';
 
 registerPluginScheme();
 
+const SHOP_FOCUS_REFRESH_MS = 2000;
+let lastShopFocusRefreshAt = 0;
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -57,6 +61,7 @@ let silentUpdates: PluginSilentUpdates | null = null;
 let silentTimer: ReturnType<typeof setInterval> | null = null;
 let reportedWatchingId: string | null = null;
 let pendingAuthUrl: string | null = null;
+let mainWindow: BrowserWindow | null = null;
 
 function session(): LocalSession {
   if (!localSession) throw new Error('本地目录还没准备好');
@@ -205,6 +210,10 @@ function applyDockIcon(icon: NativeImage | null): void {
 }
 
 function createWindow(icon: NativeImage | null): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    focusMainWindow();
+    return;
+  }
   const mac = process.platform === 'darwin';
   const win = new BrowserWindow({
     width: 1400,
@@ -229,6 +238,11 @@ function createWindow(icon: NativeImage | null): void {
       preload: hostPreloadFile(),
     },
   });
+  mainWindow = win;
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
   // 等首帧画好再显示，避免标题栏占高前先露出贴顶的字标。
   win.once('ready-to-show', () => {
@@ -381,7 +395,9 @@ function broadcastSession(view: GatewaySessionView): void {
 }
 
 function focusMainWindow(): void {
-  const win = BrowserWindow.getAllWindows().find((item) => !item.isDestroyed());
+  const win = mainWindow && !mainWindow.isDestroyed()
+    ? mainWindow
+    : BrowserWindow.getAllWindows().find((item) => !item.isDestroyed());
   if (!win) return;
   if (win.isMinimized()) win.restore();
   win.show();
@@ -492,6 +508,7 @@ function registerIpc(): void {
   handleInvoke('dex:gateway-submit-code', (_event, code) => sessionGateway().submitAuthCode(code));
   handleInvoke('dex:gateway-reopen-login', () => sessionGateway().reopenLogin());
   handleInvoke('dex:gateway-refresh', () => sessionGateway().refreshSummary());
+  handleInvoke('dex:gateway-open-shop', () => sessionGateway().openShop());
   handleInvoke('dex:gateway-logout', () => sessionGateway().logout());
 
   handleInvoke('dex:prepare-plugin', (_event, id) => {
@@ -803,6 +820,14 @@ app.whenReady().then(async () => {
     unpackedFile: path.join(app.getPath('userData'), 'unpacked-plugins.json'),
   });
   gatewaySession = createGatewaySession();
+  registry.setHostModels((pluginId) =>
+    createHostModels({
+      pluginId,
+      request: (path, init) => sessionGateway().authorizedJson(path, init),
+      shopPluginIds: () => sessionGateway().shopPluginIds(),
+      activeEntitlements: () => sessionGateway().activeEntitlements(),
+    }),
+  );
   const icon = loadAppIcon();
   applyDockIcon(icon);
   attachWebviewGuard();
@@ -811,6 +836,13 @@ app.whenReady().then(async () => {
   await loadAllPlugins();
   await gatewaySession.start();
   createWindow(icon);
+  app.on('browser-window-focus', () => {
+    if (!gatewaySession?.view().signedIn) return;
+    const now = Date.now();
+    if (now - lastShopFocusRefreshAt < SHOP_FOCUS_REFRESH_MS) return;
+    lastShopFocusRefreshAt = now;
+    void gatewaySession.refreshSummary();
+  });
   const coldUrl = pendingAuthUrl ?? findAuthUrlInArgv(process.argv);
   pendingAuthUrl = null;
   if (coldUrl) void handleIncomingAuthUrl(coldUrl);
@@ -818,7 +850,11 @@ app.whenReady().then(async () => {
 
 app.on('activate', () => {
   if (!gotSingleInstanceLock) return;
-  if (BrowserWindow.getAllWindows().length === 0) createWindow(loadAppIcon());
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    focusMainWindow();
+    return;
+  }
+  createWindow(loadAppIcon());
 });
 
 app.on('window-all-closed', () => {

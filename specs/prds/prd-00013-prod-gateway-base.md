@@ -17,7 +17,7 @@ accepted_scope: R0,R1
 | 范围 | Electron 宿主：默认网关 base URL、开发说明与默认域名单测；用线上复验 00012 已有会话，不新增登录能力 |
 | 关联文档 | `specs/prds/prd-00012-host-gateway-session.md`、`docs/memo/phase1-repos-and-auth.md`、`docs/DESIGN.md`、`src/main/gateway-config.ts`、`config.dev.example.json`、`README.md`；兄弟仓契约 `../0001-HyHarness-gateway/public/openapi.json` |
 | 关联实现（预告） | `src/main/gateway-config.ts`、`config.dev.example.json`、`README.md`、`test/gateway-config.test.ts` |
-| 姊妹 PRD | 文案转发 `specs/prds/prd-00014-host-chat-egress.md`；买断与商城 `specs/prds/prd-00015-host-buyout-shop.md`；生图 `specs/prds/prd-00016-host-image-generate.md`（三份均为功能清单，落地前须技术讨论） |
+| 姊妹 PRD | 插件经宿主调用模型 `specs/prds/prd-00014-host-chat-egress.md` |
 | 兄弟仓依赖 | 线上网关已部署于 `https://www.dexbuddy.app`；本 PRD 不改网关代码 |
 
 ## 1. 背景与问题
@@ -48,7 +48,7 @@ accepted_scope: R0,R1
 ### 非目标
 
 - 改网关仓、新增或修改 HTTP 接口。
-- 文案转发、买断列表、打开商城、生图（分别见 00014 / 00015 / 00016）。
+- 文案转发、已购列表、购买积分、生图（见 00014）。
 - 设备码界面（00012 遗留，不挪进本文）。
 - 粘贴授权码、宿主内 OTP、把 token 交给渲染进程。
 - 把本机 `localhost:3000` 当作验收环境，或启动、依赖本机正在改的网关。
@@ -256,7 +256,7 @@ stateDiagram-v2
 - README 中网关段落是原地改现有长段，还是单列「网关地址」小标题：实现时选一种，保持能搜到 `www.dexbuddy.app`。
 - `config.dev.example.json` 是删除 `gatewayBaseUrl` 键，还是保留键但改为线上地址：实现时选一种，**禁止**保留 localhost 作为示例生效值。
 
-不把 00014 / 00015 / 00016 的技术选型写入本文。
+不把 00014 的技术选型写入本文。
 
 ## 11. 修订记录
 
@@ -309,7 +309,7 @@ stateDiagram-v2
 
 ### 未完成与遗留
 
-无。Release 1 未定义。文案转发、买断、生图见 00014 / 00015 / 00016，不在本文。
+无。Release 1 未定义。文案转发、买断、生图见 00014，不在本文。
 
 ### 质量检查
 

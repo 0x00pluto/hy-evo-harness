@@ -4,7 +4,7 @@
 
 ## 页面不要调命令行
 
-页面只收集输入、展示结果。按钮里调用 `window.dex.call`，把普通对象交给 `index.js`。拼命令行参数、`child_process`、Python、FFmpeg 都写在 `index.js` 的服务方法里。
+页面只收集输入、展示结果。按钮里调用 `window.dex.call`，把普通对象交给 `index.js`。拼命令行参数、`child_process`、Python、FFmpeg 都写在 `index.js` 的服务方法里。文案和生图走 `ctx.models` 或拷进去的助手，见 [模型](models.md)。拉起 Python 时把 `childEnv(ctx, env)` 传给子进程，不要把作者的 `DEX_BUDDY_API_KEY` 带进工作台。
 
 逻辑本来就是 Node 函数时，在服务方法里直接调用。这用的是 Electron 自带的 Node，没有 npm。逻辑是 Python，或插件自己带 `package.json` 的 Node 服务时，在服务方法里用 `ctx.runtime` 拉起进程，把输出收成返回值。页面继续只调 `window.dex.call`，不要把 Next.js 或 FastAPI 的页面嵌进工作台。
 

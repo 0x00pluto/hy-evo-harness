@@ -1709,6 +1709,13 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.settings-buyout-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-ui);
+  line-height: 1.5;
+}
+
 .settings-inline-note {
   color: var(--muted);
   font-size: var(--text-ui);

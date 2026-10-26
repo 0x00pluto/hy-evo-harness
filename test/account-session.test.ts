@@ -4,6 +4,8 @@ import {
   POINTS_NAV_ID,
   accountHeadline,
   balanceLabel,
+  buyoutItems,
+  buyoutLabel,
   isLoginPending,
   pointsNavMatches,
 } from '../src/renderer/account-session.js';
@@ -13,6 +15,9 @@ test('积分导航 id 与搜索', () => {
   assert.equal(POINTS_NAV_ID, '@points');
   assert.equal(pointsNavMatches(''), true);
   assert.equal(pointsNavMatches('积分'), true);
+  assert.equal(pointsNavMatches('商城'), true);
+  assert.equal(pointsNavMatches('已购'), true);
+  assert.equal(pointsNavMatches('购买积分'), true);
   assert.equal(pointsNavMatches('不存在'), false);
 });
 
@@ -74,6 +79,49 @@ test('登录进行中判定不含 idle', () => {
       login: { phase: 'idle' },
     }),
     false,
+  );
+});
+
+test('买断列表只在已登录时返回', () => {
+  assert.deepEqual(
+    buyoutItems({
+      signedIn: false,
+      phoneMasked: null,
+      balance: null,
+      currency: null,
+      buyouts: [{ pluginId: 'x', displayName: 'X' }],
+      login: { phase: 'idle' },
+    }),
+    [],
+  );
+  assert.deepEqual(
+    buyoutItems({
+      signedIn: true,
+      phoneMasked: '138****0000',
+      balance: 1,
+      currency: 'credits',
+      buyouts: [{ pluginId: 'ai-comic-master', displayName: 'AI 漫画大师' }],
+      login: { phase: 'idle' },
+    }),
+    [{ pluginId: 'ai-comic-master', displayName: 'AI 漫画大师' }],
+  );
+});
+
+test('已购插件显示名称 (id)', () => {
+  assert.equal(
+    buyoutLabel({ pluginId: 'manju-studio', displayName: 'manju-studio' }),
+    'manju-studio',
+  );
+  assert.equal(
+    buyoutLabel({ pluginId: 'manju-studio', displayName: '漫剧工作室' }),
+    '漫剧工作室 (manju-studio)',
+  );
+  assert.equal(
+    buyoutLabel(
+      { pluginId: 'manju-studio', displayName: 'manju-studio' },
+      [{ manifestId: 'manju-studio', displayName: '漫剧工作室' }],
+    ),
+    '漫剧工作室 (manju-studio)',
   );
 });
 

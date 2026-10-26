@@ -100,6 +100,32 @@ test('扫描插件目录，跳过无 manifest 的项', async (t) => {
   assert.deepEqual(registry.getService('goodService'), { ok: true });
 });
 
+test('ctx.models 用清单 id 创建', async (t) => {
+  const root = tempDir();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writePlugin(
+    path.join(root, 'named'),
+    headless('app-dexbuddy-demo', '演示'),
+    'module.exports = { apply(ctx) { ctx.registerService("demo", { hasModels: Boolean(ctx.models) }); } };',
+  );
+  const seen: string[] = [];
+  const registry = new ServiceRegistry(silent);
+  registry.setHostModels((pluginId) => {
+    seen.push(pluginId);
+    return {
+      list: async () => ({ object: 'list', data: [] }),
+      billing: { quote: async () => ({}) },
+      chat: { completions: { create: async () => ({}) } },
+      images: {
+        generate: async () => ({ status: 'succeeded' as const, output: '/tmp/x.png', model: 'm' }),
+      },
+    };
+  });
+  await registry.scanAndLoadPlugins(root, 'bundled');
+  assert.deepEqual(seen, ['app-dexbuddy-demo']);
+  assert.deepEqual(registry.getService('demo'), { hasModels: true });
+});
+
 test('已安装插件的列表带上来源频道', async (t) => {
   const root = tempDir();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -271,11 +297,15 @@ test('示例插件可以扫描并调用', async () => {
   const list = registry.getPluginList();
   assert.deepEqual(
     list.map((item) => item.id).sort(),
-    ['ai-comic-master', 'quanmedia-crawl'],
+    ['ai-comic-master', 'models-playground', 'quanmedia-crawl'],
   );
   const comic = list.find((item) => item.id === 'ai-comic-master');
   assert.equal(comic?.uiUrl, 'app-plugin://ai-comic-master/ui/index.html');
   assert.equal(list.find((item) => item.id === 'quanmedia-crawl')?.uiUrl, null);
+  assert.equal(
+    list.find((item) => item.id === 'models-playground')?.uiUrl,
+    'app-plugin://models-playground/ui/index.html',
+  );
   assert.deepEqual(await registry.callService('aiComicService', 'renderVideo', [{ prompt: '古风修仙场景' }]), {
     success: true,
     videoPath: '/outputs/demo.mp4',

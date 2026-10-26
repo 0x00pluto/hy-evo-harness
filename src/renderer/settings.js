@@ -2,6 +2,8 @@ import {
   POINTS_NAV_ID,
   accountHeadline,
   balanceLabel,
+  buyoutItems,
+  buyoutLabel,
   isLoginPending,
   pointsNavMatches,
 } from './account-session.js';
@@ -89,6 +91,8 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
    *   pointsLead: HTMLDivElement;
    *   pointsSync: HTMLButtonElement;
    *   pointsActions: HTMLDivElement;
+   *   buyoutBody: HTMLElement;
+   *   buyoutSection: HTMLElement;
    * } | null} */
   let pointsNodes = null;
   let checkRequested = false;
@@ -538,6 +542,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
         phoneMasked: null,
         balance: null,
         currency: null,
+        buyouts: [],
         login: { phase: /** @type {GatewayLoginPhase} */ ('idle') },
       }
     );
@@ -575,13 +580,39 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
 
     if (pointsNodes && activeSettingsId === POINTS_NAV_ID) {
       const view = currentAccountView();
-      const { pointsValue, pointsLead, pointsSync, pointsActions } = pointsNodes;
+      const { pointsValue, pointsLead, pointsSync, pointsActions, buyoutBody, buyoutSection } = pointsNodes;
       pointsLead.replaceChildren(pointsValue);
       pointsActions.replaceChildren();
+      const shop = secondaryButton('购买积分');
+      shop.addEventListener('click', () => {
+        void runAccountAction(() => window.dex.openGatewayShop());
+      });
       if (view.signedIn) {
         pointsValue.textContent = balanceLabel(view.balance);
         pointsSync.hidden = false;
         pointsSync.disabled = false;
+        pointsActions.appendChild(shop);
+        buyoutSection.hidden = false;
+        const items = buyoutItems(view);
+        buyoutBody.replaceChildren();
+        if (items.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'settings-buyout-empty';
+          empty.textContent = '还没有已购插件';
+          buyoutBody.appendChild(empty);
+        } else {
+          for (const item of items) {
+            const row = document.createElement('div');
+            row.className = 'settings-row';
+            const copy = document.createElement('div');
+            copy.className = 'settings-card-copy';
+            const heading = document.createElement('h3');
+            heading.textContent = buyoutLabel(item, shell.plugins);
+            copy.appendChild(heading);
+            row.appendChild(copy);
+            buyoutBody.appendChild(row);
+          }
+        }
       } else if (isLoginPending(view)) {
         pointsValue.textContent = '登录中';
         pointsSync.hidden = true;
@@ -590,6 +621,8 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
           void runAccountAction(() => window.dex.reopenGatewayLogin());
         });
         pointsLead.appendChild(cont);
+        pointsActions.appendChild(shop);
+        buyoutSection.hidden = true;
       } else {
         pointsValue.textContent = '未登录';
         pointsSync.hidden = true;
@@ -598,11 +631,16 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
           void runAccountAction(() => window.dex.startGatewayLogin());
         });
         pointsLead.appendChild(login);
+        pointsActions.appendChild(shop);
+        buyoutSection.hidden = true;
       }
     }
   }
 
-  function watchAccountSession() {
+  /**
+   * @param {{ refreshPoints?: boolean }} [options]
+   */
+  function watchAccountSession(options) {
     stopAccountWatch();
     if (!window.dex.onGatewaySession) return;
     stopSessionWatch = window.dex.onGatewaySession((/** @type {GatewaySessionView} */ view) => {
@@ -614,6 +652,9 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
       .then((/** @type {GatewaySessionView} */ view) => {
         accountView = view;
         syncAccountSections();
+        if (!options || !options.refreshPoints || !view.signedIn) return;
+        if (activeSettingsId !== POINTS_NAV_ID) return;
+        void runAccountAction(() => window.dex.refreshGatewaySession());
       })
       .catch(() => {});
   }
@@ -755,10 +796,20 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     pointsControl.append(pointsSync, pointsActions);
     pointsRow.append(pointsCopy, pointsControl);
     points.body.appendChild(pointsRow);
-    settingsForm.appendChild(points.section);
 
-    pointsNodes = { pointsValue, pointsLead, pointsSync, pointsActions };
-    watchAccountSession();
+    const buyouts = settingsGroup('已购插件');
+    buyouts.section.hidden = true;
+    settingsForm.append(points.section, buyouts.section);
+
+    pointsNodes = {
+      pointsValue,
+      pointsLead,
+      pointsSync,
+      pointsActions,
+      buyoutBody: buyouts.body,
+      buyoutSection: buyouts.section,
+    };
+    watchAccountSession({ refreshPoints: true });
     syncAccountSections();
   }
 

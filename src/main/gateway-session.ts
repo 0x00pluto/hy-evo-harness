@@ -5,6 +5,7 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import type {
+  GatewayBuyoutView,
   GatewayLoginProgress,
   GatewaySessionView,
   OkResult,
@@ -13,11 +14,15 @@ import {
   GatewayError,
   gatewayRequest,
   parseDeviceAuthorization,
+  parseEntitlements,
+  parseShopCatalog,
   parseTokenPair,
   parseWallet,
   parseWhoami,
+  type EntitlementItem,
   type TokenPair,
 } from './gateway-client.ts';
+import type { HostModelsRequestInit } from './host-egress.ts';
 import { GATEWAY_REDIRECT_URI } from './gateway-config.ts';
 
 export const PKCE_WAIT_MS = 5 * 60 * 1000;
@@ -122,6 +127,9 @@ export class GatewaySession {
   private balance: number | null = null;
   private currency: string | null = null;
   private signedIn = false;
+  private entitlements: EntitlementItem[] = [];
+  private shopNames = new Map<string, string>();
+  private shopIds = new Set<string>();
   private login: GatewayLoginProgress = { phase: 'idle' };
   private pkceVerifier: string | null = null;
   private pkceLoginUrl: string | null = null;
@@ -169,8 +177,18 @@ export class GatewaySession {
       phoneMasked: this.signedIn ? this.phoneMasked : null,
       balance: this.signedIn ? this.balance : null,
       currency: this.signedIn ? this.currency : null,
+      buyouts: this.signedIn ? this.buyoutViews() : [],
       login: { ...this.login },
     };
+  }
+
+  private buyoutViews(): GatewayBuyoutView[] {
+    return this.entitlements
+      .filter((item) => item.status === 'active')
+      .map((item) => ({
+        pluginId: item.pluginId,
+        displayName: this.shopNames.get(item.pluginId) ?? item.pluginId,
+      }));
   }
 
   private emit(): void {
@@ -190,6 +208,9 @@ export class GatewaySession {
     this.phoneMasked = null;
     this.balance = null;
     this.currency = null;
+    this.entitlements = [];
+    this.shopNames.clear();
+    this.shopIds.clear();
   }
 
   private clearLoginState(): void {
@@ -280,6 +301,72 @@ export class GatewaySession {
     this.balance = balance;
     this.currency = currency;
     this.signedIn = true;
+    await this.refreshRightsWithAccess(accessToken);
+  }
+
+  private async refreshRightsWithAccess(accessToken: string): Promise<void> {
+    try {
+      const raw = await gatewayRequest(this.deps.fetch, this.deps.baseUrl, '/v1/entitlements', {
+        method: 'GET',
+        accessToken,
+      });
+      this.entitlements = parseEntitlements(raw).entitlements;
+    } catch {
+      this.entitlements = [];
+    }
+    try {
+      const raw = await gatewayRequest(this.deps.fetch, this.deps.baseUrl, '/api/shop/catalog', {
+        method: 'GET',
+        accessToken,
+      });
+      const catalog = parseShopCatalog(raw);
+      this.shopIds = new Set(catalog.plugins.map((item) => item.pluginId));
+      this.shopNames = new Map(
+        catalog.plugins
+          .filter((item) => item.name)
+          .map((item) => [item.pluginId, item.name as string]),
+      );
+    } catch {
+      // 目录失败时保留上次缓存；从未成功过则集合为空，烧钱闸会放行非缓存项。
+    }
+  }
+
+  /** 已登录业务请求：补 Bearer，401 时 refresh 再试一次。 */
+  async authorizedJson(path: string, init: HostModelsRequestInit): Promise<unknown> {
+    return this.withAuthRetry((accessToken) =>
+      gatewayRequest(this.deps.fetch, this.deps.baseUrl, path, {
+        method: init.method,
+        body: init.body,
+        accessToken,
+        headers: init.headers,
+      }),
+    );
+  }
+
+  async shopPluginIds(): Promise<string[]> {
+    await this.ensureAccess();
+    if (this.shopIds.size === 0 && this.accessToken) {
+      await this.refreshRightsWithAccess(this.accessToken);
+    }
+    return [...this.shopIds];
+  }
+
+  async activeEntitlements(): Promise<string[]> {
+    await this.ensureAccess();
+    return this.entitlements.filter((item) => item.status === 'active').map((item) => item.pluginId);
+  }
+
+  shopUrl(): string {
+    return `${this.deps.baseUrl.replace(/\/+$/, '')}/shop`;
+  }
+
+  async openShop(): Promise<OkResult> {
+    try {
+      await this.deps.openExternal(this.shopUrl());
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : '无法打开购买积分页面' };
+    }
   }
 
   private async refreshTokensUnlocked(): Promise<void> {

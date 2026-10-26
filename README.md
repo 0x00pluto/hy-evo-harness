@@ -73,7 +73,9 @@ module.exports = {
 };
 ```
 
-`ctx` 提供 `registerService`、`getService`、`logger`、`emit`、`on`、`getPluginConfig`、`pluginEnv`、`dirs`。清单声明了 `runtime` 时还有 `runtime`。清单声明了 `externalTools` 且本机 PATH 里已有这些命令时还有 `tools`：键是命令名，值是绝对路径。声明了 `runtime` 时，这些命令的目录在 `ctx.runtime.env` 的 PATH 前面；没有 `runtime` 时在 `pluginEnv()` 里。宿主自己的 `process.env` 不会被改写。卸载时宿主会调用 `dispose`，并移除该插件注册的服务和事件。已安装插件的 `dirs.data` 在 `plugin-data/<id>/`，卸载后保留；`dirs.cache` 在 `plugin-runtime/<id>/cache`，卸载时连同依赖环境一起删除。
+`ctx` 提供 `registerService`、`getService`、`logger`、`emit`、`on`、`models`、`getPluginConfig`、`pluginEnv`、`dirs`。清单声明了 `runtime` 时还有 `runtime`。清单声明了 `externalTools` 且本机 PATH 里已有这些命令时还有 `tools`：键是命令名，值是绝对路径。声明了 `runtime` 时，这些命令的目录在 `ctx.runtime.env` 的 PATH 前面；没有 `runtime` 时在 `pluginEnv()` 里。宿主自己的 `process.env` 不会被改写。卸载时宿主会调用 `dispose`，并移除该插件注册的服务和事件。已安装插件的 `dirs.data` 在 `plugin-data/<id>/`，卸载后保留；`dirs.cache` 在 `plugin-runtime/<id>/cache`，卸载时连同依赖环境一起删除。
+
+`ctx.models` 经宿主调用线上文案和生图。请求体对齐 OpenAI Chat Completions 与 Replicate 的 `input` 字段。插件不要自己填 `pluginId`，也不要在页面里请求网关。独立开发时拷 [dex-models.js](docs/plugin-development/snippets/dex-models.js) 或 [dex_models.py](docs/plugin-development/snippets/dex_models.py)，本机填 `DEX_BUDDY_API_KEY`；发出去的包没有 Key，谁用谁付钱。详见 [docs/plugin-development/models.md](docs/plugin-development/models.md)。
 
 `getPluginConfig()` 只返回当前插件已声明的配置。拉起子进程时显式传入环境，不要改宿主的 `process.env`：
 
@@ -96,10 +98,11 @@ const result = await window.dex.call('aiComicService', 'renderVideo', [
 
 后端要用更严的 JavaScript 写法时，见 [docs/plugin-development/typing.md](docs/plugin-development/typing.md)。
 
-仓库里有两个示例，只在 `pnpm start` 出现。安装包不带 `plugins/`。
+仓库里有示例，只在 `pnpm start` 出现。安装包不带 `plugins/`。
 
 - `plugins/ai-comic-master`：带界面，`aiComicService.renderVideo` 返回固定结果。
 - `plugins/quanmedia-crawl`：无界面，`crawlerService.fetchAccountData`，并监听 `trigger-all-spiders`。
+- `plugins/models-playground`：带界面，经 `ctx.models` 试文案和生图；独立跑用本机 `DEX_BUDDY_API_KEY`。
 
 ## 开发时挂上现有项目
 

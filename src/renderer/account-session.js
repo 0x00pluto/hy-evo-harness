@@ -2,7 +2,7 @@
 
 export const POINTS_NAV_ID = '@points';
 
-const POINTS_SEARCH_LABELS = ['积分', '余额', '同步'];
+const POINTS_SEARCH_LABELS = ['积分', '余额', '同步', '买断', '已购', '商城', '购买积分'];
 
 /**
  * @param {string | null | undefined} query
@@ -37,6 +37,41 @@ export function accountHeadline(view) {
   }
   if (isLoginPending(view)) return '登录中';
   return '未登录';
+}
+
+/**
+ * @param {GatewaySessionView | null | undefined} view
+ * @returns {Array<{ pluginId: string; displayName: string }>}
+ */
+export function buyoutItems(view) {
+  if (!view || !view.signedIn || !Array.isArray(view.buyouts)) return [];
+  return view.buyouts
+    .filter((item) => item && typeof item.pluginId === 'string' && item.pluginId.trim() !== '')
+    .map((item) => ({
+      pluginId: item.pluginId.trim(),
+      displayName:
+        typeof item.displayName === 'string' && item.displayName.trim() !== ''
+          ? item.displayName.trim()
+          : item.pluginId.trim(),
+    }));
+}
+
+/**
+ * @param {{ pluginId: string; displayName: string }} item
+ * @param {Array<{ manifestId?: string; id?: string; displayName?: string }> | null | undefined} [localPlugins]
+ */
+export function buyoutLabel(item, localPlugins) {
+  const pluginId = item.pluginId;
+  let name = typeof item.displayName === 'string' ? item.displayName.trim() : '';
+  if (!name || name === pluginId) {
+    const match = Array.isArray(localPlugins)
+      ? localPlugins.find((plugin) => plugin.manifestId === pluginId || plugin.id === pluginId)
+      : null;
+    const localName = match && typeof match.displayName === 'string' ? match.displayName.trim() : '';
+    if (localName) name = localName;
+  }
+  if (!name || name === pluginId) return pluginId;
+  return `${name} (${pluginId})`;
 }
 
 /**

@@ -146,6 +146,9 @@ const dex: DexHost = {
   refreshGatewaySession() {
     return invoke('dex:gateway-refresh');
   },
+  openGatewayShop() {
+    return invoke('dex:gateway-open-shop');
+  },
   logoutGateway() {
     return invoke('dex:gateway-logout');
   },

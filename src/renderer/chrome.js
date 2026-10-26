@@ -22,6 +22,7 @@ function emptySessionView() {
     phoneMasked: null,
     balance: null,
     currency: null,
+    buyouts: [],
     login: { phase: 'idle' },
   };
 }
