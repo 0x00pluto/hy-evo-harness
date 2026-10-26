@@ -1,7 +1,7 @@
 /** 网关 base URL：环境变量 > 开发配置 > 打包/未打包默认值。 */
 
-export const DEV_DEFAULT_GATEWAY_BASE_URL = 'http://localhost:3000';
-export const PROD_DEFAULT_GATEWAY_BASE_URL = 'https://app.dexbuddy.xds365.com';
+export const DEV_DEFAULT_GATEWAY_BASE_URL = 'https://www.dexbuddy.app';
+export const PROD_DEFAULT_GATEWAY_BASE_URL = 'https://www.dexbuddy.app';
 export const GATEWAY_REDIRECT_URI = 'dexbuddy://auth/callback';
 export const GATEWAY_ENV_KEY = 'DEX_GATEWAY_BASE_URL';
 

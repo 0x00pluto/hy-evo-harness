@@ -83,8 +83,8 @@ accepted_scope: R0,R1
 | 与 00005 关系 | 已定 | 废止 00005「登录账号不做」「个人设置下不增加第二项」；账号页由本 PRD 负责 |
 | 凭证存放 | 已定 | access 内存；refresh 仅 `safeStorage`；禁止明文文件 |
 | Token 边界 | 已定 | 预加载 / IPC 只暴露会话摘要与动作（登录、退出、刷新摘要、设备码等）；不暴露 token 字符串；粘贴 code 无 UI |
-| 网关 base URL | 已定 | 开发默认 `http://localhost:3000`；打包 / 生产默认 `https://app.dexbuddy.xds365.com`；可用环境变量或开发配置覆盖 |
-| 验收环境 | 已定 | 优先本地 3000；线上网关作联调备选 |
+| 网关 base URL | 已由 00013 修订 | 原：开发默认 `http://localhost:3000`，打包默认 `https://app.dexbuddy.xds365.com`。现以 [`prd-00013-prod-gateway-base.md`](./prd-00013-prod-gateway-base.md) 为准：未打包与安装包默认 `https://www.dexbuddy.app` |
+| 验收环境 | 已由 00013 修订 | 原：优先本地 3000。现以 00013 为准：验收打线上，localhost 仅显式覆盖，不算 00013 通过 |
 | whoami 字段 | 已定 | 使用网关现有：`userId`、`phoneMasked`、`accountKind`、`wallet`、`organizations`（空数组）；本期 UI 主展示手机号与余额，不渲染组织 |
 | refresh 并发 | 已定 | 主进程串行化 refresh；避免旧 refresh 复用导致整会话作废 |
 | 视觉 | 已定 | 遵循 `docs/DESIGN.md` |
@@ -291,6 +291,7 @@ stateDiagram-v2
 |---|---|
 | 2026-10-23 | 初稿：双入口、设备码 R0、网关 URL、覆盖 00005 账号边界 |
 | 2026-10-23 | 验收确认：粘贴授权码本期不做，移入非目标 |
+| 2026-10-26 | 默认网关域名与验收环境改由 [`prd-00013-prod-gateway-base.md`](./prd-00013-prod-gateway-base.md) 规定；协议、safeStorage、双入口、设备码遗留仍归本文 |
 
 ## 12. 工程验收状态
 
