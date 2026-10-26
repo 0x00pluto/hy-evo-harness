@@ -6,6 +6,7 @@ import { mountSettings } from './settings.js';
 import { mountChrome } from './chrome.js';
 import { mountIcons } from './icons.js';
 import { mountShellToast } from './shell-toast.js';
+import { mountSpendGate } from './spend-gate.js';
 import { byId } from './dom.js';
 
 /** @type {{ plugins: PluginSummary[]; activeId: string | null; settingsMode: boolean }} */
@@ -29,6 +30,12 @@ function setStatus(message, kind) {
 
 mountIcons();
 mountShellToast();
+mountSpendGate({
+  pluginName(pluginId) {
+    const plugin = shell.plugins.find((item) => item.id === pluginId || item.manifestId === pluginId);
+    return plugin ? plugin.displayName : null;
+  },
+});
 const sidebar = mountSidebar();
 
 // 插件列表刷新时可能正停在设置里，设置返回时又要回到刚才的插件。

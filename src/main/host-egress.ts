@@ -14,6 +14,7 @@ import {
   type BillingQuote,
   type ModelsList,
 } from './gateway-client.ts';
+import type { SpendBlockedPayload, SpendBlockedReason } from '../shared/dex-bridge.ts';
 import type { HostImageGenerateInput, HostImageGenerateResult, HostModels, HostModelsCallOptions } from './types.ts';
 
 export function unavailableHostModels(message = '网关未就绪'): HostModels {
@@ -39,10 +40,39 @@ export interface HostModelsDeps {
   request: (path: string, init: HostModelsRequestInit) => Promise<unknown>;
   shopPluginIds: () => Promise<Iterable<string>>;
   activeEntitlements: () => Promise<Iterable<string>>;
+  onBlocked?: (payload: SpendBlockedPayload) => void;
   readFile?: (filePath: string) => Buffer;
   writeFile?: (filePath: string, data: Buffer) => void;
   mkdir?: (dirPath: string) => void;
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
+}
+
+function spendBlockedReason(code: string): SpendBlockedReason | null {
+  if (code === 'NOT_ENTITLED' || code === 'UNAUTHORIZED' || code === 'INSUFFICIENT_CREDITS') {
+    return code;
+  }
+  return null;
+}
+
+/** 通知壳弹框；失败不影响原错误回到插件。 */
+function notifyBlocked(deps: HostModelsDeps, err: unknown): void {
+  if (!(err instanceof GatewayError) || !deps.onBlocked) return;
+  const reason = spendBlockedReason(err.code);
+  if (!reason) return;
+  try {
+    deps.onBlocked({ pluginId: deps.pluginId, reason });
+  } catch {
+    // 壳没接上时仍把原错误交给插件。
+  }
+}
+
+async function spendOrThrow<T>(deps: HostModelsDeps, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    notifyBlocked(deps, err);
+    throw err;
+  }
 }
 
 function pluginHeaders(pluginId: string, options?: HostModelsCallOptions): Record<string, string> {
@@ -188,71 +218,75 @@ export function createHostModels(deps: HostModelsDeps): HostModels {
     chat: {
       completions: {
         async create(body, options) {
-          await assertMaySpend(deps);
-          await quoteOrThrow(deps, quoteBodyForChat(body), options);
-          return deps.request('/v1/chat/completions', {
-            method: 'POST',
-            body: withoutPluginId(body),
-            headers: pluginHeaders(deps.pluginId, options),
+          return spendOrThrow(deps, async () => {
+            await assertMaySpend(deps);
+            await quoteOrThrow(deps, quoteBodyForChat(body), options);
+            return deps.request('/v1/chat/completions', {
+              method: 'POST',
+              body: withoutPluginId(body),
+              headers: pluginHeaders(deps.pluginId, options),
+            });
           });
         },
       },
     },
     images: {
       async generate(input: HostImageGenerateInput, options?: HostModelsCallOptions): Promise<HostImageGenerateResult> {
-        await assertMaySpend(deps);
-        const model = typeof input?.model === 'string' ? input.model.trim() : '';
-        const outputPath = typeof input?.outputPath === 'string' ? input.outputPath.trim() : '';
-        const record = asRecord(input?.input);
-        const prompt = record && typeof record.prompt === 'string' ? record.prompt.trim() : '';
-        if (!model) throw new GatewayError('INVALID_BODY', '缺少 model', 400);
-        if (!prompt) throw new GatewayError('INVALID_BODY', '缺少 prompt', 400);
-        if (!outputPath || !path.isAbsolute(outputPath)) {
-          throw new GatewayError('INVALID_BODY', 'outputPath 必须是绝对路径', 400);
-        }
-        await quoteOrThrow(deps, quoteBodyForImage(model), options);
-        const localImages = readInputImages(record);
-        const fileIds: string[] = [];
-        for (let i = 0; i < localImages.length; i += 1) {
-          const fileKey = options?.idempotencyKey
-            ? { idempotencyKey: `${options.idempotencyKey}:file:${i}` }
-            : options;
-          fileIds.push(await uploadReference(deps, localImages[i], fileKey));
-        }
-        const generateBody: Record<string, unknown> = { model, prompt };
-        if (record && typeof record.aspect_ratio === 'string' && record.aspect_ratio.trim() !== '') {
-          generateBody.aspect_ratio = record.aspect_ratio.trim();
-        }
-        if (fileIds.length > 0) generateBody.fileIds = fileIds;
-        const generatedRaw = await deps.request('/v1/images/generate', {
-          method: 'POST',
-          body: generateBody,
-          headers: pluginHeaders(deps.pluginId, options),
+        return spendOrThrow(deps, async () => {
+          await assertMaySpend(deps);
+          const model = typeof input?.model === 'string' ? input.model.trim() : '';
+          const outputPath = typeof input?.outputPath === 'string' ? input.outputPath.trim() : '';
+          const record = asRecord(input?.input);
+          const prompt = record && typeof record.prompt === 'string' ? record.prompt.trim() : '';
+          if (!model) throw new GatewayError('INVALID_BODY', '缺少 model', 400);
+          if (!prompt) throw new GatewayError('INVALID_BODY', '缺少 prompt', 400);
+          if (!outputPath || !path.isAbsolute(outputPath)) {
+            throw new GatewayError('INVALID_BODY', 'outputPath 必须是绝对路径', 400);
+          }
+          await quoteOrThrow(deps, quoteBodyForImage(model), options);
+          const localImages = readInputImages(record);
+          const fileIds: string[] = [];
+          for (let i = 0; i < localImages.length; i += 1) {
+            const fileKey = options?.idempotencyKey
+              ? { idempotencyKey: `${options.idempotencyKey}:file:${i}` }
+              : options;
+            fileIds.push(await uploadReference(deps, localImages[i], fileKey));
+          }
+          const generateBody: Record<string, unknown> = { model, prompt };
+          if (record && typeof record.aspect_ratio === 'string' && record.aspect_ratio.trim() !== '') {
+            generateBody.aspect_ratio = record.aspect_ratio.trim();
+          }
+          if (fileIds.length > 0) generateBody.fileIds = fileIds;
+          const generatedRaw = await deps.request('/v1/images/generate', {
+            method: 'POST',
+            body: generateBody,
+            headers: pluginHeaders(deps.pluginId, options),
+          });
+          const generated = parseImageGenerate(generatedRaw);
+          const fetchImpl = deps.fetchImpl ?? globalThis.fetch.bind(globalThis);
+          let downloaded: Response;
+          try {
+            downloaded = await fetchImpl(generated.downloadUrl);
+          } catch (err) {
+            throw new GatewayError(
+              'NETWORK_ERROR',
+              err instanceof Error ? err.message : '无法下载生成图',
+              0,
+            );
+          }
+          if (!downloaded.ok) {
+            throw new GatewayError('OUTPUT_EXPIRED', `生成图下载失败（${downloaded.status}）`, downloaded.status);
+          }
+          const bytes = Buffer.from(await downloaded.arrayBuffer());
+          if (bytes.length === 0) {
+            throw new GatewayError('BAD_RESPONSE', '生成图是空的', 502);
+          }
+          const mkdir = deps.mkdir ?? ((dir: string) => fs.mkdirSync(dir, { recursive: true }));
+          const writeFile = deps.writeFile ?? ((file: string, data: Buffer) => fs.writeFileSync(file, data));
+          mkdir(path.dirname(outputPath));
+          writeFile(outputPath, bytes);
+          return { status: 'succeeded' as const, output: outputPath, model: generated.model };
         });
-        const generated = parseImageGenerate(generatedRaw);
-        const fetchImpl = deps.fetchImpl ?? globalThis.fetch.bind(globalThis);
-        let downloaded: Response;
-        try {
-          downloaded = await fetchImpl(generated.downloadUrl);
-        } catch (err) {
-          throw new GatewayError(
-            'NETWORK_ERROR',
-            err instanceof Error ? err.message : '无法下载生成图',
-            0,
-          );
-        }
-        if (!downloaded.ok) {
-          throw new GatewayError('OUTPUT_EXPIRED', `生成图下载失败（${downloaded.status}）`, downloaded.status);
-        }
-        const bytes = Buffer.from(await downloaded.arrayBuffer());
-        if (bytes.length === 0) {
-          throw new GatewayError('BAD_RESPONSE', '生成图是空的', 502);
-        }
-        const mkdir = deps.mkdir ?? ((dir: string) => fs.mkdirSync(dir, { recursive: true }));
-        const writeFile = deps.writeFile ?? ((file: string, data: Buffer) => fs.writeFileSync(file, data));
-        mkdir(path.dirname(outputPath));
-        writeFile(outputPath, bytes);
-        return { status: 'succeeded', output: outputPath, model: generated.model };
       },
     },
   };

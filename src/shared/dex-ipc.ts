@@ -21,6 +21,7 @@ import type {
   SettingsPluginView,
   SettingsSaveResult,
   SilentUpdateEvent,
+  SpendBlockedPayload,
   UpdaterStatusPayload,
 } from './dex-bridge.ts';
 
@@ -96,6 +97,7 @@ export type DexPushMap = {
   'dex:plugin-silent-update': SilentUpdateEvent;
   'updater:status': UpdaterStatusPayload;
   'dex:session': GatewaySessionView;
+  'dex:spend-blocked': SpendBlockedPayload;
 };
 
 export type DexInvokeChannel = keyof DexInvokeMap;

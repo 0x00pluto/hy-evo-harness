@@ -162,18 +162,18 @@ const image = await models.images.generate({
 
 ## 错误码
 
-方法抛错，错误上有稳定 `code`。页面文案由插件自己写。
+方法抛错，错误上有稳定 `code`。`chat.completions.create` 和 `images.generate` 被拦住时，工作台自己弹框；插件不要再画购买、登录或充值提示，也不要把错误码贴到页面上。调用仍然失败，生成停住。用户买完或登完，再点一次生成。
 
-| code | 何时 |
-|---|---|
-| `UNAUTHORIZED` | 未登录，或会话失效 |
-| `NOT_ENTITLED` | 这个清单 id 在商城里卖，当前账号还没买断 |
-| `INSUFFICIENT_CREDITS` | 报价认为余额不够，或网关返回 402 |
-| 其它 | 网关 `ErrorBody.code` 或 Chat Completions 的 `error.code` 原样映射 |
+| code | 何时 | 工作台 |
+|---|---|---|
+| `UNAUTHORIZED` | 未登录，或会话失效 | 弹「需要登录」 |
+| `NOT_ENTITLED` | 这个清单 id 在商城里卖，当前账号还没买断 | 弹「需要购买插件」 |
+| `INSUFFICIENT_CREDITS` | 报价认为余额不够，或网关返回 402 | 弹「积分不够」 |
+| 其它 | 网关 `ErrorBody.code` 或 Chat Completions 的 `error.code` 原样映射 | 插件自己处理 |
 
-`list` 与 `quote` 不拦未买断。只有 `chat.completions.create` 和 `images.generate` 会查买断。
+`list` 与 `quote` 不拦未买断，也不弹框。只有补全和生图会查买断。
 
-不在商城里的清单 id（自己做的插件，或把官方 id 改成了普通 id）只验登录和余额。
+不在商城里的清单 id（自己做的插件，或把官方 id 改成了普通 id）只验登录和余额。第一期没有「查买断」函数。单机插件打开时不拦。
 
 ## 清单 id
 

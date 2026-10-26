@@ -240,6 +240,20 @@
     </div>
   </dialog>
 
+  <dialog id="spend-gate-dialog">
+    <div class="spend-gate-head">
+      <span id="spend-gate-icon" aria-hidden="true"></span>
+      <div class="spend-gate-copy">
+        <h2 id="spend-gate-title"></h2>
+        <p id="spend-gate-body" role="alert"></p>
+      </div>
+    </div>
+    <div class="spend-gate-actions">
+      <button id="spend-gate-later" type="button">取消</button>
+      <button id="spend-gate-confirm" class="primary" type="button"></button>
+    </div>
+  </dialog>
+
   <script src="../../node_modules/lottie-web/build/player/lottie.min.js"></script>
   <script src="../../node_modules/lucide/dist/umd/lucide.min.js"></script>
   <script type="module" src="app.js"></script>

@@ -19,6 +19,8 @@ import type {
   GatewaySessionView,
   GatewayLoginProgress,
   GatewayLoginPhase,
+  SpendBlockedReason,
+  SpendBlockedPayload,
 } from '../shared/dex-bridge.ts';
 
 export type {
@@ -37,6 +39,8 @@ export type {
   GatewaySessionView,
   GatewayLoginProgress,
   GatewayLoginPhase,
+  SpendBlockedReason,
+  SpendBlockedPayload,
 };
 
 interface LucideIcons {
@@ -83,6 +87,8 @@ declare global {
   type GatewaySessionView = import('../shared/dex-bridge.ts').GatewaySessionView;
   type GatewayLoginProgress = import('../shared/dex-bridge.ts').GatewayLoginProgress;
   type GatewayLoginPhase = import('../shared/dex-bridge.ts').GatewayLoginPhase;
+  type SpendBlockedReason = import('../shared/dex-bridge.ts').SpendBlockedReason;
+  type SpendBlockedPayload = import('../shared/dex-bridge.ts').SpendBlockedPayload;
 
   /** 工作台 chrome 会话（仅内存）。surface 运行时是 workspace / settings / plugins。 */
   interface ChromeSession {

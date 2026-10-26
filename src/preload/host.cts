@@ -155,6 +155,9 @@ const dex: DexHost = {
   onGatewaySession(callback) {
     return onPush('dex:session', callback);
   },
+  onSpendBlocked(callback) {
+    return onPush('dex:spend-blocked', callback);
+  },
 };
 
 contextBridge.exposeInMainWorld('dex', dex);

@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { CallServicePayload } from '../shared/dex-ipc.ts';
-import type { GatewaySessionView } from '../shared/dex-bridge.ts';
+import type { GatewaySessionView, SpendBlockedPayload } from '../shared/dex-bridge.ts';
 import { readAvailableMemory } from './available-memory.ts';
 import { readExtraPluginPaths, readForceUpdateIcon, readGatewayBaseUrl } from './dev-config.ts';
 import { GATEWAY_ENV_KEY, resolveGatewayBaseUrl } from './gateway-config.ts';
@@ -391,6 +391,12 @@ function gatewayRefreshFile(): string {
 function broadcastSession(view: GatewaySessionView): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send('dex:session', view);
+  }
+}
+
+function broadcastSpendBlocked(payload: SpendBlockedPayload): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('dex:spend-blocked', payload);
   }
 }
 
@@ -826,6 +832,7 @@ app.whenReady().then(async () => {
       request: (path, init) => sessionGateway().authorizedJson(path, init),
       shopPluginIds: () => sessionGateway().shopPluginIds(),
       activeEntitlements: () => sessionGateway().activeEntitlements(),
+      onBlocked: broadcastSpendBlocked,
     }),
   );
   const icon = loadAppIcon();

@@ -828,7 +828,8 @@ body[data-surface="settings"] .split-section {
 
 #update-later,
 #settings-discard-stay,
-#tool-install-later {
+#tool-install-later,
+#spend-gate-later {
   border: 0;
   border-radius: 8px;
   padding: 6px 8px;
@@ -867,6 +868,8 @@ body[data-surface="settings"] .split-section {
 #settings-discard-confirm:focus-visible,
 #tool-install-later:focus-visible,
 #tool-install-copy:focus-visible,
+#spend-gate-later:focus-visible,
+#spend-gate-confirm:focus-visible,
 .plugin-install-copy:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
@@ -1866,7 +1869,8 @@ h1 {
 
 #update-dialog::backdrop,
 #settings-discard-dialog::backdrop,
-#tool-install-dialog::backdrop {
+#tool-install-dialog::backdrop,
+#spend-gate-dialog::backdrop {
   background: rgba(23, 23, 23, 0.28);
 }
 
@@ -1885,16 +1889,74 @@ h1 {
 
 #update-later,
 #settings-discard-stay,
-#tool-install-later {
+#tool-install-later,
+#spend-gate-later {
   color: var(--muted);
 }
 
 #update-later:hover,
 #settings-discard-stay:hover,
-#tool-install-later:hover { background: var(--hover); }
+#tool-install-later:hover,
+#spend-gate-later:hover { background: var(--hover); }
 
 #tool-install-dialog {
   width: min(560px, calc(100vw - 32px));
+}
+
+#spend-gate-dialog {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  background: var(--card);
+  color: var(--ink);
+  width: min(360px, calc(100vw - 48px));
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.spend-gate-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+#spend-gate-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.spend-gate-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+#spend-gate-dialog h2 {
+  margin: 0;
+  font-size: var(--text-section);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+#spend-gate-dialog p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: var(--text-ui);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.spend-gate-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 #tool-install-body {
