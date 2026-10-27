@@ -226,6 +226,26 @@ test('pluginEnv 不改宿主环境，也不带上其他插件的键', async (t) 
   assert.equal(process.env.TOKEN, 'from-host-token');
 });
 
+test('pluginEnv 未设置时补上 Python UTF-8，已有值保留，不写回宿主', () => {
+  const store = new PluginSettingsStore(null, silent);
+  const manifest = parseManifest(baseManifest('demo'));
+  const previousIo = process.env.PYTHONIOENCODING;
+  const previousUtf8 = process.env.PYTHONUTF8;
+  const env = store.pluginEnv(manifest, { PATH: '/bin' });
+  assert.equal(env.PYTHONIOENCODING, 'utf-8');
+  assert.equal(env.PYTHONUTF8, '1');
+  assert.equal(env.PATH, '/bin');
+  assert.equal(process.env.PYTHONIOENCODING, previousIo);
+  assert.equal(process.env.PYTHONUTF8, previousUtf8);
+
+  const kept = store.pluginEnv(manifest, {
+    PYTHONIOENCODING: 'gbk',
+    PYTHONUTF8: '0',
+  });
+  assert.equal(kept.PYTHONIOENCODING, 'gbk');
+  assert.equal(kept.PYTHONUTF8, '0');
+});
+
 test('损坏的配置文件按空配置启动，日志不包含文件内容', (t) => {
   const root = tempDir();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

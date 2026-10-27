@@ -107,7 +107,7 @@ module.exports = {
 - `emit(event, ...args)`：向所有插件广播。
 - `on(event, handler)`：收广播。
 - `getPluginConfig()`：当前插件的配置。只含本插件声明过的键，不接收插件 id。每次调用都是设置页里**当前已保存**的值。声明方式见 [设置](settings.md)。
-- `pluginEnv()`：没有声明运行时，拉起子进程时用它。先复制 Dex Buddy 的环境，再盖上本插件的配置。数字变成十进制字符串，布尔变成 `true` 或 `false`。不会改 Dex Buddy 自己的 `process.env`。每次调用都是设置页里**当前已保存**的值；点「保存」不会单独通知插件，也不重跑 `apply`。声明了 `runtime` 时不要用它拉起 Python 或 Node。虚拟环境和 `PATH` 在 `ctx.runtime.env` 里。用 `ctx.runtime.python` 或 `ctx.runtime.node`，环境传 `ctx.runtime.env`（`ctx.runtime.env` 同样每次读取都是当前已保存的配置）。启动时 Dex Buddy 已经把用户登录 shell 的 PATH 合并进这份环境（macOS 上还包括 Homebrew 的常见目录，Windows 上重读用户和系统的 Path）。
+- `pluginEnv()`：没有声明运行时，拉起子进程时用它。先复制 Dex Buddy 的环境，再盖上本插件的配置。数字变成十进制字符串，布尔变成 `true` 或 `false`。不会改 Dex Buddy 自己的 `process.env`。每次调用都是设置页里**当前已保存**的值；点「保存」不会单独通知插件，也不重跑 `apply`。声明了 `runtime` 时不要用它拉起 Python 或 Node。虚拟环境和 `PATH` 在 `ctx.runtime.env` 里。用 `ctx.runtime.python` 或 `ctx.runtime.node`，环境传 `ctx.runtime.env`（`ctx.runtime.env` 同样每次读取都是当前已保存的配置）。启动时 Dex Buddy 已经把用户登录 shell 的 PATH 合并进这份环境（macOS 上还包括 Homebrew 的常见目录，Windows 上重读用户和系统的 Path）。返回对象在还没有这两个键时补上 `PYTHONIOENCODING=utf-8` 和 `PYTHONUTF8=1`，让 Python 在中文 Windows 上也用 UTF-8 读写管道；`ctx.runtime.env` 同样带上。
 - `tools`：清单写了 `externalTools` 并且准备成功时才有。键是 `bin` 和 `extraBins`，值是绝对路径。这些目录只加在该插件子进程的 PATH 前面。声明了 `runtime` 时加在 `ctx.runtime.env`，否则加在 `pluginEnv()` 的返回值里。
 
 没在 `externalTools` 里声明的命令，例如同事自己装的 ffmpeg，仍然用本机 PATH 里的那一份，不随 runtime 下载。没装时要等到调用才失败。声明了之后，Dex Buddy 在 `apply` 之前只检查 PATH：都在才挂上服务，缺了就给出可复制给编程助手的安装说明。字段见 [清单](manifest.md)。

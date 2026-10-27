@@ -40,12 +40,15 @@ export class PluginSettingsStore {
 
   /**
    * 返回新对象。调用方拿去传给子进程，不能写回宿主环境。
+   * 还没有 PYTHONIOENCODING / PYTHONUTF8 时补上 UTF-8，避免中文 Windows 用 GBK 写管道。
    */
   pluginEnv(manifest: PluginManifest, base: NodeJS.ProcessEnv, storageId = manifest.id): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...base };
     for (const [key, value] of Object.entries(this.getPluginConfig(manifest, storageId))) {
       env[key] = stringifyConfigValue(value);
     }
+    if (env.PYTHONIOENCODING === undefined) env.PYTHONIOENCODING = 'utf-8';
+    if (env.PYTHONUTF8 === undefined) env.PYTHONUTF8 = '1';
     return env;
   }
 
