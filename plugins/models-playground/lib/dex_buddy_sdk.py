@@ -1,5 +1,8 @@
-"""拷进插件后：独立跑用 DEX_BUDDY_API_KEY 打 Dex Buddy 网关（开发者付钱）；
-工作台里由 Node 注入 DEX_BUDDY_MODELS_URL，走宿主（谁用谁付钱）。不要把 Key 打进 zip。
+"""Dex Buddy 插件 SDK 1.0.0。拷进插件 lib/ 后：
+独立跑用 DEX_BUDDY_API_KEY 打 Dex Buddy 网关（开发者付钱）；
+工作台里由 Node 注入 DEX_BUDDY_MODELS_URL，走宿主（谁用谁付钱）。
+require_entitlement 在 Python 里始终直接返回；工作台真校验写在 index.js。
+对照文档母版的 __version__，不一致就整文件再拷。不要把 Key 打进 zip。
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+__version__ = "1.0.0"
 DEFAULT_BASE = "https://www.dexbuddy.app"
 MISSING_KEY = (
     "独立运行需要环境变量 DEX_BUDDY_API_KEY（账号里的用户 API Key，dbh_sk_ 开头）。"
@@ -237,3 +241,7 @@ def _urlopen(req: urllib.request.Request | str, timeout: int = 120):
 
 def bind_models(env: dict[str, str] | None = None) -> Models:
     return Models(env)
+
+
+def require_entitlement() -> None:
+    return None

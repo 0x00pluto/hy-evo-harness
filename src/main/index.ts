@@ -20,7 +20,7 @@ import { readAvailableMemory } from './available-memory.ts';
 import { readExtraPluginPaths, readForceUpdateIcon, readGatewayBaseUrl } from './dev-config.ts';
 import { GATEWAY_ENV_KEY, resolveGatewayBaseUrl } from './gateway-config.ts';
 import { createFileSecureStore, GatewaySession, parseAuthCallback } from './gateway-session.ts';
-import { createHostModels } from './host-egress.ts';
+import { createHostModels, createRequireEntitlement, type HostModelsRequestInit } from './host-egress.ts';
 import { INSTALLED_PLUGINS_DIR_NAME, resolveHostDataPath } from './host-data.ts';
 import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
 import { handleInvoke, onSend } from './ipc.ts';
@@ -39,17 +39,22 @@ import {
 import { exampleSettingIdsToDrop, PluginSettingsStore } from './plugin-settings.ts';
 import { ensurePluginProtocol, pluginPartition, registerPluginScheme } from './protocol.ts';
 import { ServiceRegistry } from './registry.ts';
+import { applyUnpackagedIdentity } from './app-identity.ts';
 import { applyUserSearchPath } from './shell-path.ts';
 import type { DexResult } from './types.ts';
 import { initUpdater } from './updater.ts';
 
 registerPluginScheme();
+applyUnpackagedIdentity(app);
 
 const SHOP_FOCUS_REFRESH_MS = 2000;
 let lastShopFocusRefreshAt = 0;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
+  console.error(
+    app.isPackaged ? 'Dex Buddy 已在运行，本实例退出' : 'Dex Buddy 开发版已在运行，本实例退出',
+  );
   app.quit();
 }
 
@@ -752,6 +757,19 @@ function registerIpc(): void {
     }
   });
 
+  handleInvoke('dex:reload-bundled', async (_event, id) => {
+    try {
+      const plugins = await registry.reloadBundled(id);
+      return { ok: true, plugins };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        plugins: registry.getPluginList(),
+      };
+    }
+  });
+
   handleInvoke('dex:start-preview', async (_event, id) => {
     try {
       return await session().startPreview(id);
@@ -826,15 +844,17 @@ app.whenReady().then(async () => {
     unpackedFile: path.join(app.getPath('userData'), 'unpacked-plugins.json'),
   });
   gatewaySession = createGatewaySession();
-  registry.setHostModels((pluginId) =>
-    createHostModels({
-      pluginId,
-      request: (path, init) => sessionGateway().authorizedJson(path, init),
-      shopPluginIds: () => sessionGateway().shopPluginIds(),
-      activeEntitlements: () => sessionGateway().activeEntitlements(),
-      onBlocked: broadcastSpendBlocked,
-    }),
-  );
+  const hostModelsDeps = (pluginId: string) => ({
+    pluginId,
+    request: (path: string, init: HostModelsRequestInit) => sessionGateway().authorizedJson(path, init),
+    requireSession: () => sessionGateway().requireSession(),
+    shopGate: () => sessionGateway().shopGate(),
+    activeEntitlements: () => sessionGateway().activeEntitlements(),
+    waivedPluginIds: () => sessionGateway().waivedPluginIds(),
+    onBlocked: broadcastSpendBlocked,
+  });
+  registry.setHostModels((pluginId) => createHostModels(hostModelsDeps(pluginId)));
+  registry.setRequireEntitlement((pluginId) => createRequireEntitlement(hostModelsDeps(pluginId)));
   const icon = loadAppIcon();
   applyDockIcon(icon);
   attachWebviewGuard();

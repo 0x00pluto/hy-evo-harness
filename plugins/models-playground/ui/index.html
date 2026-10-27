@@ -80,10 +80,13 @@
 <body>
   <main>
     <h1>模型试玩</h1>
-    <p>装进 Dex Buddy 后走宿主登录会话。独立跑时把 DEX_BUDDY_API_KEY 写进本机环境变量，不要打进 zip。</p>
+    <p>「需要买断」校验登录；本插件未上架则放行。「检测已买断 / 未买断」只用试玩 mock，不打真实商品。「生成」只烧模型。装进 Dex Buddy 后走宿主登录会话。独立跑时把 DEX_BUDDY_API_KEY 写进本机环境变量，不要打进 zip。</p>
     <label for="prompt">提示词</label>
     <textarea id="prompt">用一句话介绍 Dex Buddy</textarea>
     <div class="actions">
+      <button id="access" type="button">需要买断</button>
+      <button id="owned" type="button">检测已买断</button>
+      <button id="unowned" type="button">检测未买断</button>
       <button id="chat" type="button">生成文案</button>
       <button id="image" type="button">生成图片</button>
       <button id="python" type="button">用 Python 生成文案</button>
@@ -95,13 +98,12 @@
     const result = document.getElementById('result');
     const preview = document.getElementById('preview');
 
-    async function run(method) {
-      const prompt = document.getElementById('prompt').value;
+    async function run(method, args, pending) {
       result.className = '';
-      result.textContent = '正在生成…';
+      result.textContent = pending;
       preview.hidden = true;
       try {
-        const payload = await window.dex.call('modelsPlayground', method, [{ prompt }]);
+        const payload = await window.dex.call('modelsPlayground', method, args);
         result.textContent = JSON.stringify(payload, null, 2);
         if (payload && typeof payload.output === 'string' && payload.output) {
           preview.src = 'file://' + payload.output;
@@ -109,13 +111,21 @@
         }
       } catch (err) {
         result.className = 'error';
-        result.textContent = err && err.message ? err.message : '生成失败';
+        result.textContent = err && err.message ? err.message : '调用失败';
       }
     }
 
-    document.getElementById('chat').onclick = () => run('chat');
-    document.getElementById('image').onclick = () => run('image');
-    document.getElementById('python').onclick = () => run('pythonChat');
+    function generate(method) {
+      const prompt = document.getElementById('prompt').value;
+      return run(method, [{ prompt }], '正在生成…');
+    }
+
+    document.getElementById('access').onclick = () => run('checkAccess', [], '正在校验…');
+    document.getElementById('owned').onclick = () => run('checkOwned', [], '正在校验已买断…');
+    document.getElementById('unowned').onclick = () => run('checkUnowned', [], '正在校验未买断…');
+    document.getElementById('chat').onclick = () => generate('chat');
+    document.getElementById('image').onclick = () => generate('image');
+    document.getElementById('python').onclick = () => generate('pythonChat');
   </script>
 </body>
 </html>

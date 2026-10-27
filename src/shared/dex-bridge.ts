@@ -247,6 +247,7 @@ export interface DexHost {
   uninstall(id: string): Promise<DexResult>;
   loadUnpackedDirectory(): Promise<DexResult>;
   reloadUnpacked(id: string): Promise<DexResult>;
+  reloadBundled(id: string): Promise<DexResult>;
   startPreview(id: string): Promise<DexResult>;
   endPreview(id: string): Promise<DexResult>;
   removeUnpacked(id: string): Promise<DexResult>;

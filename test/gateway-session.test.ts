@@ -7,6 +7,7 @@ import {
   formatBalanceLabel,
   GatewaySession,
   parseAuthCallback,
+  RIGHTS_CACHE_TTL_MS,
 } from '../src/main/gateway-session.ts';
 import { GATEWAY_REDIRECT_URI } from '../src/main/gateway-config.ts';
 
@@ -333,4 +334,112 @@ test('refresh 失败清空凭证', async () => {
   await assert.rejects(() => session.refreshSerial(), /bad refresh|INVALID_GRANT|未登录|网关/);
   assert.equal(getBlob(), null);
   assert.equal(session.view().signedIn, false);
+});
+
+function signedInFetch(paths: string[], state: { catalogOk: boolean } = { catalogOk: true }) {
+  return async (input: string | URL | Request) => {
+    const path = new URL(String(input)).pathname;
+    paths.push(path);
+    if (path === '/v1/auth/exchange') {
+      return jsonResponse({
+        ok: true,
+        accessToken: 'dbh_at_cache',
+        refreshToken: 'dbh_rt_cache',
+        tokenType: 'Bearer',
+        expiresIn: 900,
+      });
+    }
+    if (path === '/v1/whoami') {
+      return jsonResponse({
+        userId: '00000000-0000-0000-0000-000000000001',
+        phoneMasked: '138****0000',
+        accountKind: 'personal',
+        wallet: { balance: '3.0000', currency: 'credits' },
+        organizations: [],
+      });
+    }
+    if (path === '/v1/wallet') {
+      return jsonResponse({ balance: '3.0000', currency: 'credits' });
+    }
+    if (path === '/v1/entitlements') {
+      return jsonResponse({
+        entitlements: [{ pluginId: 'ai-comic-master', status: 'active' }],
+      });
+    }
+    if (path === '/api/shop/catalog') {
+      if (!state.catalogOk) {
+        return jsonResponse({ ok: false, code: 'SERVER_ERROR', error: 'catalog down' }, 500);
+      }
+      return jsonResponse({
+        ok: true,
+        catalog: {
+          plugins: [{ pluginId: 'ai-comic-master', name: 'AI 漫画大师' }],
+          packages: [],
+          custom: { yuanMin: 10, yuanStep: 5, yuanMax: 10_000, creditsPerYuan: 100 },
+          signedIn: true,
+          ownedPluginIds: ['ai-comic-master'],
+          balance: '3.0000',
+          phoneMasked: '138****0000',
+        },
+      });
+    }
+    return jsonResponse({ ok: false, code: 'SERVER_ERROR', error: 'unexpected' }, 500);
+  };
+}
+
+test('同一 TTL 内 shopGate 只拉一次目录', async () => {
+  const { store } = memoryStore(true);
+  const paths: string[] = [];
+  let now = 1_000_000;
+  const session = new GatewaySession({
+    baseUrl: 'http://localhost:3000',
+    openExternal: async () => {},
+    store,
+    now: () => now,
+    fetch: signedInFetch(paths),
+  });
+  await session.startPkce();
+  const exchanged = await session.submitAuthCode('auth-code');
+  assert.equal(exchanged.ok, true);
+  const catalogsAfterLogin = paths.filter((item) => item === '/api/shop/catalog').length;
+  assert.equal(catalogsAfterLogin, 1);
+
+  const first = await session.shopGate();
+  const second = await session.shopGate();
+  await session.activeEntitlements();
+  assert.equal(first.ready, true);
+  assert.deepEqual(first.pluginIds, ['ai-comic-master']);
+  assert.deepEqual(second.pluginIds, first.pluginIds);
+  assert.equal(paths.filter((item) => item === '/api/shop/catalog').length, 1);
+
+  now += RIGHTS_CACHE_TTL_MS + 1;
+  const expired = await session.shopGate();
+  assert.equal(expired.ready, true);
+  assert.equal(paths.filter((item) => item === '/api/shop/catalog').length, 2);
+
+  await session.refreshSummary();
+  assert.equal(paths.filter((item) => item === '/api/shop/catalog').length, 3);
+});
+
+test('目录刷新失败时沿用上一份成功缓存', async () => {
+  const { store } = memoryStore(true);
+  const paths: string[] = [];
+  const state = { catalogOk: true };
+  let now = 1_000_000;
+  const session = new GatewaySession({
+    baseUrl: 'http://localhost:3000',
+    openExternal: async () => {},
+    store,
+    now: () => now,
+    fetch: signedInFetch(paths, state),
+  });
+  await session.startPkce();
+  assert.equal((await session.submitAuthCode('auth-code')).ok, true);
+  assert.equal((await session.shopGate()).ready, true);
+
+  state.catalogOk = false;
+  now += RIGHTS_CACHE_TTL_MS + 1;
+  const stale = await session.shopGate();
+  assert.equal(stale.ready, true);
+  assert.deepEqual(stale.pluginIds, ['ai-comic-master']);
 });

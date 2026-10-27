@@ -69,6 +69,7 @@ export type DexInvokeMap = {
   'dex:uninstall': { args: [id: string]; result: DexResult };
   'dex:load-unpacked-directory': { args: []; result: DexResult };
   'dex:reload-unpacked': { args: [id: string]; result: DexResult };
+  'dex:reload-bundled': { args: [id: string]; result: DexResult };
   'dex:start-preview': { args: [id: string]; result: DexResult };
   'dex:end-preview': { args: [id: string]; result: DexResult };
   'dex:remove-unpacked': { args: [id: string]; result: DexResult };

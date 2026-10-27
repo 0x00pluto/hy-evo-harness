@@ -13,7 +13,7 @@ import {
 } from './plugin-runtime.ts';
 import { PluginSettingsStore, isSettingsCandidate, type SettingsPluginView, type SettingsSaveResult } from './plugin-settings.ts';
 import { resolvePluginFile } from './protocol.ts';
-import { unavailableHostModels } from './host-egress.ts';
+import { unavailableHostModels, unavailableRequireEntitlement } from './host-egress.ts';
 import type { AppContext, AppPlugin, HostModels, LocalMountMode, LocalRecord, Logger, PluginManifest, PluginSource, PluginSummary, RuntimeLayout } from './types.ts';
 
 interface CommonJsModule {
@@ -104,6 +104,7 @@ export class ServiceRegistry {
   private lookupTool: RuntimeHost['lookup'];
   private originChannel: (id: string) => 'market' | 'file' | undefined = () => undefined;
   private modelsForPlugin: ((pluginId: string) => HostModels) | null = null;
+  private requireEntitlementForPlugin: ((pluginId: string) => () => Promise<void>) | null = null;
   readonly logger: Logger;
 
   constructor(logger: Logger = defaultLogger, settings?: PluginSettingsStore) {
@@ -124,6 +125,11 @@ export class ServiceRegistry {
   /** 按清单 id 创建 ctx.models。未设置时调用会报网关未就绪。 */
   setHostModels(factory: (pluginId: string) => HostModels): void {
     this.modelsForPlugin = factory;
+  }
+
+  /** 按清单 id 创建无参 ctx.requireEntitlement。未设置时调用会报网关未就绪。 */
+  setRequireEntitlement(factory: (pluginId: string) => () => Promise<void>): void {
+    this.requireEntitlementForPlugin = factory;
   }
 
   setRuntimeHost(host: RuntimeHost): void {
@@ -461,6 +467,16 @@ export class ServiceRegistry {
     this.ownership.set(id, owned);
   }
 
+  async reloadBundled(id: string): Promise<PluginSummary[]> {
+    const plugin = this.getPlugin(id);
+    if (!plugin) throw new Error('插件不存在');
+    if (plugin.source !== 'bundled') throw new Error('只能重新加载示例插件');
+    const pluginDir = plugin.absPath;
+    await this.unloadPlugin(id);
+    await this.loadPluginFromDirectory(pluginDir, 'bundled');
+    return this.getPluginList();
+  }
+
   async unloadPlugin(id: string): Promise<void> {
     const plugin = this.plugins.get(id);
     if (!plugin) return;
@@ -532,6 +548,9 @@ export class ServiceRegistry {
       models: this.modelsForPlugin
         ? this.modelsForPlugin(plugin.manifest.id)
         : unavailableHostModels(),
+      requireEntitlement: this.requireEntitlementForPlugin
+        ? this.requireEntitlementForPlugin(plugin.manifest.id)
+        : unavailableRequireEntitlement(),
       getPluginConfig: () => this.settings.getPluginConfig(plugin.manifest, id),
       pluginEnv: () => {
         const configEnv = this.settings.pluginEnv(plugin.manifest, process.env, id);

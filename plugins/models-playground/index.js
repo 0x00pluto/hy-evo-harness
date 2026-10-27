@@ -1,6 +1,7 @@
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { bindModels, childEnv } = require('./lib/dex-models');
+const { bindModels, requireEntitlement, childEnv } = require('./lib/dex-buddy-sdk');
+const { listedId } = require('./lib/mock-shop');
 
 function pickModel(list, kind, fallback) {
   const data = list && Array.isArray(list.data) ? list.data : [];
@@ -51,6 +52,18 @@ module.exports = {
   apply(ctx) {
     const models = bindModels(ctx);
     ctx.registerService('modelsPlayground', {
+      async checkAccess() {
+        await requireEntitlement(ctx);
+        return { ok: true };
+      },
+      async checkOwned() {
+        await requireEntitlement(ctx, { pluginId: listedId, mockOwned: true });
+        return { ok: true, entitled: true };
+      },
+      async checkUnowned() {
+        await requireEntitlement(ctx, { pluginId: listedId, mockOwned: false });
+        return { ok: true, entitled: true };
+      },
       async chat(params) {
         const prompt = params && typeof params.prompt === 'string' ? params.prompt.trim() : '';
         const listed = await models.list();

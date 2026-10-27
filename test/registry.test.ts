@@ -100,18 +100,19 @@ test('扫描插件目录，跳过无 manifest 的项', async (t) => {
   assert.deepEqual(registry.getService('goodService'), { ok: true });
 });
 
-test('ctx.models 用清单 id 创建', async (t) => {
+test('ctx.models 与 requireEntitlement 用清单 id 创建', async (t) => {
   const root = tempDir();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   writePlugin(
     path.join(root, 'named'),
     headless('app-dexbuddy-demo', '演示'),
-    'module.exports = { apply(ctx) { ctx.registerService("demo", { hasModels: Boolean(ctx.models) }); } };',
+    'module.exports = { apply(ctx) { ctx.registerService("demo", { hasModels: Boolean(ctx.models), requireEntitlement: ctx.requireEntitlement }); } };',
   );
-  const seen: string[] = [];
+  const seenModels: string[] = [];
+  const seenEntitlement: string[] = [];
   const registry = new ServiceRegistry(silent);
   registry.setHostModels((pluginId) => {
-    seen.push(pluginId);
+    seenModels.push(pluginId);
     return {
       list: async () => ({ object: 'list', data: [] }),
       billing: { quote: async () => ({}) },
@@ -121,9 +122,16 @@ test('ctx.models 用清单 id 创建', async (t) => {
       },
     };
   });
+  registry.setRequireEntitlement((pluginId) => {
+    seenEntitlement.push(pluginId);
+    return async () => {};
+  });
   await registry.scanAndLoadPlugins(root, 'bundled');
-  assert.deepEqual(seen, ['app-dexbuddy-demo']);
-  assert.deepEqual(registry.getService('demo'), { hasModels: true });
+  assert.deepEqual(seenModels, ['app-dexbuddy-demo']);
+  assert.deepEqual(seenEntitlement, ['app-dexbuddy-demo']);
+  const demo = registry.getService('demo') as { hasModels: boolean; requireEntitlement: () => Promise<void> };
+  assert.equal(demo.hasModels, true);
+  await demo.requireEntitlement();
 });
 
 test('已安装插件的列表带上来源频道', async (t) => {
@@ -436,4 +444,44 @@ test('拒绝越界压缩包', async (t) => {
   );
   assert.equal(fs.existsSync(path.join(work, 'evil.txt')), false);
   assert.equal(registry.getPluginList().length, 0);
+});
+
+test('reloadBundled 清缓存后读到新方法', async (t) => {
+  const root = tempDir();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, 'sample-tool');
+  writePlugin(
+    dir,
+    headless('sample-tool', '示例'),
+    'module.exports = { apply(ctx) { ctx.registerService("sampleTool", { ping() { return "old"; } }); } };',
+  );
+  const registry = new ServiceRegistry(silent);
+  await registry.scanAndLoadPlugins(root, 'bundled');
+  assert.equal(await registry.callService('sampleTool', 'ping', []), 'old');
+  await assert.rejects(
+    () => registry.callService('sampleTool', 'checkAccess', []),
+    /服务或方法不存在: sampleTool.checkAccess/,
+  );
+  fs.writeFileSync(
+    path.join(dir, 'index.js'),
+    'module.exports = { apply(ctx) { ctx.registerService("sampleTool", { ping() { return "new"; }, checkAccess() { return { ok: true }; } }); } };',
+  );
+  await registry.reloadBundled('sample-tool');
+  assert.equal(await registry.callService('sampleTool', 'ping', []), 'new');
+  assert.deepEqual(await registry.callService('sampleTool', 'checkAccess', []), { ok: true });
+});
+
+test('reloadBundled 只接受示例插件', async (t) => {
+  const root = tempDir();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writePlugin(
+    path.join(root, 'sample-tool'),
+    headless('sample-tool', '安装包'),
+    'module.exports = { apply(ctx) { ctx.registerService("sampleTool", { ping() { return "installed"; } }); } };',
+  );
+  const registry = new ServiceRegistry(silent);
+  await registry.scanAndLoadPlugins(root, 'installed');
+  await assert.rejects(() => registry.reloadBundled('missing'), /插件不存在/);
+  await assert.rejects(() => registry.reloadBundled('sample-tool'), /只能重新加载示例插件/);
+  assert.equal(await registry.callService('sampleTool', 'ping', []), 'installed');
 });

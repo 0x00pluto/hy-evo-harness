@@ -88,6 +88,12 @@ export interface AppContext {
   on: (event: string, handler: (...args: unknown[]) => void) => void;
   /** 经宿主调用线上模型。清单 id 由宿主盖上。 */
   models: HostModels;
+  /**
+   * 无参买断确认：先登录，再买断。不看积分。
+   * 作者从 SDK 调用 `requireEntitlement(ctx)`，不要直接碰这个字段。
+   * 试玩可传 mock 选项；其它插件忽略传入参数。
+   */
+  requireEntitlement: (...args: unknown[]) => Promise<void>;
   /** 默认值与已保存值合并后的本插件配置。声明非法时为空对象。 */
   getPluginConfig: () => PluginConfig;
   /**

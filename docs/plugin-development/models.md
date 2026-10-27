@@ -6,41 +6,36 @@
 
 开发用你的 Key，上线扣使用者的积分。业务代码不用改。
 
-1. 把 [dex-models.js](snippets/dex-models.js) 拷到插件 `lib/`。用 Python 时再拷 [dex_models.py](snippets/dex_models.py)。不必克隆宿主仓。
-2. 本机环境变量 `DEX_BUDDY_API_KEY`（在 dexbuddy.app 账号里创建，`dbh_sk_` 开头）。可选 `DEX_GATEWAY_BASE_URL`。助手**不读** `.env` 文件，自己 `export` 或 `load_dotenv`。不要提交 Key，不要写进 `configSchema`。
-3. `index.js` 里只用 `bindModels(ctx)`，不要直接 `ctx.models`（独立跑没有它）。
-4. 拉起 Python 时必须 `spawn(..., { env: await childEnv(ctx, env) })`。同一份 `.py` 不用写 `if dex`。
-5. 打包会丢掉 `.env`，见 [打包](pack.md)。装进 Dex Buddy 后助手走登录会话，宿主用清单 `id` 盖 `X-Plugin-Id`。参数和 JSON 体里都不要传 `pluginId`。谁打开插件，扣谁的积分。
+1. 把 [dex-buddy-sdk.js](snippets/dex-buddy-sdk.js) 拷到插件 `lib/`。用 Python 时再拷 [dex_buddy_sdk.py](snippets/dex_buddy_sdk.py)。不必克隆宿主仓。
+2. 对照自己 `lib/` 里的 `SDK_VERSION`（Python 是 `__version__`）和文档母版。不一致就整文件再拷。工作台不提示过期。
+3. 本机环境变量 `DEX_BUDDY_API_KEY`（在 dexbuddy.app 账号里创建，`dbh_sk_` 开头）。可选 `DEX_GATEWAY_BASE_URL`。SDK **不读** `.env` 文件，自己 `export` 或 `load_dotenv`。不要提交 Key，不要写进 `configSchema`。
+4. `index.js` 里从 SDK 调 `requireEntitlement(ctx)` 和 `bindModels(ctx)`，不要直接碰 `ctx.models` / `ctx.requireEntitlement`（独立跑没有它们）。
+5. 拉起 Python 时必须先 `await requireEntitlement(ctx)`，再 `spawn(..., { env: await childEnv(ctx, env) })`。同一份 `.py` 不用写 `if dex`。
+6. 打包会丢掉 `.env`，见 [打包](pack.md)。装进 Dex Buddy 后 SDK 走登录会话，宿主用清单 `id` 盖 `X-Plugin-Id`。参数和 JSON 体里都不要传 `pluginId`。谁打开插件，扣谁的积分。
 
 ```js
-const { bindModels } = require('./lib/dex-models');
+const { bindModels, requireEntitlement, SDK_VERSION } = require('./lib/dex-buddy-sdk');
 
-function pickModel(list, kind, fallback) {
-  const data = list && Array.isArray(list.data) ? list.data : [];
-  const found = data.find((item) => item && item.kind === kind && typeof item.id === 'string');
-  return found ? found.id : fallback;
-}
-
-module.exports = {
-  apply(ctx) {
+ctx.registerService('myTool', {
+  async draft(params) {
+    await requireEntitlement(ctx);
     const models = bindModels(ctx);
-    ctx.registerService('myTool', {
-      async draft(params) {
-        const listed = await models.list();
-        return models.chat.completions.create({
-          model: pickModel(listed, 'chat', 'dexbuddy-chat'),
-          messages: [{ role: 'user', content: params.prompt }],
-        });
-      },
+    return models.chat.completions.create({
+      model: 'dexbuddy-chat',
+      messages: [{ role: 'user', content: params.prompt }],
     });
   },
-};
+});
 ```
+
+把校验放在自己的服务方法里、烧模型或其它要买断的步骤之前。无参，不要传 `pluginId`。页面只 `window.dex.call`。这个函数不看积分；积分仍在后来的 `chat` / `images`。失败时不要自己画登录 / 购买文案，工作台会弹框。打开插件时不要自动调用。
+
+独立跑时同一行直接通过，不打 entitlements，也不要求登录。
 
 Python 脚本本身：
 
 ```python
-from dex_models import bind_models
+from dex_buddy_sdk import bind_models, require_entitlement
 
 def pick_model(listed, kind, fallback):
     data = listed.get("data") if isinstance(listed, dict) else None
@@ -51,6 +46,7 @@ def pick_model(listed, kind, fallback):
             return item["id"]
     return fallback
 
+require_entitlement()
 models = bind_models()
 listed = models.list()
 body = models.chat.completions.create({
@@ -59,21 +55,34 @@ body = models.chat.completions.create({
 })
 ```
 
+`require_entitlement()` 始终直接返回。工作台真校验写在 Node 的 `index.js`：先 `await requireEntitlement(ctx)` 再 `spawn`。
+
 工作台里由 Node 注入环境，同一份 `.py` 不必分支：
 
 ```js
 const { spawn } = require('node:child_process');
-const { childEnv } = require('./lib/dex-models');
+const { childEnv, requireEntitlement } = require('./lib/dex-buddy-sdk');
 
+await requireEntitlement(ctx);
 const env = await childEnv(ctx, { ...process.env, ...(ctx.pluginEnv ? ctx.pluginEnv() : {}) });
 spawn(pythonBin, [script], { cwd: __dirname, env });
 ```
 
-对照例子在仓库 `plugins/models-playground/`（只在 `pnpm start` 出现）。
+对照例子在仓库 `plugins/models-playground/`（只在 `pnpm start` 出现）。当前母版 `SDK_VERSION` 是 `1.0.0`。
 
-这两份助手只用标准库（Node `http` / Python `urllib`）。不声明 `runtime.python`，工作台会走 PATH 上的 `python3`。只有脚本要装 pip 包时才在清单里声明 `runtime`，写法见 [运行](runtime.md)。
+这份 SDK 只用标准库（Node `http` / Python `urllib`）。不声明 `runtime.python`，工作台会走 PATH 上的 `python3`。只有脚本要装 pip 包时才在清单里声明 `runtime`，写法见 [运行](runtime.md)。
 
 提示词仍由插件在本机拼好。模型 id 用 `list()` 返回的渠道 Model ID，按 `kind` 选用；目录为空时回退 `dexbuddy-chat`（文案）或 `dexbuddy-image`（生图）。不要写供应商的模型路径或 URL。不要用 OpenAI 官方 Key 打我们的网关。
+
+下面例子里的 `pickModel` 按 `kind` 从 `list()` 里选渠道 Model ID：
+
+```js
+function pickModel(list, kind, fallback) {
+  const data = list && Array.isArray(list.data) ? list.data : [];
+  const found = data.find((item) => item && item.kind === kind && typeof item.id === 'string');
+  return found ? found.id : fallback;
+}
+```
 
 ## 四个方法
 
@@ -162,18 +171,20 @@ const image = await models.images.generate({
 
 ## 错误码
 
-方法抛错，错误上有稳定 `code`。`chat.completions.create` 和 `images.generate` 被拦住时，工作台自己弹框；插件不要再画购买、登录或充值提示，也不要把错误码贴到页面上。调用仍然失败，生成停住。用户买完或登完，再点一次生成。
+方法抛错，错误上有稳定 `code`。`requireEntitlement`、`chat.completions.create` 和 `images.generate` 被拦住时，工作台自己弹框；插件不要再画购买、登录或充值提示，也不要把错误码贴到页面上。调用仍然失败，生成停住。用户买完或登完，再点一次生成。
 
 | code | 何时 | 工作台 |
 |---|---|---|
 | `UNAUTHORIZED` | 未登录，或会话失效 | 弹「需要登录」 |
-| `NOT_ENTITLED` | 这个清单 id 在商城里卖，当前账号还没买断 | 弹「需要购买插件」 |
-| `INSUFFICIENT_CREDITS` | 报价认为余额不够，或网关返回 402 | 弹「积分不够」 |
+| `NOT_ENTITLED` | 这个清单 id 在商城里卖，当前账号还没买断，平台也未限免 | 弹「需要购买插件」 |
+| `INSUFFICIENT_CREDITS` | 报价认为余额不够，或网关返回 402。只出现在文案 / 生图 | 弹「积分不够」 |
 | 其它 | 网关 `ErrorBody.code` 或 Chat Completions 的 `error.code` 原样映射 | 插件自己处理 |
 
-`list` 与 `quote` 不拦未买断，也不弹框。只有补全和生图会查买断。
+工作台两条路径都是：未登录 → 未买断 →（仅模型出口）积分不够。`requireEntitlement` 不看积分，不会出现 `INSUFFICIENT_CREDITS`。
 
-不在商城里的清单 id（自己做的插件，或把官方 id 改成了普通 id）只验登录和余额。第一期没有「查买断」函数。单机插件打开时不拦。
+`list` 与 `quote` 不拦未买断，也不弹框。文案和生图仍会兜底查买断。
+
+不在商城里的清单 id（自己做的插件，或把官方 id 改成了普通 id）买断视为通过，登录仍要过，烧模型仍报价。平台把目录里的插件标为限免时，两条路径都跳过买断，登录仍要。单机插件打开时不拦。
 
 ## 清单 id
 

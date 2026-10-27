@@ -14,8 +14,8 @@ my-tool/
 ├── icon.png              # 可选。列表和详情用同一张
 ├── index.js              # 后端。没有后端逻辑可以不放
 ├── lib/
-│   ├── dex-models.js     # 调模型时从文档拷进去
-│   └── dex_models.py     # 用 Python 调模型时再拷
+│   ├── dex-buddy-sdk.js  # 调模型与买断校验时从文档拷进去
+│   └── dex_buddy_sdk.py  # 用 Python 调模型时再拷
 └── ui/
     └── index.html        # 只有带界面的插件需要
 ```
@@ -37,7 +37,7 @@ my-tool/
 - [设置](settings.md)：`configSchema`、分组、密钥和 `pluginEnv()`。
 - [数据](data.md)：缓存、导出和数据库放在用户数据目录，不要写进安装目录。
 - [运行](runtime.md)：`index.js`、页面里的 `dex.call`，以及 Python / Node 运行时。
-- [模型](models.md)：拷助手 → 本机填 `DEX_BUDDY_API_KEY` → `bindModels(ctx)`（Python 子进程再加 `childEnv`）→ 上线不用改，谁用谁付钱。页面不接触网关。
+- [模型](models.md)：拷 SDK → 本机填 `DEX_BUDDY_API_KEY` → `requireEntitlement(ctx)` 再 `bindModels(ctx)`（Python 子进程再加 `childEnv`）→ 上线不用改，谁用谁付钱。页面不接触网关。
 - [后端 JavaScript](typing.md)：`@ts-check`、JSDoc、禁止 `any`；入口仍是 `.js`。
 - [打包](pack.md)：宿主默认丢掉什么，以及 `dex-buddy-plugin.pack` 和 `dex-buddy-plugin.ignore` 怎么配合。
 - [发布](ship.md)：开发时挂到 Dex Buddy、打成 zip 拖进工作台、什么情况会加载失败。

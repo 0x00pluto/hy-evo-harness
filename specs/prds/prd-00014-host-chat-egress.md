@@ -143,7 +143,7 @@ accepted_scope: R0,R1
 
 ### 6.6 可拷贝助手
 
-文档提供 `dex-models.js` 与 `dex_models.py`。作者拷进自己的插件。独立进程用 `DEX_BUDDY_API_KEY` 打线上网关；`apply(ctx)` 里有 `ctx.models` 则忽略 Key。Python 子进程由 Node 助手注入本机代理并删掉子进程里的 Key。
+文档提供 `dex-buddy-sdk.js` 与 `dex_buddy_sdk.py`（见 00015）。作者拷进自己的插件。独立进程用 `DEX_BUDDY_API_KEY` 打线上网关；`apply(ctx)` 里有 `ctx.models` 则忽略 Key。Python 子进程由 Node SDK 注入本机代理并删掉子进程里的 Key。
 
 ## 7. 用户故事地图与版本切片
 
@@ -256,7 +256,9 @@ flowchart TD
   signed -->|no| unauth[UNAUTHORIZED]
   signed -->|yes| shop{IdInShopCatalog}
   shop -->|no| quote[POST_billing_quote]
-  shop -->|yes| owned{ActiveEntitlement}
+  shop -->|yes| waived{PlatformWaiver}
+  waived -->|yes| quote
+  waived -->|no| owned{ActiveEntitlement}
   owned -->|no| denied[NOT_ENTITLED]
   owned -->|yes| quote
   quote -->|enough_false| poor[INSUFFICIENT_CREDITS]
@@ -335,6 +337,7 @@ flowchart TD
 | 2026-10-26 | 初稿：功能清单 |
 | 2026-10-26 | 技术讨论后补合同：盖章、有限买断闸、OpenAI 形状、本期不做签名 |
 | 2026-10-26 | 把原 00015（已购列表 / 购买积分）与 00016（生图落盘）并进本文；积分页文案改为已购插件与购买积分；补可拷贝助手与谁付钱 |
+| 2026-10-27 | 00015 修订：文案 / 生图未买断弹框仍保留；拦截顺序改为未登录 → 未买断（未上架 / 限免跳过）→ 积分不够；可拷贝助手改名为 `dex-buddy-sdk.js` / `dex_buddy_sdk.py` |
 
 ## 12. 工程验收状态
 

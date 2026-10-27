@@ -33,7 +33,11 @@ function bodyText(reason, name) {
 }
 
 /**
- * @param {{ pluginName?: (pluginId: string) => string | null | undefined }} [opts]
+ * @param {{
+ *   pluginName?: (pluginId: string) => string | null | undefined;
+ *   onOpen?: () => void;
+ *   onClose?: () => void;
+ * }} [opts]
  */
 export function mountSpendGate(opts = {}) {
   const dialog = byId('spend-gate-dialog', 'dialog');
@@ -80,7 +84,11 @@ export function mountSpendGate(opts = {}) {
     body.textContent = bodyText(payload.reason, resolveName(payload.pluginId));
     confirm.textContent = copy.confirm;
     setIcon(copy.icon);
-    if (!dialog.open) dialog.showModal();
+    if (!dialog.open) {
+      // 原生 webview 会盖住宿主 dialog，打开前先让壳把当前 guest 藏起。
+      if (typeof opts.onOpen === 'function') opts.onOpen();
+      dialog.showModal();
+    }
   }
 
   later.addEventListener('click', () => {
@@ -100,6 +108,7 @@ export function mountSpendGate(opts = {}) {
 
   dialog.addEventListener('close', () => {
     current = null;
+    if (typeof opts.onClose === 'function') opts.onClose();
   });
 
   if (window.dex.onSpendBlocked) window.dex.onSpendBlocked(show);

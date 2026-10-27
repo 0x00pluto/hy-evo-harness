@@ -10,11 +10,11 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(here, '..');
-const snippetJs = path.join(repoRoot, 'docs/plugin-development/snippets/dex-models.js');
-const snippetPy = path.join(repoRoot, 'docs/plugin-development/snippets/dex_models.py');
-const playgroundJs = path.join(repoRoot, 'plugins/models-playground/lib/dex-models.js');
-const playgroundPy = path.join(repoRoot, 'plugins/models-playground/lib/dex_models.py');
-const { MISSING_KEY, bindModels, childEnv } = require(playgroundJs);
+const snippetJs = path.join(repoRoot, 'docs/plugin-development/snippets/dex-buddy-sdk.js');
+const snippetPy = path.join(repoRoot, 'docs/plugin-development/snippets/dex_buddy_sdk.py');
+const playgroundJs = path.join(repoRoot, 'plugins/models-playground/lib/dex-buddy-sdk.js');
+const playgroundPy = path.join(repoRoot, 'plugins/models-playground/lib/dex_buddy_sdk.py');
+const { MISSING_KEY, SDK_VERSION, bindModels, childEnv, requireEntitlement } = require(playgroundJs);
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -23,9 +23,43 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-test('snippets 与试玩插件里的助手是同一份', () => {
+test('snippets 与试玩插件里的 SDK 是同一份', () => {
   assert.equal(fs.readFileSync(snippetJs, 'utf8'), fs.readFileSync(playgroundJs, 'utf8'));
   assert.equal(fs.readFileSync(snippetPy, 'utf8'), fs.readFileSync(playgroundPy, 'utf8'));
+});
+
+test('SDK_VERSION 为 1.0.0', () => {
+  assert.equal(SDK_VERSION, '1.0.0');
+});
+
+test('独立跑 requireEntitlement 直接通过，不抛登录或买断错误', async () => {
+  await requireEntitlement(undefined);
+  await requireEntitlement({});
+  await requireEntitlement({ requireEntitlement: 'not-a-function' });
+});
+
+test('工作台 requireEntitlement 转交宿主且不传 id', async () => {
+  const seen: unknown[][] = [];
+  await requireEntitlement({
+    requireEntitlement: (...args: unknown[]) => {
+      seen.push(args);
+    },
+  });
+  assert.deepEqual(seen, [[]]);
+});
+
+test('工作台 requireEntitlement 有第二参则转交', async () => {
+  const seen: unknown[][] = [];
+  const options = { pluginId: 'mock-on-sale', mockOwned: false };
+  await requireEntitlement(
+    {
+      requireEntitlement: (...args: unknown[]) => {
+        seen.push(args);
+      },
+    },
+    options,
+  );
+  assert.deepEqual(seen, [[options]]);
 });
 
 test('有 ctx.models 时不打独立 HTTP、不读 Key', async () => {
@@ -101,7 +135,7 @@ test('独立跑用 API Key 打网关并盖清单 id', async () => {
 });
 
 test('独立跑生图把 downloadUrl 写到本地文件', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-models-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-sdk-'));
   const outputPath = path.join(root, 'out.png');
   const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const models = bindModels(null, {
@@ -177,7 +211,7 @@ test('childEnv 丢掉 Key 并让 Python 走本机代理', async () => {
   assert.equal(body.choices[0].message.content, '代理');
 });
 
-test('Python 助手能被编译', (t) => {
+test('Python SDK 能被编译且 require_entitlement 直接通过', (t) => {
   const result = spawnSync('python3', ['-m', 'py_compile', playgroundPy], {
     encoding: 'utf8',
     timeout: 8000,
@@ -187,4 +221,11 @@ test('Python 助手能被编译', (t) => {
     return;
   }
   assert.equal(result.status, 0, result.stderr || String(result.error));
+  const run = spawnSync(
+    'python3',
+    ['-c', 'from dex_buddy_sdk import require_entitlement, __version__; require_entitlement(); print(__version__)'],
+    { encoding: 'utf8', timeout: 8000, cwd: path.dirname(playgroundPy) },
+  );
+  assert.equal(run.status, 0, run.stderr || String(run.error));
+  assert.equal(run.stdout.trim(), '1.0.0');
 });

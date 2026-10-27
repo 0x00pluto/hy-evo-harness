@@ -1,9 +1,12 @@
 'use strict';
 
 /**
- * 拷进插件后：独立跑用 DEX_BUDDY_API_KEY 打 Dex Buddy 网关（开发者付钱）；
- * 装进工作台则走 ctx.models（谁用谁付钱）。不要把 Key 写进设置或 zip。
+ * Dex Buddy 插件 SDK 1.0.0。拷进插件 lib/ 后：
+ * 工作台走宿主校验与 ctx.models；独立跑 requireEntitlement 直接通过，bindModels 用 DEX_BUDDY_API_KEY（开发者付钱）。
+ * 对照文档母版的 SDK_VERSION，不一致就整文件再拷。不要把 Key 写进设置或 zip。
  */
+
+const SDK_VERSION = '1.0.0';
 
 const fs = require('node:fs');
 const http = require('node:http');
@@ -114,6 +117,22 @@ function bindModels(ctx, options) {
   const host = hostModels(ctx);
   if (host) return host;
   return createStandaloneModels(options || undefined);
+}
+
+/**
+ * 工作台转交宿主买断确认；独立跑直接通过。正式作者不要传第二参。
+ * @param {unknown} ctx
+ * @param {unknown} [options]
+ */
+async function requireEntitlement(ctx, options) {
+  const fn =
+    ctx && typeof ctx === 'object'
+      ? /** @type {{ requireEntitlement?: unknown }} */ (ctx).requireEntitlement
+      : null;
+  if (typeof fn === 'function') {
+    if (arguments.length > 1) return fn(options);
+    return fn();
+  }
 }
 
 /**
@@ -398,5 +417,7 @@ module.exports = {
   MISSING_KEY,
   DexModelsError,
   bindModels,
+  requireEntitlement,
   childEnv,
+  SDK_VERSION,
 };

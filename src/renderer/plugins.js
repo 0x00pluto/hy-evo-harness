@@ -495,9 +495,11 @@ export function mountPlugins({
     if (!workspaceOpen()) return;
     const plugin = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === shell.activeId);
     if (!plugin || !isUi(plugin)) return;
-    if (plugin.source === 'local') {
+    if (plugin.source === 'local' || plugin.source === 'bundled') {
       try {
-        const result = await window.dex.reloadUnpacked(plugin.id);
+        const result = plugin.source === 'local'
+          ? await window.dex.reloadUnpacked(plugin.id)
+          : await window.dex.reloadBundled(plugin.id);
         if (result.plugins) await refresh(result.plugins);
         if (!result.ok) {
           setStatus(result.message || '重新加载失败', 'error');
@@ -534,5 +536,8 @@ export function mountPlugins({
     reopenIfWatching,
     reloadActive,
     syncPreviewStrip,
+    parkHot: () => views.parkHot(),
+    /** @param {string} id */
+    present: (id) => views.present(id),
   };
 }

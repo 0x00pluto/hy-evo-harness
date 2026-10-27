@@ -5,5 +5,5 @@
   "type": "ui",
   "main": "index.js",
   "uiEntry": "ui/index.html",
-  "description": "示范经 ctx.models 调用文案和生图。独立跑时把 DEX_BUDDY_API_KEY 写进本机 env。"
+  "description": "示范未上架放行、试玩 mock 已买/未买，以及经 ctx.models 调用文案和生图。独立跑时把 DEX_BUDDY_API_KEY 写进本机 env。"
 }

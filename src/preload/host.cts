@@ -56,6 +56,9 @@ const dex: DexHost = {
   reloadUnpacked(id) {
     return invoke('dex:reload-unpacked', id);
   },
+  reloadBundled(id) {
+    return invoke('dex:reload-bundled', id);
+  },
   startPreview(id) {
     return invoke('dex:start-preview', id);
   },

@@ -30,13 +30,6 @@ function setStatus(message, kind) {
 
 mountIcons();
 mountShellToast();
-mountSpendGate({
-  pluginName(pluginId) {
-    const plugin = shell.plugins.find((item) => item.id === pluginId || item.manifestId === pluginId);
-    return plugin ? plugin.displayName : null;
-  },
-});
-const sidebar = mountSidebar();
 
 // 插件列表刷新时可能正停在设置里，设置返回时又要回到刚才的插件。
 // 两边的挂载函数互相还拿不到对方，所以先放桥，挂载完再接上。
@@ -44,6 +37,21 @@ const settingsBridge = {
   async onPluginsChanged() {},
   dismissSurface() {},
 };
+
+const spendGateBridge = {
+  onOpen() {},
+  onClose() {},
+};
+
+mountSpendGate({
+  pluginName(pluginId) {
+    const plugin = shell.plugins.find((item) => item.id === pluginId || item.manifestId === pluginId);
+    return plugin ? plugin.displayName : null;
+  },
+  onOpen() { spendGateBridge.onOpen(); },
+  onClose() { spendGateBridge.onClose(); },
+});
+const sidebar = mountSidebar();
 
 /** @type {ChromeBridge} */
 const chromeBridge = {
@@ -83,6 +91,18 @@ const plugins = mountPlugins({
     })();
   },
 });
+
+/** @type {string | null} */
+let parkedForSpendGate = null;
+spendGateBridge.onOpen = () => {
+  parkedForSpendGate = plugins.parkHot();
+};
+spendGateBridge.onClose = () => {
+  const id = parkedForSpendGate;
+  parkedForSpendGate = null;
+  if (id) plugins.present(id);
+};
+
 const pluginsPage = mountPluginsPage({ shell, plugins, chrome: chromeBridge });
 pluginsPageBridge.sync = pluginsPage.sync;
 pluginsPageBridge.clearStatus = pluginsPage.clearStatus;

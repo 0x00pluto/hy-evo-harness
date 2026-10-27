@@ -27,6 +27,7 @@ import { GATEWAY_REDIRECT_URI } from './gateway-config.ts';
 
 export const PKCE_WAIT_MS = 5 * 60 * 1000;
 export const ACCESS_REFRESH_SKEW_MS = 60 * 1000;
+export const RIGHTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const SLOW_DOWN_EXTRA_SEC = 5;
 
 export interface SecureStore {
@@ -130,6 +131,8 @@ export class GatewaySession {
   private entitlements: EntitlementItem[] = [];
   private shopNames = new Map<string, string>();
   private shopIds = new Set<string>();
+  private shopReady = false;
+  private rightsFetchedAt = 0;
   private login: GatewayLoginProgress = { phase: 'idle' };
   private pkceVerifier: string | null = null;
   private pkceLoginUrl: string | null = null;
@@ -211,6 +214,8 @@ export class GatewaySession {
     this.entitlements = [];
     this.shopNames.clear();
     this.shopIds.clear();
+    this.shopReady = false;
+    this.rightsFetchedAt = 0;
   }
 
   private clearLoginState(): void {
@@ -311,8 +316,11 @@ export class GatewaySession {
         accessToken,
       });
       this.entitlements = parseEntitlements(raw).entitlements;
-    } catch {
-      this.entitlements = [];
+    } catch (err) {
+      if (err instanceof GatewayError && (err.code === 'UNAUTHORIZED' || err.status === 401)) {
+        throw err;
+      }
+      if (!this.shopReady) this.entitlements = [];
     }
     try {
       const raw = await gatewayRequest(this.deps.fetch, this.deps.baseUrl, '/api/shop/catalog', {
@@ -326,9 +334,28 @@ export class GatewaySession {
           .filter((item) => item.name)
           .map((item) => [item.pluginId, item.name as string]),
       );
-    } catch {
-      // 目录失败时保留上次缓存；从未成功过则集合为空，烧钱闸会放行非缓存项。
+      this.shopReady = true;
+      this.rightsFetchedAt = this.now();
+    } catch (err) {
+      if (err instanceof GatewayError && (err.code === 'UNAUTHORIZED' || err.status === 401)) {
+        throw err;
+      }
+      if (this.shopReady) {
+        this.rightsFetchedAt = this.now();
+      }
     }
+  }
+
+  private async ensureRightsCached(options?: { force?: boolean }): Promise<void> {
+    const access = await this.ensureAccess();
+    if (
+      !options?.force
+      && this.shopReady
+      && this.now() - this.rightsFetchedAt < RIGHTS_CACHE_TTL_MS
+    ) {
+      return;
+    }
+    await this.refreshRightsWithAccess(access);
   }
 
   /** 已登录业务请求：补 Bearer，401 时 refresh 再试一次。 */
@@ -343,16 +370,37 @@ export class GatewaySession {
     );
   }
 
-  async shopPluginIds(): Promise<string[]> {
+  async requireSession(): Promise<void> {
     await this.ensureAccess();
-    if (this.shopIds.size === 0 && this.accessToken) {
-      await this.refreshRightsWithAccess(this.accessToken);
-    }
+  }
+
+  async shopPluginIds(): Promise<string[]> {
+    await this.ensureRightsCached();
     return [...this.shopIds];
   }
 
+  /** 买断闸：未过期读内存。从未拉成功过则 ready=false，不得误拦。 */
+  async shopGate(): Promise<{ ready: boolean; pluginIds: string[] }> {
+    try {
+      await this.ensureRightsCached();
+      if (this.shopReady) return { ready: true, pluginIds: [...this.shopIds] };
+      return { ready: false, pluginIds: [] };
+    } catch (err) {
+      if (err instanceof GatewayError && (err.code === 'UNAUTHORIZED' || err.status === 401)) {
+        throw err;
+      }
+      if (this.shopReady) return { ready: true, pluginIds: [...this.shopIds] };
+      return { ready: false, pluginIds: [] };
+    }
+  }
+
+  /** 公开目录尚无限免字段；未定之前恒为空，不得把缺目录项当成限免。 */
+  async waivedPluginIds(): Promise<string[]> {
+    return [];
+  }
+
   async activeEntitlements(): Promise<string[]> {
-    await this.ensureAccess();
+    await this.ensureRightsCached();
     return this.entitlements.filter((item) => item.status === 'active').map((item) => item.pluginId);
   }
 

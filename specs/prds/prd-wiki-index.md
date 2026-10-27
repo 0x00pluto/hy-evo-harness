@@ -18,3 +18,4 @@
 - `specs/prds/prd-00012-host-gateway-session.md`：00012，宿主对接网关登录：dexbuddy:// PKCE、设备码、safeStorage、图标轨与设置账号页展示 whoami/wallet 与退出。工程 partial
 - `specs/prds/prd-00013-prod-gateway-base.md`：00013，线上默认域名与会话复验：未打包与安装包默认 `https://www.dexbuddy.app`，退役旧域名，用线上复验现有 PKCE。工程 accepted
 - `specs/prds/prd-00014-host-chat-egress.md`：00014，插件经宿主调用线上模型：OpenAI 文案、Replicate input 生图、清单 id 盖章与有限买断拦截；积分页已购插件与购买积分。工程 accepted
+- `specs/prds/prd-00015-plugin-access-check.md`：00015，插件 SDK（dex-buddy-sdk.js，1.0.0）无参买断校验：工作台先登录再买断，不在商城则默认放行，独立跑直接通过；文案/生图未买断弹框作兜底。工程 backlog

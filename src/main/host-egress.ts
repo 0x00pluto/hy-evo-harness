@@ -1,5 +1,5 @@
 /**
- * 插件经宿主调用网关：盖清单 id、有限买断闸、报价后再转发。
+ * 插件经宿主调用网关：盖清单 id、先登录再买断再报价、再转发。
  * 文案对齐 OpenAI；生图 input 对齐 Replicate 字段名。
  */
 
@@ -29,17 +29,32 @@ export function unavailableHostModels(message = '网关未就绪'): HostModels {
   };
 }
 
+export function unavailableRequireEntitlement(message = '网关未就绪'): () => Promise<void> {
+  return async () => {
+    throw new GatewayError('UNAUTHORIZED', message, 401);
+  };
+}
+
 export interface HostModelsRequestInit {
   method: 'GET' | 'POST';
   body?: unknown;
   headers?: Record<string, string>;
 }
 
+export interface ShopGate {
+  /** false：本次目录失败，买断闸放行，不得拿上一份缓存来拦。 */
+  ready: boolean;
+  pluginIds: Iterable<string>;
+}
+
 export interface HostModelsDeps {
   pluginId: string;
   request: (path: string, init: HostModelsRequestInit) => Promise<unknown>;
-  shopPluginIds: () => Promise<Iterable<string>>;
+  requireSession: () => Promise<void>;
+  shopGate: () => Promise<ShopGate>;
   activeEntitlements: () => Promise<Iterable<string>>;
+  /** 目录里被平台标为限免的 id。字段未上线前恒为空。 */
+  waivedPluginIds?: () => Promise<Iterable<string>>;
   onBlocked?: (payload: SpendBlockedPayload) => void;
   readFile?: (filePath: string) => Buffer;
   writeFile?: (filePath: string, data: Buffer) => void;
@@ -131,13 +146,70 @@ function quoteBodyForChat(body: unknown): Record<string, unknown> {
   return quote;
 }
 
-export async function assertMaySpend(deps: HostModelsDeps): Promise<void> {
-  const shop = new Set(await deps.shopPluginIds());
+export async function assertEntitled(deps: HostModelsDeps): Promise<void> {
+  await deps.requireSession();
+  const gate = await deps.shopGate();
+  if (!gate.ready) return;
+  const shop = new Set(gate.pluginIds);
   if (!shop.has(deps.pluginId)) return;
+  const waived = new Set(deps.waivedPluginIds ? await deps.waivedPluginIds() : []);
+  if (waived.has(deps.pluginId)) return;
   const owned = new Set(await deps.activeEntitlements());
   if (!owned.has(deps.pluginId)) {
     throw new GatewayError('NOT_ENTITLED', '尚未买断该插件', 403);
   }
+}
+
+const PLAYGROUND_ID = 'models-playground';
+
+function playgroundMock(
+  pluginId: string,
+  args: unknown[],
+): { pluginId: string; mockOwned?: boolean } | null {
+  if (pluginId !== PLAYGROUND_ID) return null;
+  const record = asRecord(args[0]);
+  if (!record) return null;
+  const id = typeof record.pluginId === 'string' ? record.pluginId.trim() : '';
+  if (!id) return null;
+  const mockOwned = record.mockOwned === true ? true : record.mockOwned === false ? false : undefined;
+  return { pluginId: id, mockOwned };
+}
+
+/** 无参。试玩可传 mock 选项；其它插件传入的 id 无效，闭包只用当前清单 id。 */
+export function createRequireEntitlement(deps: HostModelsDeps): (...args: unknown[]) => Promise<void> {
+  return async (...args: unknown[]) => {
+    const mock = playgroundMock(deps.pluginId, args);
+    if (!mock) {
+      await spendOrThrow(deps, () => assertEntitled(deps));
+      return;
+    }
+    const next: HostModelsDeps = {
+      ...deps,
+      pluginId: mock.pluginId,
+      onBlocked: deps.onBlocked
+        ? (payload) => {
+            deps.onBlocked?.({ ...payload, pluginId: deps.pluginId });
+          }
+        : undefined,
+    };
+    if (mock.mockOwned === true || mock.mockOwned === false) {
+      const owned = mock.mockOwned;
+      next.shopGate = async () => {
+        const gate = await deps.shopGate();
+        const pluginIds = [...gate.pluginIds];
+        if (!pluginIds.includes(mock.pluginId)) pluginIds.push(mock.pluginId);
+        return { ready: true, pluginIds };
+      };
+      next.activeEntitlements = async () => {
+        const current = [...await deps.activeEntitlements()];
+        if (owned) {
+          return current.includes(mock.pluginId) ? current : [...current, mock.pluginId];
+        }
+        return current.filter((id) => id !== mock.pluginId);
+      };
+    }
+    await spendOrThrow(next, () => assertEntitled(next));
+  };
 }
 
 async function quoteOrThrow(
@@ -219,7 +291,7 @@ export function createHostModels(deps: HostModelsDeps): HostModels {
       completions: {
         async create(body, options) {
           return spendOrThrow(deps, async () => {
-            await assertMaySpend(deps);
+            await assertEntitled(deps);
             await quoteOrThrow(deps, quoteBodyForChat(body), options);
             return deps.request('/v1/chat/completions', {
               method: 'POST',
@@ -233,7 +305,7 @@ export function createHostModels(deps: HostModelsDeps): HostModels {
     images: {
       async generate(input: HostImageGenerateInput, options?: HostModelsCallOptions): Promise<HostImageGenerateResult> {
         return spendOrThrow(deps, async () => {
-          await assertMaySpend(deps);
+          await assertEntitled(deps);
           const model = typeof input?.model === 'string' ? input.model.trim() : '';
           const outputPath = typeof input?.outputPath === 'string' ? input.outputPath.trim() : '';
           const record = asRecord(input?.input);
