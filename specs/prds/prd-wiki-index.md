@@ -19,3 +19,4 @@
 - `specs/prds/prd-00013-prod-gateway-base.md`：00013，线上默认域名与会话复验：未打包与安装包默认 `https://www.dexbuddy.app`，退役旧域名，用线上复验现有 PKCE。工程 accepted
 - `specs/prds/prd-00014-host-chat-egress.md`：00014，插件经宿主调用线上模型：OpenAI 文案、Replicate input 生图、清单 id 盖章与有限买断拦截；积分页已购插件与购买积分。工程 accepted
 - `specs/prds/prd-00015-plugin-access-check.md`：00015，插件 SDK（dex-buddy-sdk.js，1.0.0）无参买断校验：工作台先登录再买断，不在商城则默认放行，独立跑直接通过；文案/生图未买断弹框作兜底。工程 accepted
+- `specs/prds/prd-00016-stale-installed-plugin.md`：00016，市场装过且当前插件中心目录没有这个 id 的本机目录是孤儿；插件页标出并可删除该目录，新 id 安装与云端已购不动。工程 backlog

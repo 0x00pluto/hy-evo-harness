@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isPluginId, readManifestFile } from './manifest.ts';
+import { deleteOrigin } from './plugin-origins.ts';
 import type { ServiceRegistry } from './registry.ts';
 import type { PluginSummary } from './types.ts';
 import { extractZip, listZipEntryNames } from './zip-extract.ts';
@@ -53,17 +54,20 @@ export async function uninstallInstalledPlugin(options: {
   registry: ServiceRegistry;
   id: string;
   userPluginsDir: string;
+  originsFile?: string;
 }): Promise<PluginSummary[]> {
-  const plugin = options.registry.getPlugin(options.id);
-  if (!plugin || plugin.source !== 'installed') {
+  const row = options.registry.getPluginList().find((plugin) => plugin.id === options.id);
+  if (!row || row.source !== 'installed') {
     throw new Error('只能卸载用户安装的插件');
   }
-  const dest = resolveChildDir(options.userPluginsDir, options.id);
+  const dest = resolveInstalledRoot(options.userPluginsDir, row.rootPath);
+  const dirName = path.basename(dest);
   await options.registry.unloadPlugin(options.id);
-  options.registry.discardRuntime(options.id);
   fs.rmSync(dest, { recursive: true, force: true });
   // 目录已经删掉才动配置。删除失败时上面的 rmSync 会抛出，配置块留着。
-  options.registry.deletePluginSettings(options.id);
+  options.registry.discardRuntime(dirName);
+  options.registry.deletePluginSettings(dirName);
+  if (options.originsFile) deleteOrigin(options.originsFile, dirName);
   return options.registry.getPluginList();
 }
 
@@ -152,10 +156,14 @@ function resolveChildDir(parentDir: string, id: string): string {
   if (!isPluginId(id)) {
     throw new Error('插件 id 无效');
   }
+  return resolveInstalledRoot(parentDir, path.join(parentDir, id));
+}
+
+function resolveInstalledRoot(parentDir: string, rootPath: string): string {
   const root = path.resolve(parentDir);
-  const dest = path.resolve(root, id);
+  const dest = path.resolve(rootPath);
   const relative = path.relative(root, dest);
-  if (relative.startsWith('..') || path.isAbsolute(relative) || relative.includes(path.sep)) {
+  if (relative.startsWith('..') || path.isAbsolute(relative) || relative.includes(path.sep) || relative === '') {
     throw new Error('插件目录越界');
   }
   return dest;

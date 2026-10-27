@@ -86,6 +86,9 @@ const dex: DexHost = {
   onPluginSilentUpdate(callback) {
     return onPush('dex:plugin-silent-update', callback);
   },
+  onPluginList(callback) {
+    return onPush('dex:plugin-list', callback);
+  },
   settingsCatalog() {
     return invoke('dex:settings-catalog');
   },

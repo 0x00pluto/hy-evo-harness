@@ -45,6 +45,8 @@ export interface PluginSummary {
   catalogError?: string;
   runtimeError?: string;
   installPrompt?: string;
+  /** 市场装过、当前插件中心目录已无此 id 的本机安装。 */
+  orphan?: true;
 }
 
 export interface DexResult {
@@ -257,6 +259,7 @@ export interface DexHost {
   installCatalogPlugin(id: string): Promise<DexResult>;
   setWatchingPlugin(id: string | null): void;
   onPluginSilentUpdate(callback: (payload: SilentUpdateEvent) => void): () => void;
+  onPluginList(callback: (payload: PluginSummary[]) => void): () => void;
   settingsCatalog(): Promise<SettingsPluginView[]>;
   savePluginSettings(id: string, draft: unknown): Promise<SettingsSaveResult>;
   revealPluginSecret(id: string, key: string): Promise<RevealSecretResult>;

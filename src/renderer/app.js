@@ -151,6 +151,12 @@ function dismissBoot() {
   window.setTimeout(done, 220);
 }
 
+if (window.dex.onPluginList) {
+  window.dex.onPluginList((list) => {
+    void plugins.refresh(list);
+  });
+}
+
 try {
   await plugins.refresh();
 } catch (err) {

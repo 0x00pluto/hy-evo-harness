@@ -175,7 +175,9 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       copy.appendChild(title);
       const meta = document.createElement('span');
       meta.className = 'nav-meta';
-      if (plugin.runtimeError || plugin.previewError) {
+      if (plugin.orphan) {
+        meta.textContent = `${sourceLabel(plugin.source)} · 孤儿`;
+      } else if (plugin.runtimeError || plugin.previewError) {
         meta.textContent = '环境未就绪';
         meta.classList.add('is-danger');
       } else if (plugin.mount === 'preview') {
@@ -446,6 +448,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       : localMenuItems(plugin);
     if (menuItems.length > 0) actions.appendChild(moreMenu(menuItems));
 
+    const orphanDeleteOnly = Boolean(plugin.orphan && plugin.runtimeError);
     const use = document.createElement('button');
     use.type = 'button';
     use.id = 'plugins-use';
@@ -457,7 +460,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       }
       void chrome.usePlugin(plugin.id);
     });
-    if (updates.some((item) => item.id === plugin.id)) {
+    if (!orphanDeleteOnly && updates.some((item) => item.id === plugin.id)) {
       const update = document.createElement('button');
       update.type = 'button';
       update.id = 'plugins-update';
@@ -467,7 +470,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       });
       actions.appendChild(update);
     }
-    if (!plugin.previewError) actions.appendChild(use);
+    if (!plugin.previewError && !orphanDeleteOnly) actions.appendChild(use);
     titleRow.appendChild(actions);
     head.appendChild(titleRow);
     detail.appendChild(head);
@@ -512,7 +515,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     table.className = 'plugin-info';
     const rows = [
       ['类型', plugin.type === 'ui' ? '界面' : '后台'],
-      ['来源', sourceLabel(plugin.source)],
+      ['来源', plugin.orphan ? `${sourceLabel(plugin.source)} · 孤儿` : sourceLabel(plugin.source)],
       ['版本', plugin.version],
     ];
     if (plugin.developer) rows.push(['开发者', plugin.developer]);
@@ -752,24 +755,27 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       updates = [];
       marketError = err instanceof Error ? err.message : '无法读取插件中心';
     }
+    try {
+      await plugins.refresh(await window.dex.listPlugins());
+    } catch {
+      // 目录已经画完；列表等推送或下次打开再对。
+    }
     const session = chrome.session();
     if (session && session.surface === 'plugins') sync(session);
   }
 
   /** @param {string} pluginId */
   async function uninstallPlugin(pluginId) {
-    const plugin = localPlugin(pluginId);
-    const name = plugin ? plugin.displayName : pluginId;
     plugins.releaseView(pluginId);
     const result = await window.dex.uninstall(pluginId);
     if (!result.ok) {
-      showToast(result.message || '卸载失败', 'error');
+      setStatus(result.message || '卸载失败', 'error');
       await plugins.refresh(result.plugins);
       return;
     }
     if (shell.activeId === pluginId) shell.activeId = null;
     await plugins.refresh(result.plugins);
-    showToast(`「${name}」已卸载`, 'ok');
+    setStatus('插件已卸载', 'ok');
     chrome.enterPlugins();
     await refreshCatalog();
   }

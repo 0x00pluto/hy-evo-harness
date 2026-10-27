@@ -11,6 +11,13 @@ import {
   type CommandRunner,
   type RuntimeTools,
 } from './plugin-runtime.ts';
+import { INSTALLED_PLUGINS_DIR_NAME } from './host-data.ts';
+import {
+  listInstalledPluginDirNames,
+  listOrphans,
+  type PluginCatalogSnapshot,
+  type PluginOriginRecord,
+} from './plugin-origins.ts';
 import { PluginSettingsStore, isSettingsCandidate, type SettingsPluginView, type SettingsSaveResult } from './plugin-settings.ts';
 import { resolvePluginFile } from './protocol.ts';
 import { unavailableHostModels, unavailableRequireEntitlement } from './host-egress.ts';
@@ -103,6 +110,9 @@ export class ServiceRegistry {
   private onRuntimeProgress: RuntimeHost['onProgress'];
   private lookupTool: RuntimeHost['lookup'];
   private originChannel: (id: string) => 'market' | 'file' | undefined = () => undefined;
+  private originsLookup: () => Record<string, PluginOriginRecord> = () => ({});
+  private catalogSnapshot: PluginCatalogSnapshot = null;
+  private installedPluginsDir: string | null = null;
   private modelsForPlugin: ((pluginId: string) => HostModels) | null = null;
   private requireEntitlementForPlugin: ((pluginId: string) => () => Promise<void>) | null = null;
   readonly logger: Logger;
@@ -120,6 +130,18 @@ export class ServiceRegistry {
   /** 已安装插件的市场或压缩包记录。列表返回时按清单 id 查。 */
   setOriginLookup(lookup: (id: string) => 'market' | 'file' | undefined): void {
     this.originChannel = lookup;
+  }
+
+  setOriginsLookup(lookup: () => Record<string, PluginOriginRecord>): void {
+    this.originsLookup = lookup;
+  }
+
+  setCatalogSnapshot(snapshot: PluginCatalogSnapshot): void {
+    this.catalogSnapshot = snapshot;
+  }
+
+  setInstalledPluginsDir(dir: string): void {
+    this.installedPluginsDir = dir;
   }
 
   /** 按清单 id 创建 ctx.models。未设置时调用会报网关未就绪。 */
@@ -349,7 +371,73 @@ export class ServiceRegistry {
     const failed = Array.from(this.problems.values())
       .filter((problem) => !this.plugins.has(problem.registryId))
       .map((problem) => summarizeProblem(problem));
-    return loaded.concat(failed).map((plugin) => this.withOrigin(plugin));
+    const listed = loaded.concat(failed).map((plugin) => this.withOrigin(plugin));
+    return this.withOrphans(listed);
+  }
+
+  private resolveInstalledPluginsDir(): string | null {
+    if (this.installedPluginsDir) return this.installedPluginsDir;
+    if (this.userData) return path.join(this.userData, INSTALLED_PLUGINS_DIR_NAME);
+    return null;
+  }
+
+  private orphanIds(): string[] {
+    const dir = this.resolveInstalledPluginsDir();
+    if (!dir) return [];
+    return listOrphans(listInstalledPluginDirNames(dir), this.originsLookup(), this.catalogSnapshot);
+  }
+
+  private withOrphans(listed: PluginSummary[]): PluginSummary[] {
+    const orphanIds = this.orphanIds();
+    if (orphanIds.length === 0) return listed;
+    const orphanSet = new Set(orphanIds);
+    const marked = listed.map((plugin) => {
+      if (plugin.source !== 'installed') return plugin;
+      if (!orphanSet.has(path.basename(plugin.rootPath))) return plugin;
+      return { ...plugin, orphan: true as const };
+    });
+    const seen = new Set(
+      marked
+        .filter((plugin) => plugin.source === 'installed')
+        .map((plugin) => path.basename(plugin.rootPath)),
+    );
+    const dir = this.resolveInstalledPluginsDir();
+    if (!dir) return marked;
+    const extras: PluginSummary[] = [];
+    for (const id of orphanIds) {
+      if (seen.has(id)) continue;
+      extras.push(this.summarizeOrphanDirectory(dir, id));
+    }
+    return marked.concat(extras);
+  }
+
+  private summarizeOrphanDirectory(installedDir: string, dirName: string): PluginSummary {
+    const rootPath = path.resolve(installedDir, dirName);
+    const summary: PluginSummary = {
+      id: dirName,
+      manifestId: dirName,
+      displayName: dirName,
+      version: '',
+      type: 'headless',
+      uiUrl: null,
+      source: 'installed',
+      rootPath,
+      hasSettings: false,
+      runtimeError: '未能加载',
+      originChannel: 'market',
+      orphan: true,
+    };
+    try {
+      const manifest = readManifestFile(rootPath);
+      summary.displayName = manifest.displayName;
+      summary.manifestId = manifest.id;
+      summary.version = manifest.version;
+      summary.type = manifest.type;
+      if (manifest.description) summary.description = manifest.description;
+    } catch {
+      // 清单读不出时显示名就是目录名。
+    }
+    return summary;
   }
 
   private withOrigin(plugin: PluginSummary): PluginSummary {

@@ -96,6 +96,7 @@ export type DexSendMap = {
 export type DexPushMap = {
   'dex:runtime-progress': RuntimeProgress;
   'dex:plugin-silent-update': SilentUpdateEvent;
+  'dex:plugin-list': PluginSummary[];
   'updater:status': UpdaterStatusPayload;
   'dex:session': GatewaySessionView;
   'dex:spend-blocked': SpendBlockedPayload;

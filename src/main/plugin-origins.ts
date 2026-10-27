@@ -49,6 +49,49 @@ export function deleteOrigin(filePath: string, id: string): void {
   writeOrigins(filePath, origins);
 }
 
+export type PluginCatalogSnapshot =
+  | null
+  | { ok: false }
+  | { ok: true; plugins: Array<{ id: string }> };
+
+export function isBackupOrJunkDirName(name: string): boolean {
+  return name.startsWith('.') || name === '__MACOSX';
+}
+
+export function listInstalledPluginDirNames(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  const ids: string[] = [];
+  for (const name of fs.readdirSync(dir)) {
+    if (isBackupOrJunkDirName(name)) continue;
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(path.join(dir, name));
+    } catch {
+      continue;
+    }
+    if (stat.isDirectory()) ids.push(name);
+  }
+  return ids;
+}
+
+export function listOrphans(
+  dirNames: string[],
+  origins: Record<string, PluginOriginRecord>,
+  catalog: PluginCatalogSnapshot,
+): string[] {
+  if (!catalog || catalog.ok !== true) return [];
+  const catalogIds = new Set(catalog.plugins.map((item) => item.id));
+  const orphans: string[] = [];
+  for (const name of dirNames) {
+    if (isBackupOrJunkDirName(name)) continue;
+    const origin = origins[name];
+    if (!origin || origin.channel !== 'market') continue;
+    if (catalogIds.has(name)) continue;
+    orphans.push(name);
+  }
+  return orphans.sort(comparePluginId);
+}
+
 export function marketUpdates(options: {
   catalog: PluginRelease[];
   origins: Record<string, PluginOriginRecord>;

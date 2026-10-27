@@ -26,9 +26,15 @@ import { installPluginZip, uninstallInstalledPlugin } from './install.ts';
 import { handleInvoke, onSend } from './ipc.ts';
 import { LocalSession } from './local-session.ts';
 import { isHttpUrl } from './manifest.ts';
-import { pluginInstallPath, type PluginRelease } from './plugin-catalog.ts';
+import { pluginInstallPath, type PluginCatalog, type PluginRelease } from './plugin-catalog.ts';
 import { downloadVerifiedZip, fetchPluginCatalog, findRelease, installCatalogRelease } from './plugin-market.ts';
-import { deleteOrigin, marketUpdates, readOrigins, writeOrigin } from './plugin-origins.ts';
+import {
+  listInstalledPluginDirNames,
+  marketUpdates,
+  readOrigins,
+  writeOrigin,
+  type PluginCatalogSnapshot,
+} from './plugin-origins.ts';
 import {
   createInstallLock,
   createPluginSilentUpdates,
@@ -139,20 +145,26 @@ async function loadAllPlugins(): Promise<void> {
 }
 
 function installedPluginDirectoryIds(dir: string): string[] {
-  if (!fs.existsSync(dir)) return [];
-  const ids: string[] = [];
-  for (const name of fs.readdirSync(dir)) {
-    // 覆盖安装的备份目录以点开头，不是已安装插件。
-    if (name.startsWith('.')) continue;
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(path.join(dir, name));
-    } catch {
-      continue;
-    }
-    if (stat.isDirectory()) ids.push(name);
+  return listInstalledPluginDirNames(dir);
+}
+
+function applyCatalogSnapshot(catalog: PluginCatalogSnapshot): void {
+  registry.setCatalogSnapshot(catalog);
+  const plugins = registry.getPluginList();
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('dex:plugin-list', plugins);
   }
-  return ids;
+}
+
+async function loadPluginCatalog(): Promise<PluginCatalog> {
+  try {
+    const catalog = await fetchPluginCatalog();
+    applyCatalogSnapshot({ ok: true, plugins: catalog.plugins });
+    return catalog;
+  } catch (err) {
+    applyCatalogSnapshot({ ok: false });
+    throw err;
+  }
 }
 
 function dropStaleExampleSettings(): void {
@@ -335,7 +347,7 @@ async function installKnownRelease(release: PluginRelease): Promise<SilentInstal
 
 async function installCatalogById(id: string): Promise<DexResult> {
   try {
-    const catalog = await fetchPluginCatalog();
+    const catalog = await loadPluginCatalog();
     const release = findRelease(catalog, id);
     return installKnownRelease(release);
   } catch (err) {
@@ -356,7 +368,7 @@ function startSilentPluginUpdates(): void {
   }
   silentUpdates = createPluginSilentUpdates({
     async fetchCatalog() {
-      const catalog = await fetchPluginCatalog();
+      const catalog = await loadPluginCatalog();
       return { plugins: catalog.plugins };
     },
     readInstalled() {
@@ -654,7 +666,7 @@ function registerIpc(): void {
 
   handleInvoke('dex:plugin-catalog', async () => {
     try {
-      const catalog = await fetchPluginCatalog();
+      const catalog = await loadPluginCatalog();
       const updates = marketUpdates({
         catalog: catalog.plugins,
         origins: readOrigins(pluginOriginsFile()),
@@ -719,8 +731,8 @@ function registerIpc(): void {
           registry,
           id,
           userPluginsDir: installedPluginsDir(),
+          originsFile: pluginOriginsFile(),
         });
-        deleteOrigin(pluginOriginsFile(), id);
         return { ok: true, plugins };
       } catch (err) {
         return {
@@ -830,6 +842,8 @@ app.whenReady().then(async () => {
   registerDexbuddyProtocolClient();
   registry.setSettings(new PluginSettingsStore(pluginSettingsFile(), registry.logger));
   registry.setOriginLookup((id) => readOrigins(pluginOriginsFile())[id]?.channel);
+  registry.setOriginsLookup(() => readOrigins(pluginOriginsFile()));
+  registry.setInstalledPluginsDir(installedPluginsDir());
   registry.setRuntimeHost({
     userData: app.getPath('userData'),
     onProgress: (event) => {

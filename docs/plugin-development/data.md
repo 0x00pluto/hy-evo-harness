@@ -51,6 +51,8 @@ userData/
 
 卸载已安装的插件时，Dex Buddy 删掉安装目录、整个 `plugin-runtime/<插件 id>/`，并删掉 `plugin-settings.json` 里这一插件的配置。`plugin-data/<插件 id>/` 和全机的 `runtimes/` 留下。再次安装同一 id 时，导出和数据库还在，依赖按锁文件重装。
 
+市场换了清单 id 之后，本机按旧 id 装过、来源仍是市场、且当前插件中心目录已经没有这个 id 的目录，会在插件页标成孤儿，可以删除。删除规则与卸载相同：安装目录、运行环境和该段设置去掉，`plugin-data` 留下。新 id 的安装不动。
+
 `dispose` 用来关掉进程、数据库连接，不要在里面删除 `plugin-data` 或 `plugin-runtime`。
 
 ## 打包
