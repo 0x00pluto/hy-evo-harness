@@ -2,15 +2,19 @@
 name: prd-00015-plugin-access-check
 sequence: 15
 description: 插件 SDK（dex-buddy-sdk.js，1.0.0）提供无参买断校验：工作台先登录再查买断，不在商城则默认放行；独立跑直接通过；文案与生图未买断弹框作兜底。
-status: backlog
+status: accepted
 created: 2026-10-27T03:25:58Z
+last_accepted_at: 2026-10-27T05:56:01Z
+accepted_commit: 892f7b2
+accepted_branch: dev
+accepted_scope: R0,R1
 ---
 
 # PRD: 插件主动买断校验
 
 | 属性 | 值 |
 |---|---|
-| 状态 | backlog |
+| 状态 | 工程：accepted，见文末「工程验收状态」 |
 | 范围 | Electron 宿主注入无参买断函数；可拷贝 SDK 改名为 `dex-buddy-sdk.js` / `dex_buddy_sdk.py` 并带版本号；修正模型出口拦截顺序；平台限免与未上架默认放行。不改网关代码，不发 npm / PyPI |
 | 关联文档 | `specs/prds/prd-00014-host-chat-egress.md`、`docs/plugin-development/models.md`、`docs/plugin-development/snippets/`、`docs/DESIGN.md`、`docs/memo/phase1-billing.md` |
 | 对 00014 的修订 | 保留文案 / 生图未买断弹框；该路径改为先登录、再买断、再积分。新增作者可提前调用的买断确认。助手改名为插件 SDK |
@@ -384,3 +388,67 @@ stateDiagram-v2
 |---|---|
 | 2026-10-27 | 初稿。作者函数只做登录与买断；模型出口保留未买断弹框并修正未登录优先；id 由宿主填写；限免两条路径跳过买断。旧安装目录不在本文，见备忘 |
 | 2026-10-27 | 未上架默认放行；助手改名为 `dex-buddy-sdk.js` / `dex_buddy_sdk.py`，版本 1.0.0；独立跑校验直接通过；Python 同名但真闸在 Node；不发包装包。文档示例改为从 SDK require |
+
+## 12. 工程验收状态
+
+> 由 `/team:prd-accept` 维护；勿手工编造「通过」。最后更新：2026-10-27T05:56:01Z，dev@892f7b2，范围：R0,R1。
+
+### 总览
+
+| 项 | 值 |
+|---|---|
+| 工程状态 | accepted |
+| 验收判定 | 通过 |
+| 最近验收 | 2026-10-27T05:56:01Z |
+| 代码提交 | HEAD `892f7b2` |
+
+摘要：
+
+1. 宿主注入无参 `requireEntitlement`；SDK 工作台转交、独立跑直接通过；清单 id 由宿主盖章，外人传入无效。
+2. 作者函数与模型出口顺序均为未登录 → 未买断 →（仅模型出口）积分不够；未上架放行；spend-gate 三态仍由壳绘制。
+3. 限免钩子已接、线上字段未上线前恒为空，缺目录项不当限免；注入限免时两条路径跳过买断、登录仍拦。
+4. 母版改名为 `dex-buddy-sdk.js` / `dex_buddy_sdk.py`，`SDK_VERSION` / `__version__` 均为 `1.0.0`；`models.md` 与 README 用新名字。
+5. 正文不定义 Release 1，标为范围外。
+
+### Release 交付
+
+| Release | 状态 | 说明 |
+|---|---|---|
+| R0 | 通过 | 作者函数、未上架、模型出口顺序、限免钩子、SDK 改名与文档均有证据 |
+| R1 | 范围外 | 正文写明本文不定义 Release 1 |
+
+### 功能验收清单（Agent 优先读此表）
+
+| ID | 能力摘要 | Release | 状态 | 证据 |
+|---|---|---|---|---|
+| F01 | 宿主注入无参买断函数；SDK `requireEntitlement(ctx)` 工作台转交、独立跑通过 | R0 | 通过 | `src/main/registry.ts` `setRequireEntitlement`；`src/main/host-egress.ts` `createRequireEntitlement`；`test/dex-buddy-sdk.test.ts`「转交宿主且不传 id」「独立跑直接通过」 |
+| F02 | 清单 id 由宿主填入；不在商城目录则买断放行 | R0 | 通过 | `test/registry.test.ts`「ctx.models 与 requireEntitlement 用清单 id 创建」；`test/host-egress.test.ts`「不在商城的清单 id 只验余额，不弹买断」；`assertEntitled` 在 `shop.has` 为假时 return |
+| F03 | 模型出口保留未买断弹框；顺序未登录 → 未买断 → 积分不够 | R0 | 通过 | `createHostModels` 先 `assertEntitled` 再 `quoteOrThrow`；`test/host-egress.test.ts`「未登录烧模型时通知 UNAUTHORIZED」「商城插件未买断时不转发」「余额不够时不转发」；`src/renderer/spend-gate.js` |
+| F04 | 限免时两条路径跳过买断；字段未上线前钩子为空，缺目录项不当限免 | R0 | 通过 | `gateway-session.ts` `waivedPluginIds` 恒 `[]`；`test/host-egress.test.ts`「注入限免跳过买断，未登录仍先拦住」 |
+| F05 | 母版 `dex-buddy-sdk.js` / `dex_buddy_sdk.py` 版本 1.0.0；文档示例从 SDK require | R0 | 通过 | snippets 与 `plugins/models-playground/lib/` 同一份；`test/dex-buddy-sdk.test.ts` `SDK_VERSION === '1.0.0'`；`docs/plugin-development/models.md`、`README.md` |
+| F06 | 未登录作者函数 `UNAUTHORIZED`，不查买断 | R0 | 通过 | `test/host-egress.test.ts`「未登录调用作者函数不查买断」 |
+| F07 | 已登录、在商城、未买断：作者函数 `NOT_ENTITLED`，不报价 | R0 | 通过 | 「已登录未买断时作者函数 NOT_ENTITLED 且不报价」 |
+| F08 | 作者函数不看积分 | R0 | 通过 | 「作者函数不看积分」 |
+| F09 | 正式插件传入的 pluginId 无效，仍按当前清单 id | R0 | 通过 | 「作者函数忽略传入的插件 id」。试玩 `models-playground` 可传 mock，不进正式合同 |
+| F10 | Python `require_entitlement()` 直接返回 | R0 | 通过 | `test/dex-buddy-sdk.test.ts`「Python SDK 能被编译且 require_entitlement 直接通过」 |
+| F11 | 目录失败则买断放行，仍要登录 | R0 | 通过 | 「目录失败则买断放行后再报价」 |
+| F12 | `list` / `quote` 不弹买断框 | R0 | 通过 | 「list 与 quote 抛 UNAUTHORIZED 不通知壳」；与 00014 相同，买断闸只在 chat / images 与作者函数 |
+| R1 | Release 1 | R1 | 范围外 | 正文写明本文不定义 Release 1 |
+
+### 未完成与遗留
+
+- 限免目录字段名见开放项；接上之前 `waivedPluginIds` 保持空数组。
+- 外部插件仓（小红书等）改接 `requireEntitlement` 不在本仓（PRD 非目标）。
+- 模型试玩的「检测已买断 / 未买断」是本仓示例 mock，不改变正式作者无参合同。
+- 不把买断挪到网关；不发 npm / PyPI。
+
+### 质量检查
+
+| 检查项 | 状态 |
+|---|---|
+| pnpm test | 通过（217） |
+| 文档同步（README / docs/doc_index.md） | 通过（`models.md`、snippets 新文件名、DESIGN、plugin-development README / ship 已登记） |
+
+---
+统计：通过 12 / 部分 0 / 未实现 0 / 范围外 1
+
