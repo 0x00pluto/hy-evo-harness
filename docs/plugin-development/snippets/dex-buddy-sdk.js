@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 /**
@@ -38,16 +39,27 @@ function missingKey() {
 }
 
 /**
+ * @typedef {{
+ *   list: () => Promise<unknown>;
+ *   billing: { quote: (body?: unknown, options?: { idempotencyKey?: string }) => Promise<unknown> };
+ *   chat: { completions: { create: (body?: unknown, options?: { idempotencyKey?: string }) => Promise<unknown> } };
+ *   images: { generate: (input?: unknown, options?: { idempotencyKey?: string }) => Promise<unknown> };
+ * }} HostModels
+ */
+
+/**
  * @param {unknown} ctx
+ * @returns {HostModels | null}
  */
 function hostModels(ctx) {
-  const models = ctx && typeof ctx === 'object' ? /** @type {{ models?: { chat?: { completions?: { create?: unknown } } } }} */ (ctx).models : null;
+  const models = ctx && typeof ctx === 'object' ? /** @type {{ models?: HostModels }} */ (ctx).models : null;
   const create = models && models.chat && models.chat.completions && models.chat.completions.create;
-  return typeof create === 'function' ? models : null;
+  return typeof create === 'function' && models ? models : null;
 }
 
 /**
- * @param {string | undefined} raw
+ * @param {unknown} raw
+ * @returns {string}
  */
 function trimString(raw) {
   return typeof raw === 'string' ? raw.trim() : '';
@@ -112,6 +124,7 @@ function mimeFromPath(filePath) {
 /**
  * @param {unknown} ctx
  * @param {Record<string, unknown> | null} [options]
+ * @returns {HostModels}
  */
 function bindModels(ctx, options) {
   const host = hostModels(ctx);
@@ -137,6 +150,7 @@ async function requireEntitlement(ctx, options) {
 
 /**
  * @param {Record<string, unknown> | null | undefined} options
+ * @returns {HostModels}
  */
 function createStandaloneModels(options) {
   const env = /** @type {NodeJS.ProcessEnv} */ ((options && options.env) || process.env);
@@ -157,6 +171,7 @@ function createStandaloneModels(options) {
   async function request(requestPath, init) {
     const key = trimString(env.DEX_BUDDY_API_KEY);
     if (!key) throw missingKey();
+    /** @type {Record<string, string>} */
     const headers = {
       Accept: 'application/json',
       Authorization: `Bearer ${key}`,
@@ -191,10 +206,14 @@ function createStandaloneModels(options) {
 
   /**
    * @param {{ idempotencyKey?: string }} [callOptions]
+   * @returns {Record<string, string>}
    */
   function extraHeaders(callOptions) {
     const key = callOptions && typeof callOptions.idempotencyKey === 'string' ? callOptions.idempotencyKey.trim() : '';
-    return key ? { 'Idempotency-Key': key } : {};
+    /** @type {Record<string, string>} */
+    const headers = {};
+    if (key) headers['Idempotency-Key'] = key;
+    return headers;
   }
 
   /**
@@ -239,6 +258,10 @@ function createStandaloneModels(options) {
       return request('/v1/models', { method: 'GET' });
     },
     billing: {
+      /**
+       * @param {unknown} body
+       * @param {{ idempotencyKey?: string }} [callOptions]
+       */
       quote(body, callOptions) {
         return request('/v1/billing/quote', {
           method: 'POST',
@@ -249,6 +272,10 @@ function createStandaloneModels(options) {
     },
     chat: {
       completions: {
+        /**
+         * @param {unknown} body
+         * @param {{ idempotencyKey?: string }} [callOptions]
+         */
         create(body, callOptions) {
           return request('/v1/chat/completions', {
             method: 'POST',
@@ -260,22 +287,31 @@ function createStandaloneModels(options) {
     },
     images: {
       /**
-       * @param {{ model: string; input: { prompt: string; aspect_ratio?: string; input_images?: string[] }; outputPath: string }} input
+       * @param {unknown} input
        * @param {{ idempotencyKey?: string }} [callOptions]
        */
       async generate(input, callOptions) {
-        const model = trimString(input && input.model);
-        const outputPath = trimString(input && input.outputPath);
-        const record = input && input.input && typeof input.input === 'object' ? input.input : {};
+        const payload = input && typeof input === 'object' ? /** @type {Record<string, unknown>} */ (input) : {};
+        const model = trimString(payload.model);
+        const outputPath = trimString(payload.outputPath);
+        const record = payload.input && typeof payload.input === 'object'
+          ? /** @type {Record<string, unknown>} */ (payload.input)
+          : {};
         const prompt = trimString(record.prompt);
         if (!model) throw new DexModelsError('INVALID_BODY', '缺少 model', 400);
         if (!prompt) throw new DexModelsError('INVALID_BODY', '缺少 prompt', 400);
         if (!outputPath || !path.isAbsolute(outputPath)) {
           throw new DexModelsError('INVALID_BODY', 'outputPath 必须是绝对路径', 400);
         }
-        const localImages = Array.isArray(record.input_images)
-          ? record.input_images.filter((item) => typeof item === 'string' && item.trim() !== '').map((item) => item.trim())
-          : [];
+        const rawImages = record.input_images;
+        /** @type {string[]} */
+        const localImages = [];
+        if (Array.isArray(rawImages)) {
+          for (const item of rawImages) {
+            if (typeof item === 'string' && item.trim() !== '') localImages.push(item.trim());
+          }
+        }
+        /** @type {string[]} */
         const fileIds = [];
         for (let i = 0; i < localImages.length; i += 1) {
           const fileKey = callOptions && callOptions.idempotencyKey
@@ -283,6 +319,7 @@ function createStandaloneModels(options) {
             : callOptions;
           fileIds.push(await uploadReference(localImages[i], fileKey));
         }
+        /** @type {{ model: string; prompt: string; aspect_ratio?: string; fileIds?: string[] }} */
         const generateBody = { model, prompt };
         if (trimString(record.aspect_ratio)) generateBody.aspect_ratio = trimString(record.aspect_ratio);
         if (fileIds.length > 0) generateBody.fileIds = fileIds;
@@ -371,8 +408,11 @@ function childEnv(ctx, baseEnv) {
   if (!proxyUrlPromise) {
     proxyUrlPromise = new Promise((resolve, reject) => {
       const server = http.createServer((req, res) => {
+        /** @type {Buffer[]} */
         const chunks = [];
-        req.on('data', (chunk) => chunks.push(chunk));
+        req.on('data', (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        });
         req.on('end', () => {
           let parsed = null;
           const raw = Buffer.concat(chunks).toString('utf8');

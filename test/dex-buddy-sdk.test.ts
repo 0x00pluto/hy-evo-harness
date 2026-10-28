@@ -32,6 +32,34 @@ test('SDK_VERSION 为 1.0.0', () => {
   assert.equal(SDK_VERSION, '1.0.0');
 });
 
+test('Node SDK 在 checkJs + strict 下通过 tsc --noEmit', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-sdk-tsc-'));
+  const configPath = path.join(root, 'tsconfig.json');
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({
+      compilerOptions: {
+        allowJs: true,
+        checkJs: true,
+        strict: true,
+        noEmit: true,
+        target: 'ES2022',
+        module: 'commonjs',
+        types: ['node'],
+        typeRoots: [path.join(repoRoot, 'node_modules/@types')],
+      },
+      files: [snippetJs],
+    }),
+  );
+  const result = spawnSync('pnpm', ['exec', 'tsc', '--noEmit', '-p', configPath], {
+    encoding: 'utf8',
+    timeout: 30000,
+    cwd: repoRoot,
+  });
+  fs.rmSync(root, { recursive: true, force: true });
+  assert.equal(result.status, 0, result.stdout + result.stderr || String(result.error));
+});
+
 test('独立跑 requireEntitlement 直接通过，不抛登录或买断错误', async () => {
   await requireEntitlement(undefined);
   await requireEntitlement({});
