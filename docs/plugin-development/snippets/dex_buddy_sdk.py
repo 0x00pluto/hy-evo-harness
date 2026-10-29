@@ -1,4 +1,4 @@
-"""Dex Buddy 插件 SDK 1.0.0。拷进插件 lib/ 后：
+"""Dex Buddy 插件 SDK 1.0.1。拷进插件 lib/ 后：
 独立跑用 DEX_BUDDY_API_KEY 打 Dex Buddy 网关（开发者付钱）；
 工作台里由 Node 注入 DEX_BUDDY_MODELS_URL，走宿主（谁用谁付钱）。
 require_entitlement 在 Python 里始终直接返回；工作台真校验写在 index.js。
@@ -15,8 +15,9 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 DEFAULT_BASE = "https://www.dexbuddy.app"
+DEFAULT_TIMEOUT = 600.0
 MISSING_KEY = (
     "独立运行需要环境变量 DEX_BUDDY_API_KEY（账号里的用户 API Key，dbh_sk_ 开头）。"
     "写进本机 .env，不要放进插件设置，也不要打进 zip。装进 Dex Buddy 后会改走宿主，扣使用者的积分。"
@@ -36,6 +37,54 @@ def _env_map(env: dict[str, str] | None) -> dict[str, str]:
 
 def _trim(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _http_timeout(env: dict[str, str]) -> float | None:
+    raw = _trim(env.get("DEX_BUDDY_HTTP_TIMEOUT"))
+    if not raw:
+        return DEFAULT_TIMEOUT
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_TIMEOUT
+    if value <= 0:
+        return None
+    return value
+
+
+def _timeout_message(timeout: float | None) -> str:
+    if timeout is None:
+        waited = "0"
+    elif timeout == int(timeout):
+        waited = str(int(timeout))
+    else:
+        waited = str(timeout)
+    return f"网关读取超时（已等待 {waited} 秒）"
+
+
+def _from_network_error(err: BaseException, timeout: float | None) -> DexModelsError:
+    reason = err.reason if isinstance(err, urllib.error.URLError) else err
+    if isinstance(err, TimeoutError) or isinstance(reason, TimeoutError):
+        return DexModelsError("NETWORK_ERROR", _timeout_message(timeout), 0)
+    if isinstance(err, urllib.error.URLError):
+        return DexModelsError("NETWORK_ERROR", str(err.reason or err), 0)
+    return DexModelsError("NETWORK_ERROR", str(err), 0)
+
+
+def _resolve_plugin_id() -> str:
+    here = Path(__file__).resolve().parent
+    candidates = [here.parent / "plugin.manifest.json", here / "plugin.manifest.json"]
+    for file in candidates:
+        if not file.is_file():
+            continue
+        try:
+            parsed = json.loads(file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        plugin_id = parsed.get("id") if isinstance(parsed, dict) else None
+        if isinstance(plugin_id, str) and plugin_id.strip():
+            return plugin_id.strip()
+    return ""
 
 
 class _Completions:
@@ -70,6 +119,8 @@ class _Images:
 class Models:
     def __init__(self, env: dict[str, str] | None = None) -> None:
         self._env = _env_map(env)
+        self._timeout = _http_timeout(self._env)
+        self._plugin_id = "" if self._models_url() else _resolve_plugin_id()
         self.chat = _Chat(self)
         self.billing = _Billing(self)
         self.images = _Images(self)
@@ -93,6 +144,8 @@ class Models:
             if not key:
                 raise DexModelsError("UNAUTHORIZED", MISSING_KEY, 401)
             headers["Authorization"] = f"Bearer {key}"
+            if self._plugin_id:
+                headers["X-Plugin-Id"] = self._plugin_id
         if options and isinstance(options.get("idempotencyKey"), str):
             token = options["idempotencyKey"].strip()
             if token:
@@ -105,7 +158,7 @@ class Models:
         data = None if body is None else json.dumps(body).encode("utf-8")
         req = urllib.request.Request(url, data=data, method=method, headers=self._headers(options, body is not None))
         try:
-            with _urlopen(req) as response:
+            with _urlopen(req, self._timeout) as response:
                 raw = response.read().decode("utf-8")
                 return json.loads(raw) if raw.strip() else None
         except urllib.error.HTTPError as err:
@@ -117,8 +170,8 @@ class Models:
                 except json.JSONDecodeError:
                     parsed = None
             raise _error_from_body(parsed, err.code) from err
-        except urllib.error.URLError as err:
-            raise DexModelsError("NETWORK_ERROR", str(err.reason or err), 0) from err
+        except (TimeoutError, urllib.error.URLError) as err:
+            raise _from_network_error(err, self._timeout) from err
 
     def _post(self, path: str, body: Any, options: dict[str, Any] | None) -> Any:
         return self._request("POST", path, body, options)
@@ -158,10 +211,10 @@ class Models:
         if not isinstance(download_url, str) or not download_url.strip():
             raise DexModelsError("BAD_RESPONSE", "网关生图结果无效", 502)
         try:
-            with _urlopen(download_url) as response:
+            with _urlopen(download_url, self._timeout) as response:
                 data = response.read()
-        except urllib.error.URLError as err:
-            raise DexModelsError("NETWORK_ERROR", str(err.reason or err), 0) from err
+        except (TimeoutError, urllib.error.URLError) as err:
+            raise _from_network_error(err, self._timeout) from err
         if not data:
             raise DexModelsError("BAD_RESPONSE", "生成图是空的", 502)
         out = Path(output_path)
@@ -208,12 +261,12 @@ class Models:
             headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         )
         try:
-            with _urlopen(req) as response:
+            with _urlopen(req, self._timeout) as response:
                 response.read()
         except urllib.error.HTTPError as err:
             raise DexModelsError("UPSTREAM_ERROR", f"参考图上传失败（{err.code}）", err.code) from err
-        except urllib.error.URLError as err:
-            raise DexModelsError("NETWORK_ERROR", str(err.reason or err), 0) from err
+        except (TimeoutError, urllib.error.URLError) as err:
+            raise _from_network_error(err, self._timeout) from err
         return str(file_id)
 
 
@@ -229,7 +282,7 @@ def _error_from_body(body: Any, status: int) -> DexModelsError:
     return DexModelsError("BAD_RESPONSE", f"网关请求失败（{status}）", status)
 
 
-def _urlopen(req: urllib.request.Request | str, timeout: int = 120):
+def _urlopen(req: urllib.request.Request | str, timeout: float | None = DEFAULT_TIMEOUT):
     url = req.full_url if isinstance(req, urllib.request.Request) else req
     handlers = []
     if "127.0.0.1" in url or "localhost" in url:

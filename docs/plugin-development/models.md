@@ -11,7 +11,8 @@
 3. 本机环境变量 `DEX_BUDDY_API_KEY`（在 dexbuddy.app 账号里创建，`dbh_sk_` 开头）。可选 `DEX_GATEWAY_BASE_URL`。SDK **不读** `.env` 文件，自己 `export` 或 `load_dotenv`。不要提交 Key，不要写进 `configSchema`。
 4. `index.js` 里从 SDK 调 `requireEntitlement(ctx)` 和 `bindModels(ctx)`，不要直接碰 `ctx.models` / `ctx.requireEntitlement`（独立跑没有它们）。
 5. 拉起 Python 时必须先 `await requireEntitlement(ctx)`，再 `spawn(..., { env: await childEnv(ctx, env) })`。同一份 `.py` 不用写 `if dex`。
-6. 打包会丢掉 `.env`，见 [打包](pack.md)。装进 Dex Buddy 后 SDK 走登录会话，宿主用清单 `id` 盖 `X-Plugin-Id`。参数和 JSON 体里都不要传 `pluginId`。谁打开插件，扣谁的积分。
+6. 打包会丢掉 `.env`，见 [打包](pack.md)。装进 Dex Buddy 后 SDK 走登录会话，宿主用清单 `id` 盖 `X-Plugin-Id`。独立跑时 Python SDK 会读上一级或同级的 `plugin.manifest.json`，自己盖同一个头；读不到就不盖。参数和 JSON 体里都不要传 `pluginId`。谁打开插件，扣谁的积分。
+7. Python `urllib` 默认等 600 秒。环境变量 `DEX_BUDDY_HTTP_TIMEOUT` 改成秒数；`0` 或负数表示不设超时。超时会变成 `DexModelsError`，文案是「网关读取超时（已等待 N 秒）」。JavaScript `fetch` 没有超时。
 
 ```js
 const { bindModels, requireEntitlement, SDK_VERSION } = require('./lib/dex-buddy-sdk');
@@ -68,7 +69,7 @@ const env = await childEnv(ctx, { ...process.env, ...(ctx.pluginEnv ? ctx.plugin
 spawn(pythonBin, [script], { cwd: __dirname, env });
 ```
 
-对照例子在仓库 `plugins/models-playground/`（只在 `pnpm start` 出现）。当前母版 `SDK_VERSION` 是 `1.0.0`。
+对照例子在仓库 `plugins/models-playground/`（只在 `pnpm start` 出现）。当前母版 `SDK_VERSION` 是 `1.0.1`。
 
 这份 SDK 只用标准库（Node `http` / Python `urllib`）。不声明 `runtime.python`，工作台会走 PATH 上的 `python3`。只有脚本要装 pip 包时才在清单里声明 `runtime`，写法见 [运行](runtime.md)。
 

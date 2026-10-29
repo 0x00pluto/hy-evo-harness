@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -14,6 +15,7 @@ const snippetJs = path.join(repoRoot, 'docs/plugin-development/snippets/dex-budd
 const snippetPy = path.join(repoRoot, 'docs/plugin-development/snippets/dex_buddy_sdk.py');
 const playgroundJs = path.join(repoRoot, 'plugins/models-playground/lib/dex-buddy-sdk.js');
 const playgroundPy = path.join(repoRoot, 'plugins/models-playground/lib/dex_buddy_sdk.py');
+const generatePy = path.join(repoRoot, 'plugins/models-playground/python/generate.py');
 const { MISSING_KEY, SDK_VERSION, bindModels, childEnv, requireEntitlement } = require(playgroundJs);
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -28,8 +30,8 @@ test('snippets 与试玩插件里的 SDK 是同一份', () => {
   assert.equal(fs.readFileSync(snippetPy, 'utf8'), fs.readFileSync(playgroundPy, 'utf8'));
 });
 
-test('SDK_VERSION 为 1.0.0', () => {
-  assert.equal(SDK_VERSION, '1.0.0');
+test('SDK_VERSION 为 1.0.1', () => {
+  assert.equal(SDK_VERSION, '1.0.1');
 });
 
 test('Node SDK 在 checkJs + strict 下通过 tsc --noEmit', () => {
@@ -255,5 +257,162 @@ test('Python SDK 能被编译且 require_entitlement 直接通过', (t) => {
     { encoding: 'utf8', timeout: 8000, cwd: path.dirname(playgroundPy) },
   );
   assert.equal(run.status, 0, run.stderr || String(run.error));
-  assert.equal(run.stdout.trim(), '1.0.0');
+  assert.equal(run.stdout.trim(), '1.0.1');
+});
+
+function skipWithoutPython(t: { skip: (reason?: string) => void }): boolean {
+  const probe = spawnSync('python3', ['-c', 'print(1)'], { encoding: 'utf8', timeout: 8000 });
+  if (probe.error && (probe.error as NodeJS.ErrnoException).code === 'ENOENT') {
+    t.skip('本机没有 python3');
+    return true;
+  }
+  return false;
+}
+
+function pythonEnv(port: number, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
+  delete env.DEX_BUDDY_MODELS_URL;
+  env.DEX_BUDDY_API_KEY = extra.DEX_BUDDY_API_KEY || 'dbh_sk_test';
+  env.DEX_GATEWAY_BASE_URL = `http://127.0.0.1:${port}`;
+  return env;
+}
+
+function runPython(
+  args: string[],
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; input?: string; timeoutMs?: number },
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('python3', args, {
+      cwd: options.cwd,
+      env: options.env,
+    });
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error('python 超时'));
+    }, options.timeoutMs ?? 8000);
+    child.stdout.on('data', (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (status) => {
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr });
+    });
+    child.stdin.end(options.input ?? '');
+  });
+}
+
+function listenStub(
+  onRequest: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+): Promise<{ port: number; close: () => Promise<void> }> {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer(onRequest);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        reject(new Error('无法监听本机桩'));
+        return;
+      }
+      resolve({
+        port: address.port,
+        close: () =>
+          new Promise((done, fail) => {
+            server.close((err) => (err ? fail(err) : done()));
+            if (typeof server.closeAllConnections === 'function') {
+              server.closeAllConnections();
+            }
+          }),
+      });
+    });
+    server.on('error', reject);
+  });
+}
+
+test('Python SDK 独立跑盖清单 id', async (t) => {
+  if (skipWithoutPython(t)) return;
+  const seen: Array<{ url?: string; plugin?: string | string[] | undefined }> = [];
+  const stub = await listenStub((req, res) => {
+    seen.push({ url: req.url, plugin: req.headers['x-plugin-id'] });
+    req.resume();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ object: 'list', data: [{ id: 'dexbuddy-chat', kind: 'chat' }] }));
+  });
+  try {
+    const run = await runPython(
+      ['-c', 'from dex_buddy_sdk import bind_models; print(bind_models().list()["data"][0]["id"])'],
+      {
+        cwd: path.dirname(playgroundPy),
+        env: pythonEnv(stub.port),
+      },
+    );
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout.trim(), 'dexbuddy-chat');
+    assert.equal(seen[0]?.plugin, 'models-playground');
+  } finally {
+    await stub.close();
+  }
+});
+
+test('Python SDK 读超时收成中文 DexModelsError', async (t) => {
+  if (skipWithoutPython(t)) return;
+  const stub = await listenStub((req) => {
+    req.resume();
+  });
+  try {
+    const run = await runPython(
+      [
+        '-c',
+        [
+          'from dex_buddy_sdk import DexModelsError, bind_models',
+          'try:',
+          '    bind_models().chat.completions.create({"model": "dexbuddy-chat", "messages": []})',
+          'except DexModelsError as err:',
+          '    print(f"{type(err).__name__}:{err.code}:{err}", end="")',
+          '    raise SystemExit(1)',
+        ].join('\n'),
+      ],
+      {
+        cwd: path.dirname(playgroundPy),
+        env: pythonEnv(stub.port, { DEX_BUDDY_HTTP_TIMEOUT: '1' }),
+      },
+    );
+    assert.notEqual(run.status, 0);
+    const output = `${run.stdout}${run.stderr}`;
+    assert.match(output, /DexModelsError:NETWORK_ERROR:网关读取超时（已等待 1 秒）/);
+    assert.doesNotMatch(output, /The read operation timed out/);
+  } finally {
+    await stub.close();
+  }
+});
+
+test('试玩插件 Python 超时只打一行中文', async (t) => {
+  if (skipWithoutPython(t)) return;
+  const stub = await listenStub((req, res) => {
+    req.resume();
+    if (req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ object: 'list', data: [{ id: 'dexbuddy-chat', kind: 'chat' }] }));
+      return;
+    }
+  });
+  try {
+    const run = await runPython([generatePy], {
+      input: JSON.stringify({ kind: 'chat', prompt: 'hi' }),
+      env: pythonEnv(stub.port, { DEX_BUDDY_HTTP_TIMEOUT: '1' }),
+    });
+    assert.equal(run.status, 1, run.stderr);
+    assert.equal(run.stdout.trim(), '');
+    assert.equal(run.stderr.trim(), '网关读取超时（已等待 1 秒）');
+    assert.doesNotMatch(run.stderr, /Traceback|TimeoutError|The read operation timed out/);
+  } finally {
+    await stub.close();
+  }
 });

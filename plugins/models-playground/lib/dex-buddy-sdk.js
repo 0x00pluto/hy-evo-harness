@@ -2,12 +2,12 @@
 'use strict';
 
 /**
- * Dex Buddy 插件 SDK 1.0.0。拷进插件 lib/ 后：
+ * Dex Buddy 插件 SDK 1.0.1。拷进插件 lib/ 后：
  * 工作台走宿主校验与 ctx.models；独立跑 requireEntitlement 直接通过，bindModels 用 DEX_BUDDY_API_KEY（开发者付钱）。
  * 对照文档母版的 SDK_VERSION，不一致就整文件再拷。不要把 Key 写进设置或 zip。
  */
 
-const SDK_VERSION = '1.0.0';
+const SDK_VERSION = '1.0.1';
 
 const fs = require('node:fs');
 const http = require('node:http');
