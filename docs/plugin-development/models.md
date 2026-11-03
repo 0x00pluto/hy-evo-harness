@@ -161,6 +161,28 @@ const text = body.choices[0].message.content;
 
 没有参考图时忽略这个选项。页面仍然不接触网关。
 
+务必传 `options.idempotencyKey`（会变成 `Idempotency-Key` 头；不要写进 body）。SDK 不替你记 key，也不在失败后自动重试。发请求前自己把字符串落盘（`ctx.dirs.data` 或自己的库）。建议格式：`{业务实体id}:{槽位}:gen-{n}`，例如 `note-42:slot-1:gen-1`。
+
+同 key 再调 = 网关已结算时重签原图、**不再扣费**。用户点「再抽一张」才把 `gen-{n}` 加一。收到 `OUTPUT_EXPIRED`（成图对象约 90 天后删掉）也须换新 key。不传该选项时网关用内部 `srv_…`，客户端无法回放。
+
+断网后取回原图（伪代码；「记下」是作者自己的存储，不是 SDK 函数）：
+
+```text
+key = "note-42:slot-1:gen-1"
+在发请求之前把 key 记下来
+
+第一次：
+  image = images.generate(..., idempotencyKey = key)
+  网关已经出图并扣费，响应在半路丢了，作者没拿到文件
+
+网络恢复后，不要把 gen-1 改成 gen-2：
+  image = images.generate(..., idempotencyKey = 记下来的同一把 key)
+  image.output 是刚才那张图的本地路径，不会再扣费，也不会出一张新图
+
+用户点「再抽一张」时，作者自己写成 "note-42:slot-1:gen-2" 再调用
+原图对象已删（OUTPUT_EXPIRED）时，同样换一把新 key 才能再出一张
+```
+
 生图可能要几分钟。宿主这一侧是一个 Promise。页面按 [运行](runtime.md) 的长任务写法：`dex.call` 先交回任务 id，在 `index.js` 里等待 `images.generate`，完成后再用另一个方法读 `output`。
 
 ```js
@@ -174,13 +196,13 @@ const image = await models.images.generate({
     input_images: [referencePath],
   },
   outputPath,
-});
+}, { idempotencyKey: 'note-42:slot-1:gen-1' });
 
 await models.images.generate({
   model: pickModel(listed, 'image', 'dexbuddy-image'),
   input: { prompt, input_images: [referencePath] },
   outputPath,
-}, { referenceUpload: 'direct' });
+}, { idempotencyKey: 'note-42:slot-1:gen-1', referenceUpload: 'direct' });
 ```
 
 ## 错误码
@@ -214,4 +236,4 @@ await models.images.generate({
 
 - `src/llm/client.js` 继续把字符串或 `{ system, user }` 收成 `messages`，然后 `chat.completions.create`。从 `choices[0].message.content` 取文本。原来发给 DeepSeek 的 JSON 字段不用改名。
 - 识图仍走 `chat.completions.create`，内容块保持 `image_url`。
-- `src/image/generate.js` 不再请求 Replicate，也不轮询。`input.prompt`、`input.aspect_ratio`、`input.input_images` 保持字段名；`input_images` 改为本地路径；`model` 改为 `list()` 里的渠道 Model ID。
+- `src/image/generate.js` 不再请求 Replicate，也不轮询。`input.prompt`、`input.aspect_ratio`、`input.input_images` 保持字段名；`input_images` 改为本地路径；`model` 改为 `list()` 里的渠道 Model ID。按上文规则自己落盘并传入 `idempotencyKey`：同 key 重试取回原图，再抽才换 `gen-{n}`。

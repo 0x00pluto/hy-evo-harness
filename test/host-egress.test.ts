@@ -361,6 +361,136 @@ test('非法 referenceUpload 是 INVALID_BODY', async () => {
   assert.equal(calls.length, 0);
 });
 
+test('生图报价不带 Idempotency-Key，生图请求带', async () => {
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const written: { path: string; data: Buffer }[] = [];
+  const { models, calls } = makeHost({
+    shopGate: async () => ({ ready: true, pluginIds: [] }),
+    mkdir: () => undefined,
+    writeFile: (filePath, data) => {
+      written.push({ path: filePath, data });
+    },
+    fetchImpl: async (url) => {
+      if (url === 'https://cdn.example/out.png') return new Response(png, { status: 200 });
+      throw new Error(url);
+    },
+    request: async (path) => {
+      if (path === '/v1/billing/quote') return imageQuote(true);
+      if (path === '/v1/images/generate') {
+        return {
+          downloadUrl: 'https://cdn.example/out.png',
+          mediaType: 'image/png',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          model: 'dexbuddy-image',
+        };
+      }
+      throw new Error(path);
+    },
+  });
+  await models.images.generate(
+    {
+      model: 'dexbuddy-image',
+      input: { prompt: 'a cat' },
+      outputPath: '/tmp/out.png',
+    },
+    { idempotencyKey: 'note-42:slot-1:gen-1' },
+  );
+  const quote = calls.find((item) => item.path === '/v1/billing/quote');
+  const generate = calls.find((item) => item.path === '/v1/images/generate');
+  assert.equal(quote?.init.headers?.['Idempotency-Key'], undefined);
+  assert.equal(generate?.init.headers?.['Idempotency-Key'], 'note-42:slot-1:gen-1');
+  assert.equal(written[0]?.path, '/tmp/out.png');
+});
+
+test('无幂等键且报价不够时不打生图', async () => {
+  const { models, calls, blocked } = makeHost({
+    shopGate: async () => ({ ready: true, pluginIds: [] }),
+    request: async (path) => {
+      if (path === '/v1/billing/quote') return imageQuote(false);
+      throw new Error(path);
+    },
+  });
+  await assert.rejects(
+    () =>
+      models.images.generate({
+        model: 'dexbuddy-image',
+        input: { prompt: 'a cat' },
+        outputPath: '/tmp/out.png',
+      }),
+    (err: unknown) => err instanceof GatewayError && err.code === 'INSUFFICIENT_CREDITS',
+  );
+  assert.equal(calls.some((item) => item.path === '/v1/images/generate'), false);
+  assert.deepEqual(blocked, [{ pluginId: PLUGIN_ID, reason: 'INSUFFICIENT_CREDITS' }]);
+});
+
+test('有幂等键、报价不够、生图 200 时回放落盘', async () => {
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const written: { path: string; data: Buffer }[] = [];
+  const { models, calls, blocked } = makeHost({
+    shopGate: async () => ({ ready: true, pluginIds: [] }),
+    mkdir: () => undefined,
+    writeFile: (filePath, data) => {
+      written.push({ path: filePath, data });
+    },
+    fetchImpl: async (url) => {
+      if (url === 'https://cdn.example/out.png') return new Response(png, { status: 200 });
+      throw new Error(url);
+    },
+    request: async (path) => {
+      if (path === '/v1/billing/quote') return imageQuote(false);
+      if (path === '/v1/images/generate') {
+        return {
+          downloadUrl: 'https://cdn.example/out.png',
+          mediaType: 'image/png',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          model: 'dexbuddy-image',
+        };
+      }
+      throw new Error(path);
+    },
+  });
+  const result = await models.images.generate(
+    {
+      model: 'dexbuddy-image',
+      input: { prompt: 'a cat' },
+      outputPath: '/tmp/replay.png',
+    },
+    { idempotencyKey: 'note-42:slot-1:gen-1' },
+  );
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.output, '/tmp/replay.png');
+  assert.equal(calls.some((item) => item.path === '/v1/images/generate'), true);
+  assert.equal(written[0]?.data.equals(png), true);
+  assert.equal(blocked.length, 0);
+});
+
+test('有幂等键、报价不够、生图 402 时仍是积分不够', async () => {
+  const { models, calls, blocked } = makeHost({
+    shopGate: async () => ({ ready: true, pluginIds: [] }),
+    request: async (path) => {
+      if (path === '/v1/billing/quote') return imageQuote(false);
+      if (path === '/v1/images/generate') {
+        throw new GatewayError('INSUFFICIENT_CREDITS', '积分不足', 402);
+      }
+      throw new Error(path);
+    },
+  });
+  await assert.rejects(
+    () =>
+      models.images.generate(
+        {
+          model: 'dexbuddy-image',
+          input: { prompt: 'a cat' },
+          outputPath: '/tmp/out.png',
+        },
+        { idempotencyKey: 'note-42:slot-1:gen-1' },
+      ),
+    (err: unknown) => err instanceof GatewayError && err.code === 'INSUFFICIENT_CREDITS',
+  );
+  assert.equal(calls.some((item) => item.path === '/v1/images/generate'), true);
+  assert.deepEqual(blocked, [{ pluginId: PLUGIN_ID, reason: 'INSUFFICIENT_CREDITS' }]);
+});
+
 test('生图未买断同样拦住且通知一次', async () => {
   const { models, calls, blocked } = makeHost({
     shopGate: async () => ({ ready: true, pluginIds: [PLUGIN_ID] }),

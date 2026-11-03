@@ -236,6 +236,28 @@ async function quoteOrThrow(
   return quote;
 }
 
+/**
+ * 生图回放：报价不带调用方的 Idempotency-Key（那把留给 /v1/images/generate）。
+ * 有 key 且余额不够时仍转发，让网关对已结算任务重签；真 402 再抛。
+ */
+async function quoteBeforeImageGenerate(
+  deps: HostModelsDeps,
+  model: string,
+  options?: HostModelsCallOptions,
+): Promise<void> {
+  const hasReplayKey =
+    typeof options?.idempotencyKey === 'string' && options.idempotencyKey.trim() !== '';
+  const raw = await deps.request('/v1/billing/quote', {
+    method: 'POST',
+    body: quoteBodyForImage(model),
+    headers: pluginHeaders(deps.pluginId),
+  });
+  const quote = parseBillingQuote(raw);
+  if (!quote.enough && !hasReplayKey) {
+    throw new GatewayError('INSUFFICIENT_CREDITS', '积分不足', 402);
+  }
+}
+
 function resolveReferenceUpload(options?: HostModelsCallOptions): ReferenceUploadMode {
   const mode = options?.referenceUpload;
   if (mode === undefined || mode === 'signed') return 'signed';
@@ -331,7 +353,7 @@ export function createHostModels(deps: HostModelsDeps): HostModels {
           }
           const localImages = readInputImages(record);
           const referenceUpload = localImages.length > 0 ? resolveReferenceUpload(options) : 'signed';
-          await quoteOrThrow(deps, quoteBodyForImage(model), options);
+          await quoteBeforeImageGenerate(deps, model, options);
           const fileIds: string[] = [];
           const fileUrls: string[] = [];
           for (let i = 0; i < localImages.length; i += 1) {

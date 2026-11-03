@@ -311,7 +311,9 @@ test('独立跑 referenceUpload direct 交 fileIds', async () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('childEnv 丢掉 Key 并让 Python 走本机代理', async () => {
+test('childEnv 丢掉 Key、代理文案，并把 Idempotency-Key 交给生图', async () => {
+  /** @type {{ input: unknown; options: unknown }[]} */
+  const imageCalls = [];
   const host = {
     list: async () => ({ object: 'list', data: [{ id: 'dexbuddy-chat', object: 'model' }] }),
     billing: { quote: async () => ({ enough: true }) },
@@ -320,7 +322,12 @@ test('childEnv 丢掉 Key 并让 Python 走本机代理', async () => {
         create: async () => ({ choices: [{ message: { content: '代理' } }] }),
       },
     },
-    images: { generate: async () => ({ status: 'succeeded', output: '/tmp/x.png', model: 'dexbuddy-image' }) },
+    images: {
+      generate: async (input: unknown, options?: unknown) => {
+        imageCalls.push({ input, options });
+        return { status: 'succeeded', output: '/tmp/x.png', model: 'dexbuddy-image' };
+      },
+    },
   };
   const env = await childEnv(
     { models: host },
@@ -352,6 +359,22 @@ test('childEnv 丢掉 Key 并让 Python 走本机代理', async () => {
   });
   const body = await response.json();
   assert.equal(body.choices[0].message.content, '代理');
+
+  const imageResponse = await fetch(`${env.DEX_BUDDY_MODELS_URL}/images/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': 'note-42:slot-1:gen-1',
+    },
+    body: JSON.stringify({
+      model: 'dexbuddy-image',
+      input: { prompt: '独角兽' },
+      outputPath: '/tmp/x.png',
+    }),
+  });
+  assert.equal(imageResponse.status, 200);
+  assert.equal(imageCalls.length, 1);
+  assert.deepEqual(imageCalls[0]?.options, { idempotencyKey: 'note-42:slot-1:gen-1' });
 });
 
 test('Python SDK 能被编译且 require_entitlement 直接通过', (t) => {

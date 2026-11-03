@@ -384,6 +384,17 @@ function createStandaloneModels(options) {
 }
 
 /**
+ * @param {http.IncomingMessage} req
+ * @returns {{ idempotencyKey?: string } | undefined}
+ */
+function callOptionsFromReq(req) {
+  const raw = req.headers['idempotency-key'];
+  const key = typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? String(raw[0] || '').trim() : '';
+  if (!key) return undefined;
+  return { idempotencyKey: key };
+}
+
+/**
  * @param {unknown} ctx
  * @param {http.IncomingMessage} req
  * @param {http.ServerResponse} res
@@ -397,15 +408,16 @@ async function handleProxy(ctx, req, res, body) {
     return;
   }
   const url = new URL(req.url || '/', 'http://127.0.0.1');
+  const callOptions = callOptionsFromReq(req);
   let result;
   if (req.method === 'GET' && url.pathname === '/v1/models') {
     result = await models.list();
   } else if (req.method === 'POST' && url.pathname === '/v1/billing/quote') {
-    result = await models.billing.quote(body);
+    result = await models.billing.quote(body, callOptions);
   } else if (req.method === 'POST' && url.pathname === '/v1/chat/completions') {
-    result = await models.chat.completions.create(body);
+    result = await models.chat.completions.create(body, callOptions);
   } else if (req.method === 'POST' && url.pathname === '/images/generate') {
-    result = await models.images.generate(body);
+    result = await models.images.generate(body, callOptions);
   } else {
     res.statusCode = 404;
     res.end(JSON.stringify({ code: 'BAD_RESPONSE', error: '未知路径' }));

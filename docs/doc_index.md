@@ -17,7 +17,7 @@
 - `docs/plugin-development/settings.md`: configSchema、分组、密钥输入与眼睛、settingsEntry、pluginEnv；保存后下次读取即新值，没有保存事件
 - `docs/plugin-development/data.md`: 插件页加载的本地实例数据仍在仓库，设置和 plugin-data 用实例 id，与清单 id 隔离；装进 installed_plugins 之后 ctx.dirs 分开，卸载只删运行环境和缓存；市场换 id 后旧目录会标成孤儿，可在插件页删除
 - `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node；externalTools 在 apply 前只查 PATH，缺了给可复制的安装说明，ctx.tools 给绝对路径；未声明的命令仍靠本机 PATH；pluginEnv 与 runtime.env 每次读取都是当前已保存配置，未设置时补 PYTHONIOENCODING 与 PYTHONUTF8；dex.call 参数须可 JSON 序列化，宿主 IPC 前再圆整一次
-- `docs/plugin-development/models.md`: 拷 SDK、对照 SDK_VERSION、本机 DEX_BUDDY_API_KEY、index.js 用 requireEntitlement(ctx) 再 bindModels(ctx)、Python 子进程用 childEnv；上线零改、谁用谁付钱；OpenAI 补全与 Replicate input；参考图默认 referenceUpload signed 交 fileUrls，可选 direct 交 fileIds；页面不接触网关；未登录/未买断/积分不够由工作台弹框，插件不画购买文案
+- `docs/plugin-development/models.md`: 拷 SDK、对照 SDK_VERSION、本机 DEX_BUDDY_API_KEY、index.js 用 requireEntitlement(ctx) 再 bindModels(ctx)、Python 子进程用 childEnv；上线零改、谁用谁付钱；OpenAI 补全与 Replicate input；参考图默认 referenceUpload signed 交 fileUrls，可选 direct 交 fileIds；生图务必传 idempotencyKey（作者自落盘，同 key 重试取回原图、再抽换 gen-n）；页面不接触网关；未登录/未买断/积分不够由工作台弹框，插件不画购买文案
 - `docs/plugin-development/snippets/dex-buddy-sdk.js`: 给插件作者拷走的 Node SDK（bindModels、requireEntitlement、childEnv、SDK_VERSION 1.0.2；参考图默认 signed）
 - `docs/plugin-development/snippets/dex_buddy_sdk.py`: 给插件作者拷走的 Python SDK（bind_models、require_entitlement、__version__ 1.0.2；独立跑盖 X-Plugin-Id，超时默认 600 秒；参考图默认 signed）
 - `docs/plugin-development/typing.md`: 后端严格 JavaScript 约定：`@ts-check`、JSDoc、禁止 any；入口仍是 index.js，不编译 dist，宿主不因检查失败拒载

@@ -29,7 +29,7 @@
       font-weight: 600;
       margin: 0 0 8px;
     }
-    p { color: var(--muted); }
+    .intro { color: var(--muted); margin: 0 0 24px; }
     label { display: block; font-size: 14px; margin-bottom: 8px; }
     textarea {
       width: 100%;
@@ -42,11 +42,26 @@
       background: var(--paper);
       color: var(--ink);
     }
+    .section {
+      margin-top: 16px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .section h2 {
+      margin: 0 0 4px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .section .hint {
+      margin: 0 0 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
     .actions {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 12px;
     }
     button {
       border: 1px solid var(--line);
@@ -80,17 +95,39 @@
 <body>
   <main>
     <h1>模型试玩</h1>
-    <p>「需要买断」校验登录；本插件未上架则放行。「检测已买断 / 未买断」只用试玩 mock，不打真实商品。「生成」只烧模型。装进 Dex Buddy 后走宿主登录会话。独立跑时把 DEX_BUDDY_API_KEY 写进本机环境变量，不要打进 zip。</p>
+    <p class="intro">「买断」区校验登录与 mock 商品。「文案 / 图片」只烧模型；「重放」用同一把幂等键取回上次结果，不换新 key。装进 Dex Buddy 后走宿主登录会话。独立跑时把 DEX_BUDDY_API_KEY 写进本机环境变量，不要打进 zip。</p>
     <label for="prompt">提示词</label>
     <textarea id="prompt">用一句话介绍 Dex Buddy</textarea>
-    <div class="actions">
-      <button id="access" type="button">需要买断</button>
-      <button id="owned" type="button">检测已买断</button>
-      <button id="unowned" type="button">检测未买断</button>
-      <button id="chat" type="button">生成文案</button>
-      <button id="image" type="button">生成图片</button>
-      <button id="python" type="button">用 Python 生成文案</button>
-    </div>
+
+    <section class="section" aria-labelledby="sec-access">
+      <h2 id="sec-access">买断</h2>
+      <p class="hint">需要买断校验登录；本插件未上架则放行。检测已买断 / 未买断只用试玩 mock。</p>
+      <div class="actions">
+        <button id="access" type="button">需要买断</button>
+        <button id="owned" type="button">检测已买断</button>
+        <button id="unowned" type="button">检测未买断</button>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="sec-chat">
+      <h2 id="sec-chat">文案</h2>
+      <p class="hint">生成会换新幂等键。网络失败后点重放，用同一把 key 再调。</p>
+      <div class="actions">
+        <button id="chat" type="button">生成文案</button>
+        <button id="chat-replay" type="button">重放文案</button>
+        <button id="python" type="button">用 Python 生成文案</button>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="sec-image">
+      <h2 id="sec-image">图片</h2>
+      <p class="hint">生成图片始终换新 key（再抽一张）。下载失败或超时后点重放，取回已生成的那张。</p>
+      <div class="actions">
+        <button id="image" type="button">生成图片</button>
+        <button id="image-replay" type="button">重放图片</button>
+      </div>
+    </section>
+
     <pre id="result">等待生成</pre>
     <img id="preview" alt="" hidden>
   </main>
@@ -115,17 +152,20 @@
       }
     }
 
-    function generate(method) {
+    function generate(method, replay) {
       const prompt = document.getElementById('prompt').value;
-      return run(method, [{ prompt }], '正在生成…');
+      const pending = replay ? '正在重放…' : '正在生成…';
+      return run(method, [{ prompt, replay: !!replay }], pending);
     }
 
     document.getElementById('access').onclick = () => run('checkAccess', [], '正在校验…');
     document.getElementById('owned').onclick = () => run('checkOwned', [], '正在校验已买断…');
     document.getElementById('unowned').onclick = () => run('checkUnowned', [], '正在校验未买断…');
-    document.getElementById('chat').onclick = () => generate('chat');
-    document.getElementById('image').onclick = () => generate('image');
-    document.getElementById('python').onclick = () => generate('pythonChat');
+    document.getElementById('chat').onclick = () => generate('chat', false);
+    document.getElementById('chat-replay').onclick = () => generate('chat', true);
+    document.getElementById('python').onclick = () => generate('pythonChat', false);
+    document.getElementById('image').onclick = () => generate('image', false);
+    document.getElementById('image-replay').onclick = () => generate('image', true);
   </script>
 </body>
 </html>
