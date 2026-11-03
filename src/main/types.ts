@@ -41,8 +41,12 @@ export interface ConfigField {
 
 export type ConfigSchema = Record<string, ConfigField>;
 
+export type ReferenceUploadMode = 'signed' | 'direct';
+
 export interface HostModelsCallOptions {
   idempotencyKey?: string;
+  /** 参考图垫图方式。默认 signed：直传后交 fileUrls。direct：交 fileIds。 */
+  referenceUpload?: ReferenceUploadMode;
 }
 
 export interface HostImageGenerateInput {

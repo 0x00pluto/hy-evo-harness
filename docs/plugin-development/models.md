@@ -69,7 +69,7 @@ const env = await childEnv(ctx, { ...process.env, ...(ctx.pluginEnv ? ctx.plugin
 spawn(pythonBin, [script], { cwd: __dirname, env });
 ```
 
-对照例子在仓库 `plugins/models-playground/`（只在 `pnpm start` 出现）。当前母版 `SDK_VERSION` 是 `1.0.1`。
+对照例子在仓库 `plugins/models-playground/`（只在 `pnpm start` 出现）。当前母版 `SDK_VERSION` 是 `1.0.2`。
 
 这份 SDK 只用标准库（Node `http` / Python `urllib`）。不声明 `runtime.python`，工作台会走 PATH 上的 `python3`。只有脚本要装 pip 包时才在清单里声明 `runtime`，写法见 [运行](runtime.md)。
 
@@ -154,6 +154,13 @@ const text = body.choices[0].message.content;
 
 `output` 是本地路径。插件看不到上传凭证、预测地址和下载地址，也不自己轮询。
 
+有参考图时，可选 `options.referenceUpload`：
+
+- 默认或不写：`signed`。直传后把 `/v1/files` 返回的签名下载链作为 `fileUrls` 提交。
+- `direct`：直传后提交 `fileIds`。
+
+没有参考图时忽略这个选项。页面仍然不接触网关。
+
 生图可能要几分钟。宿主这一侧是一个 Promise。页面按 [运行](runtime.md) 的长任务写法：`dex.call` 先交回任务 id，在 `index.js` 里等待 `images.generate`，完成后再用另一个方法读 `output`。
 
 ```js
@@ -168,6 +175,12 @@ const image = await models.images.generate({
   },
   outputPath,
 });
+
+await models.images.generate({
+  model: pickModel(listed, 'image', 'dexbuddy-image'),
+  input: { prompt, input_images: [referencePath] },
+  outputPath,
+}, { referenceUpload: 'direct' });
 ```
 
 ## 错误码

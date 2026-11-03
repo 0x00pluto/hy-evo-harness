@@ -194,6 +194,173 @@ test('onBlocked 自己失败仍把 NOT_ENTITLED 交给插件', async () => {
   assert.equal(calls.length, 0);
 });
 
+test('默认参考图走 fileUrls，不交 fileIds', async () => {
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const uploads: { url: string }[] = [];
+  const written: { path: string; data: Buffer }[] = [];
+  const { models, calls } = makeHost({
+    shopGate: async () => ({ ready: true, pluginIds: [] }),
+    readFile: () => png,
+    mkdir: () => undefined,
+    writeFile: (filePath, data) => {
+      written.push({ path: filePath, data });
+    },
+    fetchImpl: async (url, init) => {
+      if (url === 'https://upload.example/put') {
+        uploads.push({ url });
+        assert.equal(init?.method, 'POST');
+        assert.ok(init?.body instanceof FormData);
+        return new Response('', { status: 200 });
+      }
+      if (url === 'https://cdn.example/out.png') {
+        return new Response(png, { status: 200 });
+      }
+      throw new Error(url);
+    },
+    request: async (path) => {
+      if (path === '/v1/billing/quote') return imageQuote(true);
+      if (path === '/v1/files') {
+        return {
+          id: 'file-1',
+          key: 'refs/u1/a.png',
+          uploadUrl: 'https://upload.example/put',
+          token: 'tok',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          downloadUrl: 'https://cdn.example/ref.png?e=1&token=sig',
+        };
+      }
+      if (path === '/v1/images/generate') {
+        return {
+          downloadUrl: 'https://cdn.example/out.png',
+          mediaType: 'image/png',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          model: 'dexbuddy-image',
+        };
+      }
+      throw new Error(path);
+    },
+  });
+  const result = await models.images.generate({
+    model: 'dexbuddy-image',
+    input: { prompt: 'a cat', input_images: ['/tmp/ref.png'] },
+    outputPath: '/tmp/out.png',
+  });
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.output, '/tmp/out.png');
+  assert.equal(uploads.length, 1);
+  const generate = calls.find((item) => item.path === '/v1/images/generate');
+  assert.deepEqual(generate?.init.body, {
+    model: 'dexbuddy-image',
+    prompt: 'a cat',
+    fileUrls: ['https://cdn.example/ref.png?e=1&token=sig'],
+  });
+  assert.equal(written[0]?.path, '/tmp/out.png');
+  assert.equal(written[0]?.data.equals(png), true);
+});
+
+test('referenceUpload direct 交 fileIds', async () => {
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const { models, calls } = makeHost({
+    shopGate: async () => ({ ready: true, pluginIds: [] }),
+    readFile: () => png,
+    mkdir: () => undefined,
+    writeFile: () => undefined,
+    fetchImpl: async (url) => {
+      if (url === 'https://upload.example/put') return new Response('', { status: 200 });
+      if (url === 'https://cdn.example/out.png') return new Response(png, { status: 200 });
+      throw new Error(url);
+    },
+    request: async (path) => {
+      if (path === '/v1/billing/quote') return imageQuote(true);
+      if (path === '/v1/files') {
+        return {
+          id: 'file-2',
+          key: 'refs/u1/b.png',
+          uploadUrl: 'https://upload.example/put',
+          token: 'tok',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        };
+      }
+      if (path === '/v1/images/generate') {
+        return {
+          downloadUrl: 'https://cdn.example/out.png',
+          mediaType: 'image/png',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          model: 'dexbuddy-image',
+        };
+      }
+      throw new Error(path);
+    },
+  });
+  await models.images.generate(
+    {
+      model: 'dexbuddy-image',
+      input: { prompt: 'a cat', input_images: ['/tmp/ref.png'] },
+      outputPath: '/tmp/out.png',
+    },
+    { referenceUpload: 'direct' },
+  );
+  const generate = calls.find((item) => item.path === '/v1/images/generate');
+  assert.deepEqual(generate?.init.body, {
+    model: 'dexbuddy-image',
+    prompt: 'a cat',
+    fileIds: ['file-2'],
+  });
+});
+
+test('signed 缺 downloadUrl 时不调用生图', async () => {
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const { models, calls } = makeHost({
+    shopGate: async () => ({ ready: true, pluginIds: [] }),
+    readFile: () => png,
+    fetchImpl: async () => new Response('', { status: 200 }),
+    request: async (path) => {
+      if (path === '/v1/billing/quote') return imageQuote(true);
+      if (path === '/v1/files') {
+        return {
+          id: 'file-3',
+          key: 'refs/u1/c.png',
+          uploadUrl: 'https://upload.example/put',
+          token: 'tok',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        };
+      }
+      throw new Error(path);
+    },
+  });
+  await assert.rejects(
+    () =>
+      models.images.generate({
+        model: 'dexbuddy-image',
+        input: { prompt: 'a cat', input_images: ['/tmp/ref.png'] },
+        outputPath: '/tmp/out.png',
+      }),
+    (err: unknown) => err instanceof GatewayError && err.code === 'BAD_RESPONSE',
+  );
+  assert.equal(calls.some((item) => item.path === '/v1/images/generate'), false);
+});
+
+test('非法 referenceUpload 是 INVALID_BODY', async () => {
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const { models, calls } = makeHost({
+    shopGate: async () => ({ ready: true, pluginIds: [] }),
+    readFile: () => png,
+  });
+  await assert.rejects(
+    () =>
+      models.images.generate(
+        {
+          model: 'dexbuddy-image',
+          input: { prompt: 'a cat', input_images: ['/tmp/ref.png'] },
+          outputPath: '/tmp/out.png',
+        },
+        { referenceUpload: 'fast' as 'signed' },
+      ),
+    (err: unknown) => err instanceof GatewayError && err.code === 'INVALID_BODY',
+  );
+  assert.equal(calls.length, 0);
+});
+
 test('生图未买断同样拦住且通知一次', async () => {
   const { models, calls, blocked } = makeHost({
     shopGate: async () => ({ ready: true, pluginIds: [PLUGIN_ID] }),

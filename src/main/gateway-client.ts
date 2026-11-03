@@ -107,6 +107,8 @@ export interface FilesIssue {
   uploadUrl: string;
   token: string;
   expiresAt: string;
+  /** 签名下载链；signed 垫图用。旧响应可没有。 */
+  downloadUrl?: string;
 }
 
 export interface ImageGenerate {
@@ -405,13 +407,17 @@ export function parseFilesIssue(body: unknown): FilesIssue {
   ) {
     throw new GatewayError('BAD_RESPONSE', '网关 files 凭证无效');
   }
-  return {
+  const issued: FilesIssue = {
     id: record.id,
     key: record.key,
     uploadUrl: record.uploadUrl,
     token: record.token,
     expiresAt: record.expiresAt,
   };
+  if (typeof record.downloadUrl === 'string' && record.downloadUrl.trim() !== '') {
+    issued.downloadUrl = record.downloadUrl.trim();
+  }
+  return issued;
 }
 
 export function parseImageGenerate(body: unknown): ImageGenerate {

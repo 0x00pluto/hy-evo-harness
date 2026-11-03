@@ -30,8 +30,8 @@ test('snippets 与试玩插件里的 SDK 是同一份', () => {
   assert.equal(fs.readFileSync(snippetPy, 'utf8'), fs.readFileSync(playgroundPy, 'utf8'));
 });
 
-test('SDK_VERSION 为 1.0.1', () => {
-  assert.equal(SDK_VERSION, '1.0.1');
+test('SDK_VERSION 为 1.0.2', () => {
+  assert.equal(SDK_VERSION, '1.0.2');
 });
 
 test('Node SDK 在 checkJs + strict 下通过 tsc --noEmit', () => {
@@ -198,6 +198,119 @@ test('独立跑生图把 downloadUrl 写到本地文件', async () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('独立跑默认参考图交 fileUrls', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-sdk-'));
+  const refPath = path.join(root, 'ref.png');
+  const outputPath = path.join(root, 'out.png');
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  fs.writeFileSync(refPath, png);
+  /** @type {{ url: string; body?: unknown }[]} */
+  const seen: { url: string; body?: unknown }[] = [];
+  const models = bindModels(null, {
+    env: { DEX_BUDDY_API_KEY: 'dbh_sk_test' },
+    pluginId: 'models-playground',
+    baseUrl: 'https://www.dexbuddy.app',
+    fetch: async (url: string, init?: RequestInit) => {
+      const body = init?.body && typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
+      seen.push({ url, body });
+      if (url.endsWith('/v1/files')) {
+        return jsonResponse({
+          id: 'file-1',
+          key: 'refs/u1/a.png',
+          uploadUrl: 'https://upload.example/put',
+          token: 'tok',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          downloadUrl: 'https://cdn.example/ref.png?e=1&token=sig',
+        });
+      }
+      if (url === 'https://upload.example/put') {
+        return new Response('', { status: 200 });
+      }
+      if (url.endsWith('/v1/images/generate')) {
+        return jsonResponse({
+          downloadUrl: 'https://cdn.example/out.png',
+          mediaType: 'image/png',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          model: 'dexbuddy-image',
+        });
+      }
+      if (url === 'https://cdn.example/out.png') {
+        return new Response(png, { status: 200 });
+      }
+      throw new Error(url);
+    },
+  });
+  await models.images.generate({
+    model: 'dexbuddy-image',
+    input: { prompt: '独角兽', input_images: [refPath] },
+    outputPath,
+  });
+  const generate = seen.find((item) => item.url.endsWith('/v1/images/generate'));
+  assert.deepEqual(generate?.body, {
+    model: 'dexbuddy-image',
+    prompt: '独角兽',
+    fileUrls: ['https://cdn.example/ref.png?e=1&token=sig'],
+  });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('独立跑 referenceUpload direct 交 fileIds', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-sdk-'));
+  const refPath = path.join(root, 'ref.png');
+  const outputPath = path.join(root, 'out.png');
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  fs.writeFileSync(refPath, png);
+  const seen: { url: string; body?: unknown }[] = [];
+  const models = bindModels(null, {
+    env: { DEX_BUDDY_API_KEY: 'dbh_sk_test' },
+    pluginId: 'models-playground',
+    baseUrl: 'https://www.dexbuddy.app',
+    fetch: async (url: string, init?: RequestInit) => {
+      const body = init?.body && typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
+      seen.push({ url, body });
+      if (url.endsWith('/v1/files')) {
+        return jsonResponse({
+          id: 'file-2',
+          key: 'refs/u1/b.png',
+          uploadUrl: 'https://upload.example/put',
+          token: 'tok',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        });
+      }
+      if (url === 'https://upload.example/put') {
+        return new Response('', { status: 200 });
+      }
+      if (url.endsWith('/v1/images/generate')) {
+        return jsonResponse({
+          downloadUrl: 'https://cdn.example/out.png',
+          mediaType: 'image/png',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          model: 'dexbuddy-image',
+        });
+      }
+      if (url === 'https://cdn.example/out.png') {
+        return new Response(png, { status: 200 });
+      }
+      throw new Error(url);
+    },
+  });
+  await models.images.generate(
+    {
+      model: 'dexbuddy-image',
+      input: { prompt: '独角兽', input_images: [refPath] },
+      outputPath,
+    },
+    { referenceUpload: 'direct' },
+  );
+  const generate = seen.find((item) => item.url.endsWith('/v1/images/generate'));
+  assert.deepEqual(generate?.body, {
+    model: 'dexbuddy-image',
+    prompt: '独角兽',
+    fileIds: ['file-2'],
+  });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('childEnv 丢掉 Key 并让 Python 走本机代理', async () => {
   const host = {
     list: async () => ({ object: 'list', data: [{ id: 'dexbuddy-chat', object: 'model' }] }),
@@ -257,7 +370,7 @@ test('Python SDK 能被编译且 require_entitlement 直接通过', (t) => {
     { encoding: 'utf8', timeout: 8000, cwd: path.dirname(playgroundPy) },
   );
   assert.equal(run.status, 0, run.stderr || String(run.error));
-  assert.equal(run.stdout.trim(), '1.0.1');
+  assert.equal(run.stdout.trim(), '1.0.2');
 });
 
 function skipWithoutPython(t: { skip: (reason?: string) => void }): boolean {

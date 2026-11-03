@@ -1,4 +1,4 @@
-"""Dex Buddy 插件 SDK 1.0.1。拷进插件 lib/ 后：
+"""Dex Buddy 插件 SDK 1.0.2。拷进插件 lib/ 后：
 独立跑用 DEX_BUDDY_API_KEY 打 Dex Buddy 网关（开发者付钱）；
 工作台里由 Node 注入 DEX_BUDDY_MODELS_URL，走宿主（谁用谁付钱）。
 require_entitlement 在 Python 里始终直接返回；工作台真校验写在 index.js。
@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 DEFAULT_BASE = "https://www.dexbuddy.app"
 DEFAULT_TIMEOUT = 600.0
 MISSING_KEY = (
@@ -194,16 +194,28 @@ class Models:
             for item in (record.get("input_images") or [])
             if isinstance(item, str) and item.strip()
         ]
-        file_ids = []
+        reference_upload = _resolve_reference_upload(options) if local_images else "signed"
+        file_ids: list[str] = []
+        file_urls: list[str] = []
         for index, file_path in enumerate(local_images):
-            file_options = options
+            file_options = dict(options or {})
+            file_options["referenceUpload"] = reference_upload
             if options and isinstance(options.get("idempotencyKey"), str) and options["idempotencyKey"].strip():
-                file_options = {"idempotencyKey": f"{options['idempotencyKey'].strip()}:file:{index}"}
-            file_ids.append(self._upload_reference(file_path, file_options))
+                file_options["idempotencyKey"] = f"{options['idempotencyKey'].strip()}:file:{index}"
+            issued = self._upload_reference(file_path, file_options)
+            if reference_upload == "direct":
+                file_ids.append(str(issued["id"]))
+                continue
+            download_url = issued.get("downloadUrl")
+            if not isinstance(download_url, str) or not download_url.strip():
+                raise DexModelsError("BAD_RESPONSE", "网关 files 凭证缺少 downloadUrl", 502)
+            file_urls.append(download_url.strip())
         body: dict[str, Any] = {"model": model, "prompt": prompt}
         aspect = _trim(record.get("aspect_ratio"))
         if aspect:
             body["aspect_ratio"] = aspect
+        if file_urls:
+            body["fileUrls"] = file_urls
         if file_ids:
             body["fileIds"] = file_ids
         generated = self._post("/v1/images/generate", body, options)
@@ -223,7 +235,7 @@ class Models:
         model_out = generated.get("model") if isinstance(generated, dict) else model
         return {"status": "succeeded", "output": output_path, "model": model_out if isinstance(model_out, str) else model}
 
-    def _upload_reference(self, file_path: str, options: dict[str, Any] | None) -> str:
+    def _upload_reference(self, file_path: str, options: dict[str, Any] | None) -> dict[str, Any]:
         data = Path(file_path).read_bytes()
         if not data:
             raise DexModelsError("INVALID_BODY", f"参考图是空的：{file_path}", 400)
@@ -267,7 +279,16 @@ class Models:
             raise DexModelsError("UPSTREAM_ERROR", f"参考图上传失败（{err.code}）", err.code) from err
         except (TimeoutError, urllib.error.URLError) as err:
             raise _from_network_error(err, self._timeout) from err
-        return str(file_id)
+        return issued
+
+
+def _resolve_reference_upload(options: dict[str, Any] | None) -> str:
+    mode = options.get("referenceUpload") if options else None
+    if mode is None or mode == "signed":
+        return "signed"
+    if mode == "direct":
+        return "direct"
+    raise DexModelsError("INVALID_BODY", "referenceUpload 只能是 signed 或 direct", 400)
 
 
 def _error_from_body(body: Any, status: int) -> DexModelsError:

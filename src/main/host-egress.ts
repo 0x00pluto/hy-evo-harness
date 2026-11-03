@@ -12,10 +12,17 @@ import {
   parseImageGenerate,
   parseModelsList,
   type BillingQuote,
+  type FilesIssue,
   type ModelsList,
 } from './gateway-client.ts';
 import type { SpendBlockedPayload, SpendBlockedReason } from '../shared/dex-bridge.ts';
-import type { HostImageGenerateInput, HostImageGenerateResult, HostModels, HostModelsCallOptions } from './types.ts';
+import type {
+  HostImageGenerateInput,
+  HostImageGenerateResult,
+  HostModels,
+  HostModelsCallOptions,
+  ReferenceUploadMode,
+} from './types.ts';
 
 export function unavailableHostModels(message = '网关未就绪'): HostModels {
   const fail = async (): Promise<never> => {
@@ -229,11 +236,18 @@ async function quoteOrThrow(
   return quote;
 }
 
+function resolveReferenceUpload(options?: HostModelsCallOptions): ReferenceUploadMode {
+  const mode = options?.referenceUpload;
+  if (mode === undefined || mode === 'signed') return 'signed';
+  if (mode === 'direct') return 'direct';
+  throw new GatewayError('INVALID_BODY', 'referenceUpload 只能是 signed 或 direct', 400);
+}
+
 async function uploadReference(
   deps: HostModelsDeps,
   filePath: string,
   options?: HostModelsCallOptions,
-): Promise<string> {
+): Promise<FilesIssue> {
   const readFile = deps.readFile ?? ((p: string) => fs.readFileSync(p));
   const bytes = readFile(filePath);
   if (!bytes || bytes.length === 0) {
@@ -265,7 +279,7 @@ async function uploadReference(
   if (!uploaded.ok) {
     throw new GatewayError('UPSTREAM_ERROR', `参考图上传失败（${uploaded.status}）`, uploaded.status);
   }
-  return issued.id;
+  return issued;
 }
 
 export function createHostModels(deps: HostModelsDeps): HostModels {
@@ -315,19 +329,31 @@ export function createHostModels(deps: HostModelsDeps): HostModels {
           if (!outputPath || !path.isAbsolute(outputPath)) {
             throw new GatewayError('INVALID_BODY', 'outputPath 必须是绝对路径', 400);
           }
-          await quoteOrThrow(deps, quoteBodyForImage(model), options);
           const localImages = readInputImages(record);
+          const referenceUpload = localImages.length > 0 ? resolveReferenceUpload(options) : 'signed';
+          await quoteOrThrow(deps, quoteBodyForImage(model), options);
           const fileIds: string[] = [];
+          const fileUrls: string[] = [];
           for (let i = 0; i < localImages.length; i += 1) {
             const fileKey = options?.idempotencyKey
-              ? { idempotencyKey: `${options.idempotencyKey}:file:${i}` }
-              : options;
-            fileIds.push(await uploadReference(deps, localImages[i], fileKey));
+              ? { idempotencyKey: `${options.idempotencyKey}:file:${i}`, referenceUpload }
+              : { ...options, referenceUpload };
+            const issued = await uploadReference(deps, localImages[i], fileKey);
+            if (referenceUpload === 'direct') {
+              fileIds.push(issued.id);
+              continue;
+            }
+            const downloadUrl = issued.downloadUrl?.trim() ?? '';
+            if (!downloadUrl) {
+              throw new GatewayError('BAD_RESPONSE', '网关 files 凭证缺少 downloadUrl', 502);
+            }
+            fileUrls.push(downloadUrl);
           }
           const generateBody: Record<string, unknown> = { model, prompt };
           if (record && typeof record.aspect_ratio === 'string' && record.aspect_ratio.trim() !== '') {
             generateBody.aspect_ratio = record.aspect_ratio.trim();
           }
+          if (fileUrls.length > 0) generateBody.fileUrls = fileUrls;
           if (fileIds.length > 0) generateBody.fileIds = fileIds;
           const generatedRaw = await deps.request('/v1/images/generate', {
             method: 'POST',

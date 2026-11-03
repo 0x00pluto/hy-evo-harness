@@ -2,12 +2,12 @@
 'use strict';
 
 /**
- * Dex Buddy 插件 SDK 1.0.1。拷进插件 lib/ 后：
+ * Dex Buddy 插件 SDK 1.0.2。拷进插件 lib/ 后：
  * 工作台走宿主校验与 ctx.models；独立跑 requireEntitlement 直接通过，bindModels 用 DEX_BUDDY_API_KEY（开发者付钱）。
  * 对照文档母版的 SDK_VERSION，不一致就整文件再拷。不要把 Key 写进设置或 zip。
  */
 
-const SDK_VERSION = '1.0.1';
+const SDK_VERSION = '1.0.2';
 
 const fs = require('node:fs');
 const http = require('node:http');
@@ -217,8 +217,19 @@ function createStandaloneModels(options) {
   }
 
   /**
+   * @param {{ idempotencyKey?: string; referenceUpload?: string }} [callOptions]
+   * @returns {'signed' | 'direct'}
+   */
+  function resolveReferenceUpload(callOptions) {
+    const mode = callOptions && callOptions.referenceUpload;
+    if (mode === undefined || mode === 'signed') return 'signed';
+    if (mode === 'direct') return 'direct';
+    throw new DexModelsError('INVALID_BODY', 'referenceUpload 只能是 signed 或 direct', 400);
+  }
+
+  /**
    * @param {string} filePath
-   * @param {{ idempotencyKey?: string }} [callOptions]
+   * @param {{ idempotencyKey?: string; referenceUpload?: string }} [callOptions]
    */
   async function uploadReference(filePath, callOptions) {
     const bytes = fs.readFileSync(filePath);
@@ -231,7 +242,14 @@ function createStandaloneModels(options) {
       body: { contentType, contentLength: bytes.length },
       headers: extraHeaders(callOptions),
     });
-    if (!issued || typeof issued.uploadUrl !== 'string' || typeof issued.token !== 'string' || typeof issued.key !== 'string') {
+    if (
+      !issued ||
+      typeof issued.uploadUrl !== 'string' ||
+      typeof issued.token !== 'string' ||
+      typeof issued.key !== 'string' ||
+      typeof issued.id !== 'string' ||
+      issued.id.trim() === ''
+    ) {
       throw new DexModelsError('BAD_RESPONSE', '网关 files 凭证无效', 502);
     }
     const form = new FormData();
@@ -247,10 +265,7 @@ function createStandaloneModels(options) {
     if (!uploaded.ok) {
       throw new DexModelsError('UPSTREAM_ERROR', `参考图上传失败（${uploaded.status}）`, uploaded.status);
     }
-    if (typeof issued.id !== 'string' || issued.id.trim() === '') {
-      throw new DexModelsError('BAD_RESPONSE', '网关 files 凭证无效', 502);
-    }
-    return issued.id;
+    return issued;
   }
 
   return {
@@ -288,7 +303,7 @@ function createStandaloneModels(options) {
     images: {
       /**
        * @param {unknown} input
-       * @param {{ idempotencyKey?: string }} [callOptions]
+       * @param {{ idempotencyKey?: string; referenceUpload?: string }} [callOptions]
        */
       async generate(input, callOptions) {
         const payload = input && typeof input === 'object' ? /** @type {Record<string, unknown>} */ (input) : {};
@@ -311,17 +326,31 @@ function createStandaloneModels(options) {
             if (typeof item === 'string' && item.trim() !== '') localImages.push(item.trim());
           }
         }
+        const referenceUpload = localImages.length > 0 ? resolveReferenceUpload(callOptions) : 'signed';
         /** @type {string[]} */
         const fileIds = [];
+        /** @type {string[]} */
+        const fileUrls = [];
         for (let i = 0; i < localImages.length; i += 1) {
-          const fileKey = callOptions && callOptions.idempotencyKey
-            ? { idempotencyKey: `${callOptions.idempotencyKey}:file:${i}` }
-            : callOptions;
-          fileIds.push(await uploadReference(localImages[i], fileKey));
+          /** @type {{ idempotencyKey?: string; referenceUpload?: string } | undefined} */
+          const fileKey = callOptions && typeof callOptions.idempotencyKey === 'string' && callOptions.idempotencyKey.trim() !== ''
+            ? { idempotencyKey: `${callOptions.idempotencyKey.trim()}:file:${i}`, referenceUpload }
+            : { ...(callOptions || {}), referenceUpload };
+          const issued = await uploadReference(localImages[i], fileKey);
+          if (referenceUpload === 'direct') {
+            fileIds.push(String(issued.id));
+            continue;
+          }
+          const downloadUrl = typeof issued.downloadUrl === 'string' ? issued.downloadUrl.trim() : '';
+          if (!downloadUrl) {
+            throw new DexModelsError('BAD_RESPONSE', '网关 files 凭证缺少 downloadUrl', 502);
+          }
+          fileUrls.push(downloadUrl);
         }
-        /** @type {{ model: string; prompt: string; aspect_ratio?: string; fileIds?: string[] }} */
+        /** @type {{ model: string; prompt: string; aspect_ratio?: string; fileIds?: string[]; fileUrls?: string[] }} */
         const generateBody = { model, prompt };
         if (trimString(record.aspect_ratio)) generateBody.aspect_ratio = trimString(record.aspect_ratio);
+        if (fileUrls.length > 0) generateBody.fileUrls = fileUrls;
         if (fileIds.length > 0) generateBody.fileIds = fileIds;
         const generated = await request('/v1/images/generate', {
           method: 'POST',
