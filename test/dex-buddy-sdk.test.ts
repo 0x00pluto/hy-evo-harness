@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -12,11 +13,16 @@ const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(here, '..');
 const snippetJs = path.join(repoRoot, 'docs/plugin-development/snippets/dex-buddy-sdk.js');
+const snippetStandaloneJs = path.join(repoRoot, 'docs/plugin-development/snippets/dex-buddy-standalone.js');
 const snippetPy = path.join(repoRoot, 'docs/plugin-development/snippets/dex_buddy_sdk.py');
+const snippetStandalonePy = path.join(repoRoot, 'docs/plugin-development/snippets/dex_buddy_standalone.py');
 const playgroundJs = path.join(repoRoot, 'plugins/models-playground/lib/dex-buddy-sdk.js');
+const playgroundStandaloneJs = path.join(repoRoot, 'plugins/models-playground/lib/dex-buddy-standalone.js');
 const playgroundPy = path.join(repoRoot, 'plugins/models-playground/lib/dex_buddy_sdk.py');
+const playgroundStandalonePy = path.join(repoRoot, 'plugins/models-playground/lib/dex_buddy_standalone.py');
 const generatePy = path.join(repoRoot, 'plugins/models-playground/python/generate.py');
 const { MISSING_KEY, SDK_VERSION, bindModels, childEnv, requireEntitlement } = require(playgroundJs);
+const { STANDALONE_VERSION, createStandaloneModels } = require(playgroundStandaloneJs);
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -27,15 +33,31 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 test('snippets 与试玩插件里的 SDK 是同一份', () => {
   assert.equal(fs.readFileSync(snippetJs, 'utf8'), fs.readFileSync(playgroundJs, 'utf8'));
+  assert.equal(fs.readFileSync(snippetStandaloneJs, 'utf8'), fs.readFileSync(playgroundStandaloneJs, 'utf8'));
   assert.equal(fs.readFileSync(snippetPy, 'utf8'), fs.readFileSync(playgroundPy, 'utf8'));
+  assert.equal(fs.readFileSync(snippetStandalonePy, 'utf8'), fs.readFileSync(playgroundStandalonePy, 'utf8'));
 });
 
-test('SDK_VERSION 为 1.0.2', () => {
-  assert.equal(SDK_VERSION, '1.0.2');
+test('SDK_VERSION 为 1.0.3，STANDALONE_VERSION 为 1.0.3', () => {
+  assert.equal(SDK_VERSION, '1.0.3');
+  assert.equal(STANDALONE_VERSION, '1.0.3');
+});
+
+test('接口层不含独立跑上传实现', () => {
+  const facade = fs.readFileSync(snippetJs, 'utf8');
+  assert.equal(facade.includes('createHash'), false);
+  assert.equal(facade.includes(':file:'), false);
+  assert.equal(facade.includes('/v1/files'), false);
+  assert.equal(facade.includes('createStandaloneModels'), true);
+  assert.equal(typeof createStandaloneModels, 'function');
 });
 
 test('Node SDK 在 checkJs + strict 下通过 tsc --noEmit', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-sdk-tsc-'));
+  const facadeCopy = path.join(root, 'dex-buddy-sdk.js');
+  const standaloneCopy = path.join(root, 'dex-buddy-standalone.js');
+  fs.copyFileSync(snippetJs, facadeCopy);
+  fs.copyFileSync(snippetStandaloneJs, standaloneCopy);
   const configPath = path.join(root, 'tsconfig.json');
   fs.writeFileSync(
     configPath,
@@ -50,7 +72,7 @@ test('Node SDK 在 checkJs + strict 下通过 tsc --noEmit', () => {
         types: ['node'],
         typeRoots: [path.join(repoRoot, 'node_modules/@types')],
       },
-      files: [snippetJs],
+      files: [facadeCopy, standaloneCopy],
     }),
   );
   const result = spawnSync('pnpm', ['exec', 'tsc', '--noEmit', '-p', configPath], {
@@ -204,15 +226,15 @@ test('独立跑默认参考图交 fileUrls', async () => {
   const outputPath = path.join(root, 'out.png');
   const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   fs.writeFileSync(refPath, png);
-  /** @type {{ url: string; body?: unknown }[]} */
-  const seen: { url: string; body?: unknown }[] = [];
+  /** @type {{ url: string; body?: unknown; headers?: HeadersInit }[]} */
+  const seen: { url: string; body?: unknown; headers?: HeadersInit }[] = [];
   const models = bindModels(null, {
     env: { DEX_BUDDY_API_KEY: 'dbh_sk_test' },
     pluginId: 'models-playground',
     baseUrl: 'https://www.dexbuddy.app',
     fetch: async (url: string, init?: RequestInit) => {
       const body = init?.body && typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
-      seen.push({ url, body });
+      seen.push({ url, body, headers: init?.headers });
       if (url.endsWith('/v1/files')) {
         return jsonResponse({
           id: 'file-1',
@@ -251,6 +273,66 @@ test('独立跑默认参考图交 fileUrls', async () => {
     prompt: '独角兽',
     fileUrls: ['https://cdn.example/ref.png?e=1&token=sig'],
   });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('独立跑参考图文件键按内容哈希，不跟成图键', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-buddy-sdk-'));
+  const refPath = path.join(root, 'ref.png');
+  const outputPath = path.join(root, 'out.png');
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const expectedFileKey = `ref:${crypto.createHash('sha256').update(png).digest('hex')}`;
+  fs.writeFileSync(refPath, png);
+  /** @type {{ url: string; headers?: HeadersInit }[]} */
+  const seen: { url: string; headers?: HeadersInit }[] = [];
+  const models = bindModels(null, {
+    env: { DEX_BUDDY_API_KEY: 'dbh_sk_test' },
+    pluginId: 'models-playground',
+    baseUrl: 'https://www.dexbuddy.app',
+    fetch: async (url: string, init?: RequestInit) => {
+      seen.push({ url, headers: init?.headers });
+      if (url.endsWith('/v1/files')) {
+        return jsonResponse({
+          id: 'file-1',
+          key: 'refs/u1/a.png',
+          uploadUrl: 'https://upload.example/put',
+          token: 'tok',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          downloadUrl: 'https://cdn.example/ref.png?e=1&token=sig',
+        });
+      }
+      if (url === 'https://upload.example/put') {
+        return new Response('', { status: 200 });
+      }
+      if (url.endsWith('/v1/images/generate')) {
+        return jsonResponse({
+          downloadUrl: 'https://cdn.example/out.png',
+          mediaType: 'image/png',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          model: 'dexbuddy-image',
+        });
+      }
+      if (url === 'https://cdn.example/out.png') {
+        return new Response(png, { status: 200 });
+      }
+      throw new Error(url);
+    },
+  });
+  await models.images.generate(
+    {
+      model: 'dexbuddy-image',
+      input: { prompt: '独角兽', input_images: [refPath] },
+      outputPath,
+    },
+    { idempotencyKey: 'note-42:slot-1:gen-1' },
+  );
+  const files = seen.find((item) => item.url.endsWith('/v1/files'));
+  const generate = seen.find((item) => item.url.endsWith('/v1/images/generate'));
+  const fileHeaders = files?.headers as Record<string, string> | undefined;
+  const generateHeaders = generate?.headers as Record<string, string> | undefined;
+  assert.equal(fileHeaders?.['Idempotency-Key'], expectedFileKey);
+  assert.equal(String(fileHeaders?.['Idempotency-Key'] || '').includes(':file:'), false);
+  assert.equal(generateHeaders?.['Idempotency-Key'], 'note-42:slot-1:gen-1');
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -393,7 +475,7 @@ test('Python SDK 能被编译且 require_entitlement 直接通过', (t) => {
     { encoding: 'utf8', timeout: 8000, cwd: path.dirname(playgroundPy) },
   );
   assert.equal(run.status, 0, run.stderr || String(run.error));
-  assert.equal(run.stdout.trim(), '1.0.2');
+  assert.equal(run.stdout.trim(), '1.0.3');
 });
 
 function skipWithoutPython(t: { skip: (reason?: string) => void }): boolean {

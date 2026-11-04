@@ -1,21 +1,20 @@
-"""Dex Buddy 插件 SDK 1.0.2。拷进插件 lib/ 后：
-独立跑用 DEX_BUDDY_API_KEY 打 Dex Buddy 网关（开发者付钱）；
+"""Dex Buddy 插件 SDK 接口层 1.0.3。拷进插件 lib/ 后：
 工作台里由 Node 注入 DEX_BUDDY_MODELS_URL，走宿主（谁用谁付钱）。
+独立跑再拷同目录的 dex_buddy_standalone.py，用 DEX_BUDDY_API_KEY（开发者付钱）。
+__version__ 只表示对外契约；契约没变就不必再拷本文件。
 require_entitlement 在 Python 里始终直接返回；工作台真校验写在 index.js。
-对照文档母版的 __version__，不一致就整文件再拷。不要把 Key 打进 zip。
+不要把 Key 打进 zip。
 """
 
 from __future__ import annotations
 
 import json
-import mimetypes
 import os
 import urllib.error
 import urllib.request
-from pathlib import Path
 from typing import Any
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 DEFAULT_BASE = "https://www.dexbuddy.app"
 DEFAULT_TIMEOUT = 600.0
 MISSING_KEY = (
@@ -71,226 +70,6 @@ def _from_network_error(err: BaseException, timeout: float | None) -> DexModelsE
     return DexModelsError("NETWORK_ERROR", str(err), 0)
 
 
-def _resolve_plugin_id() -> str:
-    here = Path(__file__).resolve().parent
-    candidates = [here.parent / "plugin.manifest.json", here / "plugin.manifest.json"]
-    for file in candidates:
-        if not file.is_file():
-            continue
-        try:
-            parsed = json.loads(file.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        plugin_id = parsed.get("id") if isinstance(parsed, dict) else None
-        if isinstance(plugin_id, str) and plugin_id.strip():
-            return plugin_id.strip()
-    return ""
-
-
-class _Completions:
-    def __init__(self, client: "Models") -> None:
-        self._client = client
-
-    def create(self, body: Any, options: dict[str, Any] | None = None) -> Any:
-        return self._client._post("/v1/chat/completions", body, options)
-
-
-class _Chat:
-    def __init__(self, client: "Models") -> None:
-        self.completions = _Completions(client)
-
-
-class _Billing:
-    def __init__(self, client: "Models") -> None:
-        self._client = client
-
-    def quote(self, body: Any, options: dict[str, Any] | None = None) -> Any:
-        return self._client._post("/v1/billing/quote", body, options)
-
-
-class _Images:
-    def __init__(self, client: "Models") -> None:
-        self._client = client
-
-    def generate(self, payload: dict[str, Any], options: dict[str, Any] | None = None) -> Any:
-        return self._client._generate_image(payload, options)
-
-
-class Models:
-    def __init__(self, env: dict[str, str] | None = None) -> None:
-        self._env = _env_map(env)
-        self._timeout = _http_timeout(self._env)
-        self._plugin_id = "" if self._models_url() else _resolve_plugin_id()
-        self.chat = _Chat(self)
-        self.billing = _Billing(self)
-        self.images = _Images(self)
-
-    def list(self) -> Any:
-        return self._request("GET", "/v1/models")
-
-    def _models_url(self) -> str:
-        return _trim(self._env.get("DEX_BUDDY_MODELS_URL")).rstrip("/")
-
-    def _gateway(self) -> str:
-        return _trim(self._env.get("DEX_GATEWAY_BASE_URL")) or DEFAULT_BASE
-
-    def _headers(self, options: dict[str, Any] | None, json_body: bool) -> dict[str, str]:
-        headers = {"Accept": "application/json"}
-        if json_body:
-            headers["Content-Type"] = "application/json"
-        models_url = self._models_url()
-        if not models_url:
-            key = _trim(self._env.get("DEX_BUDDY_API_KEY"))
-            if not key:
-                raise DexModelsError("UNAUTHORIZED", MISSING_KEY, 401)
-            headers["Authorization"] = f"Bearer {key}"
-            if self._plugin_id:
-                headers["X-Plugin-Id"] = self._plugin_id
-        if options and isinstance(options.get("idempotencyKey"), str):
-            token = options["idempotencyKey"].strip()
-            if token:
-                headers["Idempotency-Key"] = token
-        return headers
-
-    def _request(self, method: str, path: str, body: Any = None, options: dict[str, Any] | None = None) -> Any:
-        base = self._models_url() or self._gateway().rstrip("/")
-        url = f"{base}{path if path.startswith('/') else '/' + path}"
-        data = None if body is None else json.dumps(body).encode("utf-8")
-        req = urllib.request.Request(url, data=data, method=method, headers=self._headers(options, body is not None))
-        try:
-            with _urlopen(req, self._timeout) as response:
-                raw = response.read().decode("utf-8")
-                return json.loads(raw) if raw.strip() else None
-        except urllib.error.HTTPError as err:
-            raw = err.read().decode("utf-8") if err.fp else ""
-            parsed: Any = None
-            if raw.strip():
-                try:
-                    parsed = json.loads(raw)
-                except json.JSONDecodeError:
-                    parsed = None
-            raise _error_from_body(parsed, err.code) from err
-        except (TimeoutError, urllib.error.URLError) as err:
-            raise _from_network_error(err, self._timeout) from err
-
-    def _post(self, path: str, body: Any, options: dict[str, Any] | None) -> Any:
-        return self._request("POST", path, body, options)
-
-    def _generate_image(self, payload: dict[str, Any], options: dict[str, Any] | None) -> Any:
-        if self._models_url():
-            return self._post("/images/generate", payload, options)
-        model = _trim(payload.get("model"))
-        output_path = _trim(payload.get("outputPath"))
-        record = payload.get("input") if isinstance(payload.get("input"), dict) else {}
-        prompt = _trim(record.get("prompt"))
-        if not model:
-            raise DexModelsError("INVALID_BODY", "缺少 model", 400)
-        if not prompt:
-            raise DexModelsError("INVALID_BODY", "缺少 prompt", 400)
-        if not output_path or not os.path.isabs(output_path):
-            raise DexModelsError("INVALID_BODY", "outputPath 必须是绝对路径", 400)
-        local_images = [
-            item.strip()
-            for item in (record.get("input_images") or [])
-            if isinstance(item, str) and item.strip()
-        ]
-        reference_upload = _resolve_reference_upload(options) if local_images else "signed"
-        file_ids: list[str] = []
-        file_urls: list[str] = []
-        for index, file_path in enumerate(local_images):
-            file_options = dict(options or {})
-            file_options["referenceUpload"] = reference_upload
-            if options and isinstance(options.get("idempotencyKey"), str) and options["idempotencyKey"].strip():
-                file_options["idempotencyKey"] = f"{options['idempotencyKey'].strip()}:file:{index}"
-            issued = self._upload_reference(file_path, file_options)
-            if reference_upload == "direct":
-                file_ids.append(str(issued["id"]))
-                continue
-            download_url = issued.get("downloadUrl")
-            if not isinstance(download_url, str) or not download_url.strip():
-                raise DexModelsError("BAD_RESPONSE", "网关 files 凭证缺少 downloadUrl", 502)
-            file_urls.append(download_url.strip())
-        body: dict[str, Any] = {"model": model, "prompt": prompt}
-        aspect = _trim(record.get("aspect_ratio"))
-        if aspect:
-            body["aspect_ratio"] = aspect
-        if file_urls:
-            body["fileUrls"] = file_urls
-        if file_ids:
-            body["fileIds"] = file_ids
-        generated = self._post("/v1/images/generate", body, options)
-        download_url = generated.get("downloadUrl") if isinstance(generated, dict) else None
-        if not isinstance(download_url, str) or not download_url.strip():
-            raise DexModelsError("BAD_RESPONSE", "网关生图结果无效", 502)
-        try:
-            with _urlopen(download_url, self._timeout) as response:
-                data = response.read()
-        except (TimeoutError, urllib.error.URLError) as err:
-            raise _from_network_error(err, self._timeout) from err
-        if not data:
-            raise DexModelsError("BAD_RESPONSE", "生成图是空的", 502)
-        out = Path(output_path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(data)
-        model_out = generated.get("model") if isinstance(generated, dict) else model
-        return {"status": "succeeded", "output": output_path, "model": model_out if isinstance(model_out, str) else model}
-
-    def _upload_reference(self, file_path: str, options: dict[str, Any] | None) -> dict[str, Any]:
-        data = Path(file_path).read_bytes()
-        if not data:
-            raise DexModelsError("INVALID_BODY", f"参考图是空的：{file_path}", 400)
-        content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
-        issued = self._post(
-            "/v1/files",
-            {"contentType": content_type, "contentLength": len(data)},
-            options,
-        )
-        if not isinstance(issued, dict):
-            raise DexModelsError("BAD_RESPONSE", "网关 files 凭证无效", 502)
-        upload_url = issued.get("uploadUrl")
-        token = issued.get("token")
-        key = issued.get("key")
-        file_id = issued.get("id")
-        if not all(isinstance(item, str) and item.strip() for item in (upload_url, token, key, file_id)):
-            raise DexModelsError("BAD_RESPONSE", "网关 files 凭证无效", 502)
-        boundary = "----DexBuddyForm"
-        filename = os.path.basename(file_path) or "image"
-        chunks = [
-            f"--{boundary}\r\nContent-Disposition: form-data; name=\"token\"\r\n\r\n{token}\r\n".encode("utf-8"),
-            f"--{boundary}\r\nContent-Disposition: form-data; name=\"key\"\r\n\r\n{key}\r\n".encode("utf-8"),
-            (
-                f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n"
-                f"Content-Type: {content_type}\r\n\r\n"
-            ).encode("utf-8")
-            + data
-            + b"\r\n",
-            f"--{boundary}--\r\n".encode("utf-8"),
-        ]
-        req = urllib.request.Request(
-            str(upload_url),
-            data=b"".join(chunks),
-            method="POST",
-            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-        )
-        try:
-            with _urlopen(req, self._timeout) as response:
-                response.read()
-        except urllib.error.HTTPError as err:
-            raise DexModelsError("UPSTREAM_ERROR", f"参考图上传失败（{err.code}）", err.code) from err
-        except (TimeoutError, urllib.error.URLError) as err:
-            raise _from_network_error(err, self._timeout) from err
-        return issued
-
-
-def _resolve_reference_upload(options: dict[str, Any] | None) -> str:
-    mode = options.get("referenceUpload") if options else None
-    if mode is None or mode == "signed":
-        return "signed"
-    if mode == "direct":
-        return "direct"
-    raise DexModelsError("INVALID_BODY", "referenceUpload 只能是 signed 或 direct", 400)
-
-
 def _error_from_body(body: Any, status: int) -> DexModelsError:
     record = body if isinstance(body, dict) else None
     nested = record.get("error") if record else None
@@ -313,8 +92,96 @@ def _urlopen(req: urllib.request.Request | str, timeout: float | None = DEFAULT_
     return opener.open(req, timeout=timeout)
 
 
-def bind_models(env: dict[str, str] | None = None) -> Models:
-    return Models(env)
+class _ProxyCompletions:
+    def __init__(self, client: "ProxyModels") -> None:
+        self._client = client
+
+    def create(self, body: Any, options: dict[str, Any] | None = None) -> Any:
+        return self._client._post("/v1/chat/completions", body, options)
+
+
+class _ProxyChat:
+    def __init__(self, client: "ProxyModels") -> None:
+        self.completions = _ProxyCompletions(client)
+
+
+class _ProxyBilling:
+    def __init__(self, client: "ProxyModels") -> None:
+        self._client = client
+
+    def quote(self, body: Any, options: dict[str, Any] | None = None) -> Any:
+        return self._client._post("/v1/billing/quote", body, options)
+
+
+class _ProxyImages:
+    def __init__(self, client: "ProxyModels") -> None:
+        self._client = client
+
+    def generate(self, payload: dict[str, Any], options: dict[str, Any] | None = None) -> Any:
+        return self._client._post("/images/generate", payload, options)
+
+
+class ProxyModels:
+    """工作台：只转发到 Node 注入的本机代理。"""
+
+    def __init__(self, env: dict[str, str] | None = None) -> None:
+        self._env = _env_map(env)
+        self._timeout = _http_timeout(self._env)
+        self.chat = _ProxyChat(self)
+        self.billing = _ProxyBilling(self)
+        self.images = _ProxyImages(self)
+
+    def list(self) -> Any:
+        return self._request("GET", "/v1/models")
+
+    def _models_url(self) -> str:
+        return _trim(self._env.get("DEX_BUDDY_MODELS_URL")).rstrip("/")
+
+    def _headers(self, options: dict[str, Any] | None, json_body: bool) -> dict[str, str]:
+        headers = {"Accept": "application/json"}
+        if json_body:
+            headers["Content-Type"] = "application/json"
+        if options and isinstance(options.get("idempotencyKey"), str):
+            token = options["idempotencyKey"].strip()
+            if token:
+                headers["Idempotency-Key"] = token
+        return headers
+
+    def _request(self, method: str, path: str, body: Any = None, options: dict[str, Any] | None = None) -> Any:
+        base = self._models_url()
+        if not base:
+            raise DexModelsError("UNAUTHORIZED", "宿主模型代理不可用", 401)
+        url = f"{base}{path if path.startswith('/') else '/' + path}"
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method=method, headers=self._headers(options, body is not None))
+        try:
+            with _urlopen(req, self._timeout) as response:
+                raw = response.read().decode("utf-8")
+                return json.loads(raw) if raw.strip() else None
+        except urllib.error.HTTPError as err:
+            raw = err.read().decode("utf-8") if err.fp else ""
+            parsed: Any = None
+            if raw.strip():
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = None
+            raise _error_from_body(parsed, err.code) from err
+        except (TimeoutError, urllib.error.URLError) as err:
+            raise _from_network_error(err, self._timeout) from err
+
+    def _post(self, path: str, body: Any, options: dict[str, Any] | None) -> Any:
+        return self._request("POST", path, body, options)
+
+
+def bind_models(env: dict[str, str] | None = None) -> Any:
+    env_map = _env_map(env)
+    if _trim(env_map.get("DEX_BUDDY_MODELS_URL")):
+        return ProxyModels(env_map)
+    # 懒加载，避免与 standalone 顶层互相 import。
+    from dex_buddy_standalone import create_standalone_models
+
+    return create_standalone_models(env_map)
 
 
 def require_entitlement() -> None:

@@ -157,12 +157,28 @@ export function parseCreditsBalance(value: unknown): number {
   throw new GatewayError('BAD_RESPONSE', '网关余额无效');
 }
 
-function readError(body: unknown, status: number): GatewayError {
+function parseRetryAfterHeader(headers: Headers): number | undefined {
+  const raw = headers.get('Retry-After');
+  if (raw === null) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === '') return undefined;
+  const seconds = Number(trimmed);
+  if (!Number.isFinite(seconds) || seconds < 0) return undefined;
+  return seconds;
+}
+
+function readError(body: unknown, status: number, headers?: Headers): GatewayError {
   const record = asRecord(body);
   const nested = record ? asRecord(record.error) : null;
+  const bodyRetryAfter =
+    record && typeof record.retryAfter === 'number' && Number.isFinite(record.retryAfter)
+      ? record.retryAfter
+      : undefined;
+  const headerRetryAfter = headers ? parseRetryAfterHeader(headers) : undefined;
+  const retryAfter = bodyRetryAfter ?? headerRetryAfter;
   if (nested && typeof nested.message === 'string' && nested.message.trim() !== '') {
     const code = typeof nested.code === 'string' && nested.code.trim() !== '' ? nested.code : 'BAD_RESPONSE';
-    return new GatewayError(code, nested.message, status);
+    return new GatewayError(code, nested.message, status, retryAfter);
   }
   const codeRaw = record && typeof record.code === 'string' ? record.code : 'BAD_RESPONSE';
   const code = codeRaw || 'BAD_RESPONSE';
@@ -170,10 +186,6 @@ function readError(body: unknown, status: number): GatewayError {
     record && typeof record.error === 'string' && record.error.trim() !== ''
       ? record.error
       : `网关请求失败（${status}）`;
-  const retryAfter =
-    record && typeof record.retryAfter === 'number' && Number.isFinite(record.retryAfter)
-      ? record.retryAfter
-      : undefined;
   return new GatewayError(code, error, status, retryAfter);
 }
 
@@ -222,7 +234,7 @@ export async function gatewayRequest(
   }
 
   const body = await readJson(response);
-  if (!response.ok) throw readError(body, response.status);
+  if (!response.ok) throw readError(body, response.status, response.headers);
   return body;
 }
 

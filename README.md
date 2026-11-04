@@ -75,7 +75,7 @@ module.exports = {
 
 `ctx` 提供 `registerService`、`getService`、`logger`、`emit`、`on`、`models`、`requireEntitlement`、`getPluginConfig`、`pluginEnv`、`dirs`。清单声明了 `runtime` 时还有 `runtime`。清单声明了 `externalTools` 且本机 PATH 里已有这些命令时还有 `tools`：键是命令名，值是绝对路径。声明了 `runtime` 时，这些命令的目录在 `ctx.runtime.env` 的 PATH 前面；没有 `runtime` 时在 `pluginEnv()` 里。宿主自己的 `process.env` 不会被改写。卸载时宿主会调用 `dispose`，并移除该插件注册的服务和事件。已安装插件的 `dirs.data` 在 `plugin-data/<id>/`，卸载后保留；`dirs.cache` 在 `plugin-runtime/<id>/cache`，卸载时连同依赖环境一起删除。
 
-`ctx.models` 经宿主调用线上文案和生图。请求体对齐 OpenAI Chat Completions 与 Replicate 的 `input` 字段。插件不要自己填 `pluginId`，也不要在页面里请求网关。独立开发时拷 [dex-buddy-sdk.js](docs/plugin-development/snippets/dex-buddy-sdk.js) 或 [dex_buddy_sdk.py](docs/plugin-development/snippets/dex_buddy_sdk.py)，本机填 `DEX_BUDDY_API_KEY`；从 SDK 调 `requireEntitlement(ctx)` 和 `bindModels(ctx)`，不要直接碰宿主字段。发出去的包没有 Key，谁用谁付钱。详见 [docs/plugin-development/models.md](docs/plugin-development/models.md)。
+`ctx.models` 经宿主调用线上文案和生图。请求体对齐 OpenAI Chat Completions 与 Replicate 的 `input` 字段。插件不要自己填 `pluginId`，也不要在页面里请求网关。开发时拷接口层 [dex-buddy-sdk.js](docs/plugin-development/snippets/dex-buddy-sdk.js) 或 [dex_buddy_sdk.py](docs/plugin-development/snippets/dex_buddy_sdk.py)；本机独立跑再拷同目录的 standalone。从 SDK 调 `requireEntitlement(ctx)` 和 `bindModels(ctx)`，不要直接碰宿主字段。发出去的包没有 Key，谁用谁付钱。详见 [docs/plugin-development/models.md](docs/plugin-development/models.md)。
 
 `getPluginConfig()` 只返回当前插件已声明的配置。拉起子进程时显式传入环境，不要改宿主的 `process.env`：
 

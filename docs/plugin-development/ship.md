@@ -4,7 +4,7 @@
 
 ## 开发时挂到 Dex Buddy
 
-日常改模型调用不必先克隆宿主仓。按 [模型](models.md)：拷 `dex-buddy-sdk.js` / `dex_buddy_sdk.py`，对照 `SDK_VERSION`，本机填 `DEX_BUDDY_API_KEY`，`index.js` 里 `requireEntitlement(ctx)` 再 `bindModels(ctx)`，Python 子进程用 `childEnv`。装进 Dex Buddy 验收时走下面这条路，业务代码不用改。不要把 Key 打进 zip。
+日常改模型调用不必先克隆宿主仓。按 [模型](models.md)：拷接口层 `dex-buddy-sdk.js` / `dex_buddy_sdk.py`（独立跑再拷 standalone）；`SDK_VERSION` 只对照接口契约。本机填 `DEX_BUDDY_API_KEY`，`index.js` 里 `requireEntitlement(ctx)` 再 `bindModels(ctx)`，Python 子进程用 `childEnv`。装进 Dex Buddy 验收时走下面这条路，业务代码不用改；宿主实现升级不必跟拷接口。不要把 Key 打进 zip。
 
 不要把源码复制进 Dex Buddy 的 `plugins/` 目录，否则改一处、另一处还是旧的。
 

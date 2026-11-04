@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import test from 'node:test';
 import { GatewayError } from '../src/main/gateway-client.ts';
 import {
@@ -359,6 +360,128 @@ test('非法 referenceUpload 是 INVALID_BODY', async () => {
     (err: unknown) => err instanceof GatewayError && err.code === 'INVALID_BODY',
   );
   assert.equal(calls.length, 0);
+});
+
+test('参考图 /v1/files 用内容哈希，同字节换成图键仍复用', async () => {
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const expectedFileKey = `ref:${crypto.createHash('sha256').update(png).digest('hex')}`;
+  const { models, calls } = makeHost({
+    shopGate: async () => ({ ready: true, pluginIds: [] }),
+    readFile: () => png,
+    mkdir: () => undefined,
+    writeFile: () => undefined,
+    fetchImpl: async (url) => {
+      if (url === 'https://upload.example/put') return new Response('', { status: 200 });
+      if (url === 'https://cdn.example/out.png') return new Response(png, { status: 200 });
+      throw new Error(url);
+    },
+    request: async (path) => {
+      if (path === '/v1/billing/quote') return imageQuote(true);
+      if (path === '/v1/files') {
+        return {
+          id: 'file-hash',
+          key: 'refs/u1/h.png',
+          uploadUrl: 'https://upload.example/put',
+          token: 'tok',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          downloadUrl: 'https://cdn.example/ref.png?e=1&token=sig',
+        };
+      }
+      if (path === '/v1/images/generate') {
+        return {
+          downloadUrl: 'https://cdn.example/out.png',
+          mediaType: 'image/png',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          model: 'dexbuddy-image',
+        };
+      }
+      throw new Error(path);
+    },
+  });
+  await models.images.generate(
+    {
+      model: 'dexbuddy-image',
+      input: { prompt: 'a cat', input_images: ['/tmp/ref.png'] },
+      outputPath: '/tmp/out-a.png',
+    },
+    { idempotencyKey: 'post-1:cover:gen-1' },
+  );
+  await models.images.generate(
+    {
+      model: 'dexbuddy-image',
+      input: { prompt: 'a dog', input_images: ['/tmp/ref.png'] },
+      outputPath: '/tmp/out-b.png',
+    },
+    { idempotencyKey: 'post-1:gallery-01:gen-2' },
+  );
+  const fileCalls = calls.filter((item) => item.path === '/v1/files');
+  assert.equal(fileCalls.length, 2);
+  for (const call of fileCalls) {
+    assert.equal(call.init.headers?.['Idempotency-Key'], expectedFileKey);
+    assert.equal(String(call.init.headers?.['Idempotency-Key'] || '').includes(':file:'), false);
+    assert.equal(String(call.init.headers?.['Idempotency-Key'] || '').includes('post-1'), false);
+  }
+  const generateCalls = calls.filter((item) => item.path === '/v1/images/generate');
+  assert.equal(generateCalls[0]?.init.headers?.['Idempotency-Key'], 'post-1:cover:gen-1');
+  assert.equal(generateCalls[1]?.init.headers?.['Idempotency-Key'], 'post-1:gallery-01:gen-2');
+});
+
+test('参考图字节变了则文件幂等键变', async () => {
+  const pngA = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const pngB = Buffer.from([137, 80, 78, 71, 13, 10, 26, 11]);
+  const keyA = `ref:${crypto.createHash('sha256').update(pngA).digest('hex')}`;
+  const keyB = `ref:${crypto.createHash('sha256').update(pngB).digest('hex')}`;
+  assert.notEqual(keyA, keyB);
+  let reads = 0;
+  const { models, calls } = makeHost({
+    shopGate: async () => ({ ready: true, pluginIds: [] }),
+    readFile: () => {
+      reads += 1;
+      return reads === 1 ? pngA : pngB;
+    },
+    mkdir: () => undefined,
+    writeFile: () => undefined,
+    fetchImpl: async (url) => {
+      if (url === 'https://upload.example/put') return new Response('', { status: 200 });
+      if (url === 'https://cdn.example/out.png') return new Response(pngA, { status: 200 });
+      throw new Error(url);
+    },
+    request: async (path) => {
+      if (path === '/v1/billing/quote') return imageQuote(true);
+      if (path === '/v1/files') {
+        return {
+          id: 'file-hash',
+          key: 'refs/u1/h.png',
+          uploadUrl: 'https://upload.example/put',
+          token: 'tok',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          downloadUrl: 'https://cdn.example/ref.png?e=1&token=sig',
+        };
+      }
+      if (path === '/v1/images/generate') {
+        return {
+          downloadUrl: 'https://cdn.example/out.png',
+          mediaType: 'image/png',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          model: 'dexbuddy-image',
+        };
+      }
+      throw new Error(path);
+    },
+  });
+  await models.images.generate({
+    model: 'dexbuddy-image',
+    input: { prompt: 'a', input_images: ['/tmp/same-path.png'] },
+    outputPath: '/tmp/out-a.png',
+  });
+  await models.images.generate({
+    model: 'dexbuddy-image',
+    input: { prompt: 'b', input_images: ['/tmp/same-path.png'] },
+    outputPath: '/tmp/out-b.png',
+  });
+  const fileCalls = calls.filter((item) => item.path === '/v1/files');
+  assert.equal(fileCalls[0]?.init.headers?.['Idempotency-Key'], keyA);
+  assert.equal(fileCalls[1]?.init.headers?.['Idempotency-Key'], keyB);
 });
 
 test('生图报价不带 Idempotency-Key，生图请求带', async () => {

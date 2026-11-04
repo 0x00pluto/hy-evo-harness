@@ -442,6 +442,18 @@ stateDiagram-v2
 - 模型试玩的「检测已买断 / 未买断」是本仓示例 mock，不改变正式作者无参合同。
 - 不把买断挪到网关；不发 npm / PyPI。
 
+### 工程决议（接口与实现分拆，不新开 PRD）
+
+相对正文「单文件拷贝、SDK_VERSION 不一致就整文件再拷」：拷贝关系改为**接口必拷、默认可跑实现可选**。
+
+| 层 | 文件 | 版本常量 | 何时再拷 |
+|---|---|---|---|
+| 接口 | `dex-buddy-sdk.js` / `dex_buddy_sdk.py` | `SDK_VERSION` / `__version__` | 仅对外契约变更 |
+| 默认实现 | `dex-buddy-standalone.js` / `dex_buddy_standalone.py` | `STANDALONE_VERSION` | 仅独立跑需要该补丁时 |
+| 运行时实现 | 宿主 `host-egress` | 宿主发版 | 插件永不拷 |
+
+工作台 `bindModels(ctx)` 仍直接返回 `ctx.models`。作者判断接口新旧只看接口版本，不为宿主内部实现细节整文件再拷接口。
+
 ### 质量检查
 
 | 检查项 | 状态 |

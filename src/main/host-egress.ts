@@ -3,6 +3,7 @@
  * 文案对齐 OpenAI；生图 input 对齐 Replicate 字段名。
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -265,10 +266,15 @@ function resolveReferenceUpload(options?: HostModelsCallOptions): ReferenceUploa
   throw new GatewayError('INVALID_BODY', 'referenceUpload 只能是 signed 或 direct', 400);
 }
 
+/** 参考图按字节复用；不带帖子 id、槽位或 gen。 */
+function referenceIdempotencyKey(bytes: Buffer): string {
+  return `ref:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
+}
+
 async function uploadReference(
   deps: HostModelsDeps,
   filePath: string,
-  options?: HostModelsCallOptions,
+  referenceUpload: ReferenceUploadMode,
 ): Promise<FilesIssue> {
   const readFile = deps.readFile ?? ((p: string) => fs.readFileSync(p));
   const bytes = readFile(filePath);
@@ -279,7 +285,10 @@ async function uploadReference(
   const issuedRaw = await deps.request('/v1/files', {
     method: 'POST',
     body: { contentType, contentLength: bytes.length },
-    headers: pluginHeaders(deps.pluginId, options),
+    headers: pluginHeaders(deps.pluginId, {
+      idempotencyKey: referenceIdempotencyKey(bytes),
+      referenceUpload,
+    }),
   });
   const issued = parseFilesIssue(issuedRaw);
   const fetchImpl = deps.fetchImpl ?? globalThis.fetch.bind(globalThis);
@@ -356,11 +365,8 @@ export function createHostModels(deps: HostModelsDeps): HostModels {
           await quoteBeforeImageGenerate(deps, model, options);
           const fileIds: string[] = [];
           const fileUrls: string[] = [];
-          for (let i = 0; i < localImages.length; i += 1) {
-            const fileKey = options?.idempotencyKey
-              ? { idempotencyKey: `${options.idempotencyKey}:file:${i}`, referenceUpload }
-              : { ...options, referenceUpload };
-            const issued = await uploadReference(deps, localImages[i], fileKey);
+          for (const localPath of localImages) {
+            const issued = await uploadReference(deps, localPath, referenceUpload);
             if (referenceUpload === 'direct') {
               fileIds.push(issued.id);
               continue;

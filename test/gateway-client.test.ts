@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   GatewayError,
+  gatewayRequest,
   parseCreditsBalance,
   parseEntitlements,
   parseModelsList,
@@ -91,4 +92,40 @@ test('parseEntitlements / parseModelsList / parseShopCatalog', () => {
     },
   });
   assert.equal(titled.plugins[0]?.name, '漫剧工作室');
+});
+
+test('429 无 body retryAfter 时从 Retry-After 头取秒数', async () => {
+  await assert.rejects(
+    () =>
+      gatewayRequest(
+        async () =>
+          new Response(JSON.stringify({ code: 'RATE_LIMITED', error: '太快了' }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': '12' },
+          }),
+        'https://www.dexbuddy.app',
+        '/v1/files',
+        { method: 'POST', body: {} },
+      ),
+    (err: unknown) =>
+      err instanceof GatewayError && err.code === 'RATE_LIMITED' && err.retryAfter === 12,
+  );
+});
+
+test('body 已有 retryAfter 时不覆盖', async () => {
+  await assert.rejects(
+    () =>
+      gatewayRequest(
+        async () =>
+          new Response(JSON.stringify({ code: 'RATE_LIMITED', error: '太快了', retryAfter: 7 }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': '99' },
+          }),
+        'https://www.dexbuddy.app',
+        '/v1/files',
+        { method: 'POST', body: {} },
+      ),
+    (err: unknown) =>
+      err instanceof GatewayError && err.code === 'RATE_LIMITED' && err.retryAfter === 7,
+  );
 });
