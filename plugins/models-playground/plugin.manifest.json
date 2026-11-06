@@ -5,5 +5,14 @@
   "type": "ui",
   "main": "index.js",
   "uiEntry": "ui/index.html",
-  "description": "示范未上架放行、试玩 mock 已买/未买，以及经 ctx.models 调用文案和生图。独立跑时把 DEX_BUDDY_API_KEY 写进本机 env。"
+  "description": "示范未上架放行、试玩 mock 已买/未买，以及经 ctx.models 调用文案和生图。独立跑时把 DEX_BUDDY_API_KEY 写进本机 env。",
+  "configSchema": {
+    "PLAYGROUND_NOTE": {
+      "type": "string",
+      "title": "试玩备注",
+      "description": "用于演示 navigate 跳到本插件设置字段，可随便填",
+      "default": "",
+      "group": "演示"
+    }
+  }
 }

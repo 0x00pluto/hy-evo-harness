@@ -10,13 +10,13 @@
 2. **只在工作台跑**：拷接口层即可。宿主升级参考图上传、幂等等实现细节时，不必跟拷。`SDK_VERSION`（Python `__version__`）只表示对外契约；契约没变就不要整文件再拷接口。工作台不提示过期。
 3. **本机独立跑**（`DEX_BUDDY_API_KEY`）：同目录再拷 [dex-buddy-standalone.js](snippets/dex-buddy-standalone.js)（Python [dex_buddy_standalone.py](snippets/dex_buddy_standalone.py)）。独立跑实现变更看 `STANDALONE_VERSION`，与接口版本分开；不必为了 standalone 去升接口 `SDK_VERSION`。
 4. 本机环境变量 `DEX_BUDDY_API_KEY`（在 dexbuddy.app 账号里创建，`dbh_sk_` 开头）。可选 `DEX_GATEWAY_BASE_URL`。SDK **不读** `.env` 文件，自己 `export` 或 `load_dotenv`。不要提交 Key，不要写进 `configSchema`。
-5. `index.js` 里从 SDK 调 `requireEntitlement(ctx)` 和 `bindModels(ctx)`，不要直接碰 `ctx.models` / `ctx.requireEntitlement`（独立跑没有它们）。
+5. `index.js` 里从 SDK 调 `requireEntitlement(ctx)`、`navigate(ctx, href)` 和 `bindModels(ctx)`，不要直接碰 `ctx.models` / `ctx.requireEntitlement` / `ctx.navigate`（独立跑没有它们；`navigate` 独立跑静默成功）。
 6. 拉起 Python 时必须先 `await requireEntitlement(ctx)`，再 `spawn(..., { env: await childEnv(ctx, env) })`。同一份 `.py` 不用写 `if dex`。
 7. 打包会丢掉 `.env`，见 [打包](pack.md)。装进 Dex Buddy 后 SDK 走登录会话，宿主用清单 `id` 盖 `X-Plugin-Id`。独立跑时 standalone 会读上一级或同级的 `plugin.manifest.json`，自己盖同一个头；读不到就不盖。参数和 JSON 体里都不要传 `pluginId`。谁打开插件，扣谁的积分。
 8. Python `urllib` 默认等 600 秒。环境变量 `DEX_BUDDY_HTTP_TIMEOUT` 改成秒数；`0` 或负数表示不设超时。超时会变成 `DexModelsError`，文案是「网关读取超时（已等待 N 秒）」。JavaScript `fetch` 没有超时。
 
 ```js
-const { bindModels, requireEntitlement, SDK_VERSION } = require('./lib/dex-buddy-sdk');
+const { bindModels, requireEntitlement, navigate, SDK_VERSION } = require('./lib/dex-buddy-sdk');
 
 ctx.registerService('myTool', {
   async draft(params) {
@@ -70,7 +70,7 @@ const env = await childEnv(ctx, { ...process.env, ...(ctx.pluginEnv ? ctx.plugin
 spawn(pythonBin, [script], { cwd: __dirname, env });
 ```
 
-对照例子在仓库 `plugins/models-playground/`（只在 `pnpm start` 出现）。当前接口母版 `SDK_VERSION` 是 `1.0.3`；独立跑默认实现 `STANDALONE_VERSION` 同为 `1.0.3`。
+对照例子在仓库 `plugins/models-playground/`（只在 `pnpm start` 出现）。当前接口母版 `SDK_VERSION` 是 `1.0.4`；独立跑默认实现 `STANDALONE_VERSION` 仍为 `1.0.3`。
 
 接口层与 standalone 只用标准库（Node `http` / Python `urllib`）。不声明 `runtime.python`，工作台会走 PATH 上的 `python3`。只有脚本要装 pip 包时才在清单里声明 `runtime`，写法见 [运行](runtime.md)。
 

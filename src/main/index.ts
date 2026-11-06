@@ -14,8 +14,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import type { CallServicePayload } from '../shared/dex-ipc.ts';
-import type { GatewaySessionView, SpendBlockedPayload } from '../shared/dex-bridge.ts';
+import type { GatewaySessionView, NavigateCompletePayload, SpendBlockedPayload } from '../shared/dex-bridge.ts';
+import {
+  DexNavigateError,
+  parseDexNavigate,
+  type DexNavigateCode,
+} from '../shared/dex-navigate.ts';
 import { readAvailableMemory } from './available-memory.ts';
 import { readExtraPluginPaths, readForceUpdateIcon, readGatewayBaseUrl } from './dev-config.ts';
 import { GATEWAY_ENV_KEY, resolveGatewayBaseUrl } from './gateway-config.ts';
@@ -73,6 +79,16 @@ let silentTimer: ReturnType<typeof setInterval> | null = null;
 let reportedWatchingId: string | null = null;
 let pendingAuthUrl: string | null = null;
 let mainWindow: BrowserWindow | null = null;
+
+const NAVIGATE_TIMEOUT_MS = 60_000;
+
+interface PendingNavigate {
+  resolve: () => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const pendingNavigates = new Map<string, PendingNavigate>();
 
 function session(): LocalSession {
   if (!localSession) throw new Error('本地目录还没准备好');
@@ -427,6 +443,61 @@ function focusMainWindow(): void {
   win.focus();
 }
 
+function hostUiWindow(): BrowserWindow | null {
+  if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
+  return BrowserWindow.getAllWindows().find((item) => !item.isDestroyed()) ?? null;
+}
+
+function finishNavigate(payload: NavigateCompletePayload): void {
+  const pending = pendingNavigates.get(payload.requestId);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pendingNavigates.delete(payload.requestId);
+  if (payload.ok) {
+    pending.resolve();
+    return;
+  }
+  const code: DexNavigateCode =
+    payload.code === 'INVALID_HREF'
+    || payload.code === 'PLUGIN_GONE'
+    || payload.code === 'NAVIGATE_CANCELLED'
+    || payload.code === 'NO_HOST_UI'
+    || payload.code === 'NAVIGATE_TIMEOUT'
+      ? payload.code
+      : 'INVALID_HREF';
+  pending.reject(new DexNavigateError(code, payload.message || '导航失败'));
+}
+
+function askPluginNavigate(pluginId: string, fieldKey?: string): Promise<void> {
+  const win = hostUiWindow();
+  if (!win) {
+    throw new DexNavigateError('NO_HOST_UI', '当前没有工作台界面');
+  }
+  focusMainWindow();
+  const requestId = randomUUID();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingNavigates.delete(requestId);
+      reject(new DexNavigateError('NAVIGATE_TIMEOUT', '打开设置超时'));
+    }, NAVIGATE_TIMEOUT_MS);
+    pendingNavigates.set(requestId, { resolve, reject, timer });
+    win.webContents.send('dex:plugin-navigate', {
+      requestId,
+      pluginId,
+      ...(fieldKey ? { fieldKey } : {}),
+      source: 'plugin-navigate' as const,
+    });
+  });
+}
+
+async function runNavigate(pluginId: string, href: string): Promise<void> {
+  if (!registry.getPlugin(pluginId)) {
+    throw new DexNavigateError('PLUGIN_GONE', '插件不存在');
+  }
+  const target = parseDexNavigate(href);
+  await askPluginNavigate(pluginId, target.fieldKey);
+}
+
 function registerDexbuddyProtocolClient(): void {
   // 未打包时必须带上入口脚本，否则系统只会唤起 Electron 本体。
   if (process.defaultApp) {
@@ -611,6 +682,12 @@ function registerIpc(): void {
 
   handleInvoke('dex:plugin-settings-save', (event, draft) => {
     return registry.savePluginSettings(pluginIdFromSender(event), draft);
+  });
+
+  handleInvoke('dex:navigate', (event, href) => runNavigate(pluginIdFromSender(event), href));
+
+  onSend('dex:navigate-complete', (_event, payload) => {
+    finishNavigate(payload);
   });
 
   handleInvoke('dex:open-external', async (_event, url) => {
@@ -869,6 +946,7 @@ app.whenReady().then(async () => {
   });
   registry.setHostModels((pluginId) => createHostModels(hostModelsDeps(pluginId)));
   registry.setRequireEntitlement((pluginId) => createRequireEntitlement(hostModelsDeps(pluginId)));
+  registry.setNavigate((pluginId) => (href) => runNavigate(pluginId, href));
   const icon = loadAppIcon();
   applyDockIcon(icon);
   attachWebviewGuard();

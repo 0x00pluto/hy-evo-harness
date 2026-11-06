@@ -1,8 +1,8 @@
-"""Dex Buddy 插件 SDK 接口层 1.0.3。拷进插件 lib/ 后：
+"""Dex Buddy 插件 SDK 接口层 1.0.4。拷进插件 lib/ 后：
 工作台里由 Node 注入 DEX_BUDDY_MODELS_URL，走宿主（谁用谁付钱）。
 独立跑再拷同目录的 dex_buddy_standalone.py，用 DEX_BUDDY_API_KEY（开发者付钱）。
 __version__ 只表示对外契约；契约没变就不必再拷本文件。
-require_entitlement 在 Python 里始终直接返回；工作台真校验写在 index.js。
+require_entitlement / navigate 在 Python 里始终直接返回；工作台真能力写在 index.js。
 不要把 Key 打进 zip。
 """
 
@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 DEFAULT_BASE = "https://www.dexbuddy.app"
 DEFAULT_TIMEOUT = 600.0
 MISSING_KEY = (
@@ -185,4 +185,9 @@ def bind_models(env: dict[str, str] | None = None) -> Any:
 
 
 def require_entitlement() -> None:
+    return None
+
+
+def navigate(href: str = "") -> None:
+    """独立跑 / Python 子进程无工作台界面，静默成功。真跳转在 Node 里用 SDK navigate(ctx, href)。"""
     return None

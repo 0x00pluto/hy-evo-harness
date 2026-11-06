@@ -28,4 +28,7 @@ contextBridge.exposeInMainWorld('dex', {
   saveSettings(draft: unknown) {
     return invoke('dex:plugin-settings-save', draft);
   },
+  navigate(href: string) {
+    return invoke('dex:navigate', href);
+  },
 });

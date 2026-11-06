@@ -98,6 +98,11 @@ export interface AppContext {
    * 试玩可传 mock 选项；其它插件忽略传入参数。
    */
   requireEntitlement: (...args: unknown[]) => Promise<void>;
+  /**
+   * 打开工作台本插件设置（可选字段锚点）。地址见 docs/plugin-development/navigate.md。
+   * 宿主注入。作者从 SDK 调 `navigate(ctx, href)`，不要直接碰这个字段（独立跑没有它，SDK 会静默成功）。
+   */
+  navigate: (href: string) => Promise<void>;
   /** 默认值与已保存值合并后的本插件配置。声明非法时为空对象。 */
   getPluginConfig: () => PluginConfig;
   /**

@@ -30,9 +30,10 @@ function emptySessionView() {
 /**
  * @param {{
  *   settings: {
- *     enterSettings: (pluginId?: string) => Promise<void>;
+ *     enterSettings: (pluginId?: string, options?: { fieldKey?: string; source?: 'plugin-navigate' | 'chrome' }) => Promise<void>;
  *     confirmDiscard: () => Promise<boolean>;
  *     leaveSettings: (opts: { resume: boolean }) => void;
+ *     onAutoReturn?: (() => void) | null;
  *   };
  *   plugins: {
  *     syncPreviewStrip: () => void;
@@ -259,17 +260,45 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
       });
   }
 
-  /** @param {string} [pluginId] */
-  async function openSettings(pluginId) {
+  /**
+   * @param {string} [pluginId]
+   * @param {{ fieldKey?: string; source?: 'plugin-navigate' | 'chrome' }} [options]
+   */
+  async function openSettings(pluginId, options) {
     const next = enterSettingsState(session);
     if (next !== session) {
       session = next;
       apply();
     }
     try {
-      await settings.enterSettings(pluginId);
+      await settings.enterSettings(pluginId, options);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : '无法打开设置', 'error');
+      if (options && options.source === 'plugin-navigate') throw err;
+    }
+  }
+
+  /**
+   * @param {PluginNavigatePayload} payload
+   */
+  async function handlePluginNavigate(payload) {
+    try {
+      await openSettings(payload.pluginId, {
+        fieldKey: payload.fieldKey,
+        source: 'plugin-navigate',
+      });
+      window.dex.completeNavigate({ requestId: payload.requestId, ok: true });
+    } catch (err) {
+      const code =
+        err && typeof err === 'object' && 'code' in err && typeof err.code === 'string'
+          ? err.code
+          : 'INVALID_HREF';
+      window.dex.completeNavigate({
+        requestId: payload.requestId,
+        ok: false,
+        code,
+        message: err instanceof Error ? err.message : '导航失败',
+      });
     }
   }
 
@@ -405,6 +434,19 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
 
   watchGatewaySession();
   apply();
+
+  settings.onAutoReturn = () => {
+    const next = goBack(session);
+    if (next === session) return;
+    session = next;
+    apply();
+  };
+
+  if (typeof window.dex.onPluginNavigate === 'function') {
+    window.dex.onPluginNavigate((payload) => {
+      void handlePluginNavigate(payload);
+    });
+  }
 
   return {
     session() {

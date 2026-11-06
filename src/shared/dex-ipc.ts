@@ -23,6 +23,8 @@ import type {
   SilentUpdateEvent,
   SpendBlockedPayload,
   UpdaterStatusPayload,
+  PluginNavigatePayload,
+  NavigateCompletePayload,
 } from './dex-bridge.ts';
 
 export interface CallServicePayload {
@@ -85,11 +87,13 @@ export type DexInvokeMap = {
   'dex:gateway-refresh': { args: []; result: OkResult };
   'dex:gateway-open-shop': { args: []; result: OkResult };
   'dex:gateway-logout': { args: []; result: OkResult };
+  'dex:navigate': { args: [href: string]; result: void };
 };
 
 /** 渲染层 → 主进程 send（无返回值）。 */
 export type DexSendMap = {
   'dex:set-watching-plugin': [id: string | null];
+  'dex:navigate-complete': [payload: NavigateCompletePayload];
 };
 
 /** 主进程 → 渲染层推送。 */
@@ -100,6 +104,7 @@ export type DexPushMap = {
   'updater:status': UpdaterStatusPayload;
   'dex:session': GatewaySessionView;
   'dex:spend-blocked': SpendBlockedPayload;
+  'dex:plugin-navigate': PluginNavigatePayload;
 };
 
 export type DexInvokeChannel = keyof DexInvokeMap;

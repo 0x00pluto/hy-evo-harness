@@ -21,7 +21,14 @@ import {
 import { PluginSettingsStore, isSettingsCandidate, type SettingsPluginView, type SettingsSaveResult } from './plugin-settings.ts';
 import { resolvePluginFile } from './protocol.ts';
 import { unavailableHostModels, unavailableRequireEntitlement } from './host-egress.ts';
+import { DexNavigateError } from '../shared/dex-navigate.ts';
 import type { AppContext, AppPlugin, HostModels, LocalMountMode, LocalRecord, Logger, PluginManifest, PluginSource, PluginSummary, RuntimeLayout } from './types.ts';
+
+function unavailableNavigate(): (href: string) => Promise<void> {
+  return async () => {
+    throw new DexNavigateError('NO_HOST_UI', '当前没有工作台界面');
+  };
+}
 
 interface CommonJsModule {
   filename: string;
@@ -115,6 +122,7 @@ export class ServiceRegistry {
   private installedPluginsDir: string | null = null;
   private modelsForPlugin: ((pluginId: string) => HostModels) | null = null;
   private requireEntitlementForPlugin: ((pluginId: string) => () => Promise<void>) | null = null;
+  private navigateForPlugin: ((pluginId: string) => (href: string) => Promise<void>) | null = null;
   readonly logger: Logger;
 
   constructor(logger: Logger = defaultLogger, settings?: PluginSettingsStore) {
@@ -152,6 +160,11 @@ export class ServiceRegistry {
   /** 按清单 id 创建无参 ctx.requireEntitlement。未设置时调用会报网关未就绪。 */
   setRequireEntitlement(factory: (pluginId: string) => () => Promise<void>): void {
     this.requireEntitlementForPlugin = factory;
+  }
+
+  /** 按注册表 id（本地实例用 instance id）创建 ctx.navigate。 */
+  setNavigate(factory: (pluginId: string) => (href: string) => Promise<void>): void {
+    this.navigateForPlugin = factory;
   }
 
   setRuntimeHost(host: RuntimeHost): void {
@@ -639,6 +652,7 @@ export class ServiceRegistry {
       requireEntitlement: this.requireEntitlementForPlugin
         ? this.requireEntitlementForPlugin(plugin.manifest.id)
         : unavailableRequireEntitlement(),
+      navigate: this.navigateForPlugin ? this.navigateForPlugin(id) : unavailableNavigate(),
       getPluginConfig: () => this.settings.getPluginConfig(plugin.manifest, id),
       pluginEnv: () => {
         const configEnv = this.settings.pluginEnv(plugin.manifest, process.env, id);

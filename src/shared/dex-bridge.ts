@@ -236,6 +236,22 @@ export interface SpendBlockedPayload {
   reason: SpendBlockedReason;
 }
 
+/** 主进程请壳打开本插件设置。 */
+export interface PluginNavigatePayload {
+  requestId: string;
+  pluginId: string;
+  fieldKey?: string;
+  source: 'plugin-navigate';
+}
+
+/** 壳回报导航结果。 */
+export interface NavigateCompletePayload {
+  requestId: string;
+  ok: boolean;
+  code?: string;
+  message?: string;
+}
+
 /** 对照预加载暴露的 window.dex；底层通道见 dex-ipc.ts。 */
 export interface DexHost {
   devFlags(): Promise<DevFlags>;
@@ -286,4 +302,6 @@ export interface DexHost {
   logoutGateway(): Promise<OkResult>;
   onGatewaySession(callback: (payload: GatewaySessionView) => void): () => void;
   onSpendBlocked(callback: (payload: SpendBlockedPayload) => void): () => void;
+  onPluginNavigate(callback: (payload: PluginNavigatePayload) => void): () => void;
+  completeNavigate(payload: NavigateCompletePayload): void;
 }

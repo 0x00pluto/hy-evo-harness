@@ -21,6 +21,8 @@ import type {
   GatewayLoginPhase,
   SpendBlockedReason,
   SpendBlockedPayload,
+  PluginNavigatePayload,
+  NavigateCompletePayload,
 } from '../shared/dex-bridge.ts';
 
 export type {
@@ -41,6 +43,8 @@ export type {
   GatewayLoginPhase,
   SpendBlockedReason,
   SpendBlockedPayload,
+  PluginNavigatePayload,
+  NavigateCompletePayload,
 };
 
 interface LucideIcons {
@@ -89,6 +93,8 @@ declare global {
   type GatewayLoginPhase = import('../shared/dex-bridge.ts').GatewayLoginPhase;
   type SpendBlockedReason = import('../shared/dex-bridge.ts').SpendBlockedReason;
   type SpendBlockedPayload = import('../shared/dex-bridge.ts').SpendBlockedPayload;
+  type PluginNavigatePayload = import('../shared/dex-bridge.ts').PluginNavigatePayload;
+  type NavigateCompletePayload = import('../shared/dex-bridge.ts').NavigateCompletePayload;
 
   /** 工作台 chrome 会话（仅内存）。surface 运行时是 workspace / settings / plugins。 */
   interface ChromeSession {
@@ -138,7 +144,7 @@ declare global {
     focusPlugin(pluginId: string): void;
     usePlugin(pluginId: string): Promise<void>;
     clearNavigation(): void;
-    openSettings(pluginId?: string): Promise<void>;
+    openSettings(pluginId?: string, options?: { fieldKey?: string; source?: 'plugin-navigate' | 'chrome' }): Promise<void>;
   }
 }
 

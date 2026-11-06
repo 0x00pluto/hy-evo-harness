@@ -128,6 +128,14 @@
       </div>
     </section>
 
+    <section class="section" aria-labelledby="sec-settings">
+      <h2 id="sec-settings">设置</h2>
+      <p class="hint">打开本插件设置并落到「试玩备注」。保存成功后会自动回到本页。</p>
+      <div class="actions">
+        <button id="open-settings" type="button">打开本插件设置</button>
+      </div>
+    </section>
+
     <pre id="result">等待生成</pre>
     <img id="preview" alt="" hidden>
   </main>
@@ -166,6 +174,24 @@
     document.getElementById('python').onclick = () => generate('pythonChat', false);
     document.getElementById('image').onclick = () => generate('image', false);
     document.getElementById('image-replay').onclick = () => generate('image', true);
+    document.getElementById('open-settings').onclick = async () => {
+      result.className = '';
+      preview.hidden = true;
+      if (!window.dex || typeof window.dex.navigate !== 'function') {
+        // 独立打开 HTML：没有工作台预加载，静默跳过
+        result.textContent = '当前没有工作台导航（独立调试），已跳过';
+        return;
+      }
+      result.textContent = '正在打开设置…';
+      try {
+        await window.dex.navigate('dex://settings/self#PLAYGROUND_NOTE');
+        result.textContent = '已打开本插件设置';
+      } catch (err) {
+        result.className = 'error';
+        const code = err && err.code ? String(err.code) + ' ' : '';
+        result.textContent = code + (err && err.message ? err.message : '打开设置失败');
+      }
+    };
   </script>
 </body>
 </html>

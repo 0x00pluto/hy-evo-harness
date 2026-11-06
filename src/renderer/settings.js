@@ -52,6 +52,8 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
   onStatus() { return () => {}; },
   openInstallDialog() {},
 }) }) {
+  /** @type {{ onAutoReturn: (() => void) | null }} */
+  const hooks = { onAutoReturn: null };
   const settingsSearch = byId('settings-search', 'input');
   const settingsList = byId('settings-list', 'div');
   const settingsScreen = byId('settings-screen', 'section');
@@ -75,6 +77,8 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
   let settingsBaseline = '';
   /** @type {string | null} */
   let returnPluginId = null;
+  /** 本次设置会话是否由插件 navigate 发起（R1 保存后自动回）。 */
+  let pluginNavigateSession = false;
   let savingSettings = false;
   /** @type {((allowed: boolean) => void) | null} */
   let discardResolver = null;
@@ -864,6 +868,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
       for (const field of group.fields) {
         const row = document.createElement('div');
         row.className = 'settings-row';
+        row.dataset.settingsKey = field.key;
         const copy = document.createElement('div');
         copy.className = 'settings-card-copy';
         const title = document.createElement('h3');
@@ -1163,10 +1168,10 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
 
   /** @param {string} id */
   async function selectSettings(id) {
-    if (id === activeSettingsId) return;
+    if (id === activeSettingsId) return true;
     const plugin = isHostSettingsId(id) ? null : settingsCatalog.find((item) => item.id === id);
-    if (!isHostSettingsId(id) && !plugin) return;
-    if (activeSettingsId && !(await confirmDiscard())) return;
+    if (!isHostSettingsId(id) && !plugin) return false;
+    if (activeSettingsId && !(await confirmDiscard())) return false;
     if (id === GENERAL_NAV_ID) {
       activeSettingsId = GENERAL_NAV_ID;
       settingsDraft = null;
@@ -1177,7 +1182,7 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
       } catch (err) {
         setStatus(err instanceof Error ? err.message : '打开设置页失败', 'error');
       }
-      return;
+      return true;
     }
     if (id === POINTS_NAV_ID) {
       activeSettingsId = POINTS_NAV_ID;
@@ -1189,9 +1194,9 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
       } catch (err) {
         setStatus(err instanceof Error ? err.message : '打开设置页失败', 'error');
       }
-      return;
+      return true;
     }
-    if (!plugin) return;
+    if (!plugin) return false;
     stopAccountWatch();
     accountNodes = null;
     pointsNodes = null;
@@ -1205,14 +1210,57 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     } catch (err) {
       setStatus(err instanceof Error ? err.message : '打开设置页失败', 'error');
     }
+    return true;
   }
 
-  /** @param {string} [pluginId] */
-  async function enterSettings(pluginId) {
-    if (shell.settingsMode) {
-      if (typeof pluginId === 'string') await selectSettings(preferredSettingsId(pluginId, catalogIds()));
+  /**
+   * @param {string} [fieldKey]
+   * @param {SettingsPluginView | null} [plugin]
+   */
+  function focusSettingsField(fieldKey, plugin) {
+    if (!fieldKey) return;
+    const known = plugin && plugin.fields.some((field) => field.key === fieldKey);
+    if (!known) {
+      setStatus('没有这一项', 'error');
       return;
     }
+    const row = settingsForm.querySelector(`[data-settings-key="${CSS.escape(fieldKey)}"]`);
+    if (!(row instanceof HTMLElement)) {
+      setStatus('没有这一项', 'error');
+      return;
+    }
+    row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const control = row.querySelector('input, select, button.path-change');
+    if (control instanceof HTMLElement) {
+      control.focus({ preventScroll: true });
+    }
+  }
+
+  /**
+   * @param {string} [pluginId]
+   * @param {{ fieldKey?: string; source?: 'plugin-navigate' | 'chrome' }} [options]
+   */
+  async function enterSettings(pluginId, options = {}) {
+    const fromPlugin = options.source === 'plugin-navigate';
+    const fieldKey = typeof options.fieldKey === 'string' ? options.fieldKey : undefined;
+    if (fromPlugin) pluginNavigateSession = true;
+
+    if (shell.settingsMode) {
+      if (typeof pluginId === 'string') {
+        const switched = await selectSettings(preferredSettingsId(pluginId, catalogIds()));
+        if (!switched) {
+          const err = new Error('已取消');
+          // @ts-expect-error 稳定错误码给导航 complete 用
+          err.code = 'NAVIGATE_CANCELLED';
+          throw err;
+        }
+      }
+      const plugin = settingsCatalog.find((item) => item.id === activeSettingsId) || null;
+      focusSettingsField(fieldKey, plugin);
+      return;
+    }
+
+    if (!fromPlugin) pluginNavigateSession = false;
     returnPluginId = shell.activeId;
     shell.settingsMode = true;
     settingsSearch.value = '';
@@ -1221,13 +1269,22 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     setStatus('');
     await reloadSettingsCatalog();
     if (!shell.settingsMode) return;
-    await selectSettings(preferredSettingsId(pluginId, catalogIds()));
+    const switched = await selectSettings(preferredSettingsId(pluginId, catalogIds()));
+    if (!switched) {
+      const err = new Error('已取消');
+      // @ts-expect-error 稳定错误码给导航 complete 用
+      err.code = 'NAVIGATE_CANCELLED';
+      throw err;
+    }
+    const plugin = settingsCatalog.find((item) => item.id === activeSettingsId) || null;
+    focusSettingsField(fieldKey, plugin);
   }
 
   /** @param {{ resume?: boolean }} [options] */
   function leaveSettings(options = {}) {
     const backTo = returnPluginId;
     shell.settingsMode = false;
+    pluginNavigateSession = false;
     activeSettingsId = null;
     generalNodes = null;
     accountNodes = null;
@@ -1265,6 +1322,11 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
       rememberBaseline();
       await renderSettingsMain(fresh, false);
       reloadSettingsWebview();
+      // R1：仅插件发起的会话在保存成功后自动回到进入前的插件。
+      if (pluginNavigateSession) {
+        leaveSettings({ resume: true });
+        hooks.onAutoReturn?.();
+      }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : '保存失败', 'error');
     } finally {
@@ -1305,5 +1367,17 @@ export function mountSettings({ shell, setStatus, plugins, updater = /** @type {
     finishDiscard(false);
   });
 
-  return { onPluginsChanged, dismissSurface, enterSettings, leaveSettings, confirmDiscard };
+  return {
+    onPluginsChanged,
+    dismissSurface,
+    enterSettings,
+    leaveSettings,
+    confirmDiscard,
+    get onAutoReturn() {
+      return hooks.onAutoReturn;
+    },
+    set onAutoReturn(fn) {
+      hooks.onAutoReturn = typeof fn === 'function' ? fn : null;
+    },
+  };
 }

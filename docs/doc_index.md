@@ -12,15 +12,16 @@
 - `docs/memo/plugin-signing.md`: 插件打包签名已讨论不立项：货架钉公钥可挡仍声称自己是 A；挡不住改成未上架 id 走买断放行
 - `docs/memo/stale-installed-plugin.md`: 商店换 id 后本机市场旧安装成孤儿（小红书改 id）；判定见 `specs/prds/prd-00016-stale-installed-plugin.md`
 - `docs/plugin-development.md`: 插件开发说明已拆到 `docs/plugin-development/`，本文件只保留入口
-- `docs/plugin-development/README.md`: 可单独转发的插件开发目录：交什么、两种插件，以及清单、设置、数据、运行、模型、后端 JavaScript、打包、发布、插件中心、配色的入口
+- `docs/plugin-development/README.md`: 可单独转发的插件开发目录：交什么、两种插件，以及清单、设置、导航、数据、运行、模型、后端 JavaScript、打包、发布、插件中心、配色的入口
 - `docs/plugin-development/manifest.md`: plugin.manifest.json 字段与图标尺寸、画布、格式
-- `docs/plugin-development/settings.md`: configSchema、分组、密钥输入与眼睛、settingsEntry、pluginEnv；保存后下次读取即新值，没有保存事件
+- `docs/plugin-development/settings.md`: configSchema、分组、密钥输入与眼睛、settingsEntry、pluginEnv；保存后下次读取即新值，没有保存事件；缺配置时可链到导航协议跳本插件字段
+- `docs/plugin-development/navigate.md`: 插件导航协议：SDK navigate(ctx,href) / window.dex.navigate、dex://settings/self 地址表、错误码；独立跑静默成功；扩地址表不必重拷 SDK
 - `docs/plugin-development/data.md`: 插件页加载的本地实例数据仍在仓库，设置和 plugin-data 用实例 id，与清单 id 隔离；装进 installed_plugins 之后 ctx.dirs 分开，卸载只删运行环境和缓存；市场换 id 后旧目录会标成孤儿，可在插件页删除
 - `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node；externalTools 在 apply 前只查 PATH，缺了给可复制的安装说明，ctx.tools 给绝对路径；未声明的命令仍靠本机 PATH；pluginEnv 与 runtime.env 每次读取都是当前已保存配置，未设置时补 PYTHONIOENCODING 与 PYTHONUTF8；dex.call 参数须可 JSON 序列化，宿主 IPC 前再圆整一次
-- `docs/plugin-development/models.md`: 必拷接口层 SDK；独立跑再拷 standalone；SDK_VERSION 只表契约；本机 DEX_BUDDY_API_KEY、requireEntitlement 再 bindModels、childEnv；参考图文件键按字节 sha256（宿主/standalone）；生图传 idempotencyKey；页面不接触网关
-- `docs/plugin-development/snippets/dex-buddy-sdk.js`: 插件必拷的 Node 接口层（bindModels、requireEntitlement、childEnv、SDK_VERSION 1.0.3）
+- `docs/plugin-development/models.md`: 必拷接口层 SDK；独立跑再拷 standalone；SDK_VERSION 只表契约；本机 DEX_BUDDY_API_KEY、requireEntitlement / navigate 再 bindModels、childEnv；参考图文件键按字节 sha256（宿主/standalone）；生图传 idempotencyKey；页面不接触网关
+- `docs/plugin-development/snippets/dex-buddy-sdk.js`: 插件必拷的 Node 接口层（bindModels、requireEntitlement、navigate、childEnv、SDK_VERSION 1.0.4）
 - `docs/plugin-development/snippets/dex-buddy-standalone.js`: 独立跑默认实现（STANDALONE_VERSION 1.0.3；参考图按内容哈希；工作台不必拷）
-- `docs/plugin-development/snippets/dex_buddy_sdk.py`: 插件必拷的 Python 接口层（bind_models、require_entitlement、__version__ 1.0.3；工作台代理）
+- `docs/plugin-development/snippets/dex_buddy_sdk.py`: 插件必拷的 Python 接口层（bind_models、require_entitlement、navigate、__version__ 1.0.4；工作台代理）
 - `docs/plugin-development/snippets/dex_buddy_standalone.py`: 独立跑默认实现（STANDALONE_VERSION 1.0.3；盖 X-Plugin-Id；参考图按内容哈希）
 - `docs/plugin-development/typing.md`: 后端严格 JavaScript 约定：`@ts-check`、JSDoc、禁止 any；入口仍是 index.js，不编译 dist，宿主不因检查失败拒载
 - `docs/plugin-development/pack.md`: 插件中心打包：宿主默认丢掉密钥和虚拟环境；dex-buddy-plugin.pack 指定要装的路径，dex-buddy-plugin.ignore 再挖掉

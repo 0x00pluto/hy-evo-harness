@@ -74,6 +74,20 @@ tts_engine = os.getenv("TTS_ENGINE", "edge-tts")
 
 某一项的 `group` 超过 32 个字符，或不是字符串，整份 `configSchema` 这次不可用。插件仍然加载，设置页说明问题，`getPluginConfig()` 返回空对象，`pluginEnv()` 不带这些键。磁盘上的 `plugin-settings.json` 不删。改好声明并重启后，原来的键还会注入。其它字段声明写错也是这样：整份声明暂时不注入，已保存的值留在磁盘上。
 
+## 跳到设置
+
+缺某项配置时，不要只写「请去齿轮里打开设置」。页面或后端可以请求打开本插件设置，并可落到某个字段：
+
+```javascript
+if (window.dex && typeof window.dex.navigate === 'function') {
+  await window.dex.navigate('dex://settings/self#OPENAI_API_KEY');
+}
+// 后端：const { navigate } = require('./lib/dex-buddy-sdk');
+// await navigate(ctx, 'dex://settings/self#OPENAI_API_KEY');
+```
+
+入口、完整地址表、错误码与保存后是否自动返回，见 [导航协议](navigate.md)。后端用 SDK `navigate(ctx, href)`：工作台打开设置，独立跑静默成功。不要直接写 `ctx.navigate`。
+
 接入时按这个顺序：
 
 1. 在 `plugin.manifest.json` 写 `configSchema`。键名必须和脚本里 `os.getenv` 或 `process.env` 的名字一致。

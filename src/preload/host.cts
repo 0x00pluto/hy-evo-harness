@@ -164,6 +164,12 @@ const dex: DexHost = {
   onSpendBlocked(callback) {
     return onPush('dex:spend-blocked', callback);
   },
+  onPluginNavigate(callback) {
+    return onPush('dex:plugin-navigate', callback);
+  },
+  completeNavigate(payload) {
+    send('dex:navigate-complete', payload);
+  },
 };
 
 contextBridge.exposeInMainWorld('dex', dex);

@@ -2,12 +2,12 @@
 'use strict';
 
 /**
- * Dex Buddy 插件 SDK 接口层 1.0.3。拷进插件 lib/ 后：
+ * Dex Buddy 插件 SDK 接口层 1.0.4。拷进插件 lib/ 后：
  * 工作台走宿主校验与 ctx.models；独立跑再拷同目录的 dex-buddy-standalone.js，用 DEX_BUDDY_API_KEY（开发者付钱）。
  * SDK_VERSION 只表示对外契约；契约没变就不必再拷本文件。不要把 Key 写进设置或 zip。
  */
 
-const SDK_VERSION = '1.0.3';
+const SDK_VERSION = '1.0.4';
 
 const http = require('node:http');
 
@@ -78,6 +78,18 @@ async function requireEntitlement(ctx, options) {
     if (arguments.length > 1) return fn(options);
     return fn();
   }
+}
+
+/**
+ * 工作台转交宿主打开设置等页面；独立跑无界面，静默成功（不跳页、不报错）。
+ * 地址见 docs/plugin-development/navigate.md。不要直接写 ctx.navigate（独立跑没有该字段）。
+ * @param {unknown} ctx
+ * @param {string} href
+ */
+async function navigate(ctx, href) {
+  const fn =
+    ctx && typeof ctx === 'object' ? /** @type {{ navigate?: unknown }} */ (ctx).navigate : null;
+  if (typeof fn === 'function') return fn(href);
 }
 
 /**
@@ -196,6 +208,7 @@ module.exports = {
   DexModelsError,
   bindModels,
   requireEntitlement,
+  navigate,
   childEnv,
   SDK_VERSION,
 };

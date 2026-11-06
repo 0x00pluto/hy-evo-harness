@@ -21,7 +21,7 @@ const playgroundStandaloneJs = path.join(repoRoot, 'plugins/models-playground/li
 const playgroundPy = path.join(repoRoot, 'plugins/models-playground/lib/dex_buddy_sdk.py');
 const playgroundStandalonePy = path.join(repoRoot, 'plugins/models-playground/lib/dex_buddy_standalone.py');
 const generatePy = path.join(repoRoot, 'plugins/models-playground/python/generate.py');
-const { MISSING_KEY, SDK_VERSION, bindModels, childEnv, requireEntitlement } = require(playgroundJs);
+const { MISSING_KEY, SDK_VERSION, bindModels, childEnv, navigate, requireEntitlement } = require(playgroundJs);
 const { STANDALONE_VERSION, createStandaloneModels } = require(playgroundStandaloneJs);
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -38,8 +38,8 @@ test('snippets 与试玩插件里的 SDK 是同一份', () => {
   assert.equal(fs.readFileSync(snippetStandalonePy, 'utf8'), fs.readFileSync(playgroundStandalonePy, 'utf8'));
 });
 
-test('SDK_VERSION 为 1.0.3，STANDALONE_VERSION 为 1.0.3', () => {
-  assert.equal(SDK_VERSION, '1.0.3');
+test('SDK_VERSION 为 1.0.4，STANDALONE_VERSION 为 1.0.3', () => {
+  assert.equal(SDK_VERSION, '1.0.4');
   assert.equal(STANDALONE_VERSION, '1.0.3');
 });
 
@@ -112,6 +112,25 @@ test('工作台 requireEntitlement 有第二参则转交', async () => {
     options,
   );
   assert.deepEqual(seen, [[options]]);
+});
+
+test('独立跑 navigate 静默成功，不抛错', async () => {
+  await navigate(undefined, 'dex://settings/self');
+  await navigate({}, 'dex://settings/self#PLAYGROUND_NOTE');
+  await navigate({ navigate: 'not-a-function' }, 'dex://settings/self');
+});
+
+test('工作台 navigate 转交宿主 href', async () => {
+  const seen: unknown[] = [];
+  await navigate(
+    {
+      navigate: (href: string) => {
+        seen.push(href);
+      },
+    },
+    'dex://settings/self#OPENAI_API_KEY',
+  );
+  assert.deepEqual(seen, ['dex://settings/self#OPENAI_API_KEY']);
 });
 
 test('有 ctx.models 时不打独立 HTTP、不读 Key', async () => {
@@ -471,11 +490,14 @@ test('Python SDK 能被编译且 require_entitlement 直接通过', (t) => {
   assert.equal(result.status, 0, result.stderr || String(result.error));
   const run = spawnSync(
     'python3',
-    ['-c', 'from dex_buddy_sdk import require_entitlement, __version__; require_entitlement(); print(__version__)'],
+    [
+      '-c',
+      'from dex_buddy_sdk import require_entitlement, navigate, __version__; require_entitlement(); navigate("dex://settings/self"); print(__version__)',
+    ],
     { encoding: 'utf8', timeout: 8000, cwd: path.dirname(playgroundPy) },
   );
   assert.equal(run.status, 0, run.stderr || String(run.error));
-  assert.equal(run.stdout.trim(), '1.0.3');
+  assert.equal(run.stdout.trim(), '1.0.4');
 });
 
 function skipWithoutPython(t: { skip: (reason?: string) => void }): boolean {
