@@ -526,6 +526,15 @@ export function mountPlugins({
     void endActivePreview();
   });
 
+  if (window.dex.onRuntimeProgress) {
+    window.dex.onRuntimeProgress((event) => {
+      if (!event || event.id !== shell.activeId) return;
+      if (!workspaceOpen()) return;
+      const bin = typeof event.bin === 'string' && event.bin ? `（${event.bin}）` : '';
+      setStatus(`正在准备运行环境${bin}`);
+    });
+  }
+
   return {
     refresh,
     suspend,

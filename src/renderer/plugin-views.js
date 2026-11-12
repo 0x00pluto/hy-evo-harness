@@ -1,4 +1,5 @@
 import { selectEvictions } from './view-quota.js';
+import { STYLESHEET_PROBE, stylesheetReady } from './page-ready.js';
 
 const ABORTED = -3;
 
@@ -11,6 +12,7 @@ const ABORTED = -3;
  *   lastHotAt: number;
  *   closing: boolean;
  *   reopen: boolean;
+ *   styleRetried: boolean;
  * }} ViewEntry
  */
 
@@ -39,6 +41,22 @@ async function readAvailableBytes() {
 /** @param {ElectronWebviewElement} webview */
 function parked(webview) {
   return webview.classList.contains('is-parked');
+}
+
+/**
+ * @param {ViewEntry} entry
+ * @returns {Promise<boolean>}
+ */
+async function stylesheetsReady(entry) {
+  if (typeof entry.webview.executeJavaScript !== 'function') return true;
+  try {
+    const report = /** @type {{ total?: unknown; loaded?: unknown }} */ (
+      await entry.webview.executeJavaScript(STYLESHEET_PROBE, true)
+    );
+    return stylesheetReady(report).ok;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -114,6 +132,38 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
   }
 
   /**
+   * @param {ViewEntry} entry
+   */
+  async function finishLoad(entry) {
+    if (entry.closing || views.get(entry.id) !== entry) return;
+    const ready = await stylesheetsReady(entry);
+    if (entry.closing || views.get(entry.id) !== entry) return;
+    if (!ready) {
+      if (!entry.styleRetried && typeof entry.webview.reload === 'function') {
+        entry.styleRetried = true;
+        // 保持 is-booting，不调用 onLoaded，避免露出裸页。
+        entry.webview.reload();
+        return;
+      }
+      drop(entry.id, 'fail');
+      onFailed(entry.id, '插件页面样式未加载');
+      return;
+    }
+
+    const first = !entry.loaded;
+    entry.loaded = true;
+    entry.webview.classList.remove('is-booting');
+    entry.state = parked(entry.webview) ? 'warm' : 'hot';
+    void applyThrottle(entry);
+    onLoaded(entry.id);
+    if (first && entry.reopen) {
+      entry.reopen = false;
+      evicted.delete(entry.id);
+      onReopened();
+    }
+  }
+
+  /**
    * @param {PluginSummary} plugin
    * @param {PreparePluginResult} prepared
    */
@@ -135,6 +185,7 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
       lastHotAt: Date.now(),
       closing: false,
       reopen,
+      styleRetried: false,
     };
     views.set(plugin.id, entry);
 
@@ -145,18 +196,7 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
     webview.addEventListener('did-attach', syncThrottle);
     webview.addEventListener('did-start-loading', syncThrottle);
     webview.addEventListener('did-finish-load', () => {
-      if (entry.closing || views.get(entry.id) !== entry) return;
-      const first = !entry.loaded;
-      entry.loaded = true;
-      entry.webview.classList.remove('is-booting');
-      entry.state = parked(entry.webview) ? 'warm' : 'hot';
-      syncThrottle();
-      onLoaded(entry.id);
-      if (first && entry.reopen) {
-        entry.reopen = false;
-        evicted.delete(entry.id);
-        onReopened();
-      }
+      void finishLoad(entry);
     });
     webview.addEventListener('did-fail-load', (raw) => {
       const event = /** @type {ElectronDidFailLoadEvent} */ (raw);

@@ -25,6 +25,8 @@ Node 必须有 `package-lock.json`，并且和清单里的 `package.json` 在同
 
 同事第一次打开已安装的插件会下载解释器并安装依赖，插件页显示「正在准备运行环境」。失败时宿主不执行 `apply`，服务不存在。详情里留下日志，按钮是「重试」。这时页面调用会失败。重试成功后才挂上服务。开发目录缺 `.venv` 或 `node_modules` 时也是这样，重试不会替你建环境，见 [数据](data.md)。
 
+已安装且声明了 Node 运行时的插件，宿主会把 `plugin-runtime/<id>/env/node_modules` 联接到插件目录下的 `node_modules`。页面通过 `app-plugin://` 引用这条联接里的 CSS/JS 时，宿主会放行真实路径落在该 env 根内的文件；任意其它外链仍拒绝。工作区第一次打开若样式表未齐，保持冷启动遮罩并自动重载一次，仍失败则不当成功页留下裸 HTML。见 [首次打开丢样式](../faqs/first-open-plugin-unstyled.md)。
+
 ```javascript
 const { spawn } = require('child_process');
 

@@ -110,6 +110,11 @@ export function pluginRuntimeDir(userData: string, pluginId: string): string {
   return path.join(userData, 'plugin-runtime', pluginId);
 }
 
+/** 已安装插件的宿主自管 env（含联接出去的 node_modules）。 */
+export function pluginRuntimeEnvDir(userData: string, pluginId: string): string {
+  return path.join(pluginRuntimeDir(userData, pluginId), 'env');
+}
+
 export function pluginDataDir(userData: string, pluginId: string): string {
   return path.join(userData, 'plugin-data', pluginId);
 }

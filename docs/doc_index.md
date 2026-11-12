@@ -40,3 +40,4 @@
 - `docs/renderer-layout.md`: 设置页和插件页共用一份 #split-layout；渲染层 checkJs 开 strict；IPC 通道表在 shared/dex-ipc，预加载编到 dist/preload；仍不打包前端；Lucide/lottie 继续 node_modules UMD；以后在第四个分栏表面把间距改散，或单页拼 DOM 超过约 800 行时，再引入 Lit 具名插槽，本次不安装
 - `docs/faqs/how-to-prevent-popup-clipping.md`: 工作台弹出层不要绝对定位在 overflow 容器里；用 fixed 按按钮摆放，否则只剩一条
 - `docs/faqs/dev-and-prod-side-by-side.md`: 未打包用 Dex Buddy Dev 和独立 userData，可与安装包同时开；开发版仍单实例；pnpm start 无挂载日志即闪退是锁失败
+- `docs/faqs/first-open-plugin-unstyled.md`: 首次打开丢样式：env 联接曾被协议拒绝、遮罩过早撤下；现放行宿主 env 并加样式门闩

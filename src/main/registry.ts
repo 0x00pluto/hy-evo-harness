@@ -6,11 +6,13 @@ import { readManifestFile } from './manifest.ts';
 import { prepareExternalTools, prependToolDirs } from './external-tools.ts';
 import {
   pluginRuntimeDir,
+  pluginRuntimeEnvDir,
   preparePluginRuntime,
   runtimeEnv,
   type CommandRunner,
   type RuntimeTools,
 } from './plugin-runtime.ts';
+import type { PluginAssetContext } from './protocol.ts';
 import { INSTALLED_PLUGINS_DIR_NAME } from './host-data.ts';
 import {
   listInstalledPluginDirNames,
@@ -351,6 +353,16 @@ export class ServiceRegistry {
 
   getPlugin(id: string): AppPlugin | undefined {
     return this.plugins.get(id);
+  }
+
+  /** 给 app-plugin 协议：词法根在插件目录，真实文件可落在宿主自管 env。 */
+  resolveAssetContext(id: string): PluginAssetContext | undefined {
+    const plugin = this.plugins.get(id);
+    if (!plugin) return undefined;
+    const allowedRealRoots = this.userData
+      ? [pluginRuntimeEnvDir(this.userData, registryIdOf(plugin))]
+      : [];
+    return { absPath: plugin.absPath, allowedRealRoots };
   }
 
   listSettingsViews(): SettingsPluginView[] {

@@ -299,6 +299,38 @@ test('插件文件路径拒绝逃逸', (t) => {
   assert.ok(resolvePluginAsset(root, 'ui/ok.txt')?.endsWith(`${path.sep}ok.txt`));
 });
 
+test('宿主 runtime env 联接内的文件可解析，任意外链仍拒绝', (t) => {
+  const root = tempDir();
+  const userData = tempDir();
+  const secretDir = tempDir();
+  t.after(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(userData, { recursive: true, force: true });
+    fs.rmSync(secretDir, { recursive: true, force: true });
+  });
+
+  const env = path.join(userData, 'plugin-runtime', 'sample-tool', 'env');
+  const pkg = path.join(env, 'node_modules', 'demo-pkg');
+  fs.mkdirSync(pkg, { recursive: true });
+  fs.writeFileSync(path.join(pkg, 'x.css'), 'body{}');
+  const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+  fs.symlinkSync(path.join(env, 'node_modules'), path.join(root, 'node_modules'), linkType);
+
+  fs.writeFileSync(path.join(secretDir, 'secret.txt'), 'nope');
+  fs.symlinkSync(path.join(secretDir, 'secret.txt'), path.join(root, 'leak.txt'));
+
+  assert.equal(resolvePluginAsset(root, 'node_modules/demo-pkg/x.css'), null);
+  assert.ok(
+    resolvePluginAsset(root, 'node_modules/demo-pkg/x.css', { allowedRealRoots: [env] })?.endsWith(
+      `${path.sep}x.css`,
+    ),
+  );
+  assert.equal(
+    resolvePluginAsset(root, 'leak.txt', { allowedRealRoots: [env] }),
+    null,
+  );
+});
+
 test('示例插件可以扫描并调用', async () => {
   const registry = new ServiceRegistry(silent);
   await registry.scanAndLoadPlugins(repoPlugins, 'bundled');

@@ -117,6 +117,7 @@ declare global {
   /** Electron &lt;webview&gt; 在渲染层当普通元素用。 */
   interface ElectronWebviewElement extends HTMLElement {
     reload(): void;
+    executeJavaScript?(code: string, userGesture?: boolean): Promise<unknown>;
     getWebContentsId?: () => number;
     src: string;
   }
