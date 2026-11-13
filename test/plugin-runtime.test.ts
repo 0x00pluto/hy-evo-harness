@@ -6,6 +6,10 @@ import test from 'node:test';
 import { uninstallInstalledPlugin } from '../src/main/install.ts';
 import { parseManifest } from '../src/main/manifest.ts';
 import {
+  OFFICIAL_PYPI_INDEX,
+  PYTHON_DEPS_FAILED_MESSAGE,
+  isOfficialPypiIndex,
+  isPypiIndexFetchFailure,
   pluginDataDir,
   pluginRuntimeDir,
   preparePluginRuntime,
@@ -35,9 +39,14 @@ function writePlugin(dir: string, runtime: unknown, source = 'module.exports = {
   fs.writeFileSync(path.join(dir, 'requirements.txt'), 'PyYAML>=6\n');
 }
 
-function fakeRun(calls: string[][]): CommandRunner {
-  return async (_command, args) => {
-    calls.push(args);
+/** @typedef {{ args: string[]; index: string }} RunCall */
+
+function fakeRun(calls: RunCall[]): CommandRunner {
+  return async (_command, args, options) => {
+    calls.push({
+      args,
+      index: typeof options?.env?.UV_DEFAULT_INDEX === 'string' ? options.env.UV_DEFAULT_INDEX : '',
+    });
     if (args[0] === 'venv') {
       const python = path.join(String(args[1]), 'bin', 'python');
       fs.mkdirSync(path.dirname(python), { recursive: true });
@@ -75,7 +84,8 @@ test('依赖没变时跳过安装，变了才重装', async () => {
   const userData = tempDir();
   const pluginDir = path.join(userData, 'installed_plugins', 'sample-tool');
   writePlugin(pluginDir);
-  const calls: string[][] = [];
+  /** @type {RunCall[]} */
+  const calls = [];
   const input = {
     userData,
     pluginDir,
@@ -88,7 +98,7 @@ test('依赖没变时跳过安装，变了才重装', async () => {
   assert.equal(first.ok, true);
   if (!first.ok) return;
   assert.equal(first.bins?.python, path.join(pluginRuntimeDir(userData, 'sample-tool'), 'env', 'bin', 'python'));
-  const venvCalls = () => calls.filter((args) => args[0] === 'venv').length;
+  const venvCalls = () => calls.filter((item) => item.args[0] === 'venv').length;
   assert.equal(venvCalls(), 1);
   const second = await preparePluginRuntime(input);
   assert.equal(second.ok, true);
@@ -96,6 +106,125 @@ test('依赖没变时跳过安装，变了才重装', async () => {
   fs.writeFileSync(path.join(pluginDir, 'requirements.txt'), 'openai>=1\n');
   await preparePluginRuntime(input);
   assert.equal(venvCalls(), 2);
+});
+
+test('默认镜像 403 时同一次改官方源再装', async () => {
+  const userData = tempDir();
+  const pluginDir = path.join(userData, 'installed_plugins', 'sample-tool');
+  writePlugin(pluginDir);
+  /** @type {RunCall[]} */
+  const calls = [];
+  let pipAttempts = 0;
+  const run: CommandRunner = async (_command, args, options) => {
+    const index = typeof options?.env?.UV_DEFAULT_INDEX === 'string' ? options.env.UV_DEFAULT_INDEX : '';
+    calls.push({ args, index });
+    if (args[0] === 'venv') {
+      const python = path.join(String(args[1]), 'bin', 'python');
+      fs.mkdirSync(path.dirname(python), { recursive: true });
+      fs.writeFileSync(python, '');
+      return { code: 0, stdout: '', stderr: '' };
+    }
+    if (args[0] === 'pip') {
+      pipAttempts += 1;
+      if (pipAttempts === 1) {
+        return {
+          code: 1,
+          stdout: '',
+          stderr: 'Failed to download https://pypi.tuna.tsinghua.edu.cn/.../pyyaml.whl: 403 Forbidden',
+        };
+      }
+      return { code: 0, stdout: '', stderr: '' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+  const result = await preparePluginRuntime({
+    userData,
+    pluginDir,
+    source: 'installed',
+    spec: { python: { requirements: 'requirements.txt' } },
+    tools,
+    run,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(pipAttempts, 2);
+  const pipIndexes = calls.filter((item) => item.args[0] === 'pip').map((item) => item.index);
+  assert.equal(isOfficialPypiIndex(pipIndexes[1] ?? ''), true);
+  assert.equal(pipIndexes[1], OFFICIAL_PYPI_INDEX);
+});
+
+test('已是官方索引时 403 不二次尝试', async () => {
+  const previous = process.env.DEX_BUDDY_PYPI_INDEX;
+  process.env.DEX_BUDDY_PYPI_INDEX = OFFICIAL_PYPI_INDEX;
+  try {
+    const userData = tempDir();
+    const pluginDir = path.join(userData, 'installed_plugins', 'sample-tool');
+    writePlugin(pluginDir);
+    let pipAttempts = 0;
+    const run: CommandRunner = async (_command, args) => {
+      if (args[0] === 'venv') {
+        const python = path.join(String(args[1]), 'bin', 'python');
+        fs.mkdirSync(path.dirname(python), { recursive: true });
+        fs.writeFileSync(python, '');
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      if (args[0] === 'pip') {
+        pipAttempts += 1;
+        return { code: 1, stdout: '', stderr: '403 Forbidden' };
+      }
+      return { code: 0, stdout: '', stderr: '' };
+    };
+    const result = await preparePluginRuntime({
+      userData,
+      pluginDir,
+      source: 'installed',
+      spec: { python: { requirements: 'requirements.txt' } },
+      tools,
+      run,
+    });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.message, PYTHON_DEPS_FAILED_MESSAGE);
+    assert.equal(pipAttempts, 1);
+  } finally {
+    if (previous === undefined) delete process.env.DEX_BUDDY_PYPI_INDEX;
+    else process.env.DEX_BUDDY_PYPI_INDEX = previous;
+  }
+});
+
+test('两源皆失败时首层是依赖没装上', async () => {
+  const userData = tempDir();
+  const pluginDir = path.join(userData, 'installed_plugins', 'sample-tool');
+  writePlugin(pluginDir);
+  const run: CommandRunner = async (_command, args) => {
+    if (args[0] === 'venv') {
+      const python = path.join(String(args[1]), 'bin', 'python');
+      fs.mkdirSync(path.dirname(python), { recursive: true });
+      fs.writeFileSync(python, '');
+      return { code: 0, stdout: '', stderr: '' };
+    }
+    if (args[0] === 'pip') {
+      return { code: 1, stdout: '', stderr: 'Failed to download wheel: 403 Forbidden' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+  const result = await preparePluginRuntime({
+    userData,
+    pluginDir,
+    source: 'installed',
+    spec: { python: { requirements: 'requirements.txt' } },
+    tools,
+    run,
+  });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.message, PYTHON_DEPS_FAILED_MESSAGE);
+});
+
+test('识别 403 与下载失败才可换源', () => {
+  assert.equal(isPypiIndexFetchFailure('HTTP 403 Forbidden'), true);
+  assert.equal(isPypiIndexFetchFailure('Failed to download package'), true);
+  assert.equal(isPypiIndexFetchFailure('Invalid requirement syntax'), false);
+  assert.equal(isOfficialPypiIndex('https://pypi.org/simple/'), true);
 });
 
 test('安装失败时不执行 apply，卸载删掉运行环境并留下数据', async () => {
@@ -116,9 +245,10 @@ test('安装失败时不执行 apply，卸载删掉运行环境并留下数据',
   assert.equal(registry.getPlugin('sample-tool'), undefined);
   assert.equal(fs.existsSync(marker), false);
   const failed = registry.getPluginList().find((plugin) => plugin.id === 'sample-tool');
-  assert.match(failed?.runtimeError ?? '', /pip failed/);
+  assert.equal(failed?.runtimeError, PYTHON_DEPS_FAILED_MESSAGE);
 
-  const calls: string[][] = [];
+  /** @type {RunCall[]} */
+  const calls = [];
   registry.setRuntimeHost({ userData, tools, run: fakeRun(calls) });
   const retried = await registry.retryRuntime('sample-tool');
   assert.equal(retried, null);

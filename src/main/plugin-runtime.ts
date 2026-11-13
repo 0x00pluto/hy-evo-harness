@@ -13,6 +13,12 @@ export const NODE_VERSION = '22.21.0';
 
 export const RUNTIME_CDN_BASE = 'https://oss.ai.66plat.com/dex-buddy/runtimes';
 
+/** 官方 PyPI simple；默认镜像 403 / 下载失败时同一次准备改用此索引。 */
+export const OFFICIAL_PYPI_INDEX = 'https://pypi.org/simple';
+
+/** 依赖装不上时给使用者的首层文案（不把路径和镜像 URL 当必读）。 */
+export const PYTHON_DEPS_FAILED_MESSAGE = '这个插件还不能用，因为依赖没装上。';
+
 export const RUNTIME_ARCHES = ['darwin-arm64', 'darwin-x64', 'win32-x64', 'linux-x64', 'linux-arm64'] as const;
 
 export type RuntimeArch = (typeof RUNTIME_ARCHES)[number];
@@ -68,6 +74,27 @@ interface InstallStamp {
 
 export function pypiIndex(): string {
   return process.env.DEX_BUDDY_PYPI_INDEX || 'https://pypi.tuna.tsinghua.edu.cn/simple';
+}
+
+export function normalizePypiIndex(url: string): string {
+  return url.trim().replace(/\/+$/, '');
+}
+
+export function isOfficialPypiIndex(url: string): boolean {
+  return normalizePypiIndex(url) === normalizePypiIndex(OFFICIAL_PYPI_INDEX);
+}
+
+/** 默认镜像对 wheel / 页面返回 403 或下载失败时，才同一次改官方源。 */
+export function isPypiIndexFetchFailure(log: string): boolean {
+  const text = log.toLowerCase();
+  return (
+    /\b403\b/.test(text)
+    || text.includes('forbidden')
+    || text.includes('failed to download')
+    || text.includes('error downloading')
+    || text.includes('download failed')
+    || text.includes('failed to fetch')
+  );
 }
 
 export function npmRegistry(): string {
@@ -275,31 +302,40 @@ async function installPluginEnv(
   fs.mkdirSync(runtimeDir, { recursive: true });
   if (input.spec.python) {
     const requirements = requireInside(input.pluginDir, input.spec.python.requirements, 'requirements');
-    fs.rmSync(envDir, { recursive: true, force: true });
-    const uvEnv = toolEnv();
-    const created = await run(tools.uv, ['venv', envDir, '--python', tools.python, '--clear'], {
-      cwd: input.pluginDir,
-      env: uvEnv,
-    });
-    assertRan(created, '创建 Python 环境失败');
     const lock = path.join(input.pluginDir, 'uv.lock');
-    if (fs.existsSync(lock)) {
-      const synced = await run(
-        tools.uv,
-        ['sync', '--frozen', '--no-dev', '--no-install-project'],
-        {
-          cwd: input.pluginDir,
-          env: { ...uvEnv, UV_PROJECT_ENVIRONMENT: envDir },
-        },
-      );
-      assertRan(synced, '安装 Python 依赖失败');
-    } else {
-      const installed = await run(
-        tools.uv,
-        ['pip', 'install', '-r', requirements, '--python', venvPython(envDir)],
-        { cwd: input.pluginDir, env: uvEnv },
-      );
-      assertRan(installed, '安装 Python 依赖失败');
+    const defaultIndex = pypiIndex();
+    try {
+      await createPythonEnvAndInstallDeps({
+        run,
+        tools,
+        pluginDir: input.pluginDir,
+        envDir,
+        requirements,
+        lockPath: lock,
+        index: defaultIndex,
+      });
+    } catch (err) {
+      const log = err instanceof Error ? err.message : String(err);
+      const canFallback =
+        isPypiIndexFetchFailure(log)
+        && !isOfficialPypiIndex(defaultIndex);
+      if (canFallback) {
+        try {
+          await createPythonEnvAndInstallDeps({
+            run,
+            tools,
+            pluginDir: input.pluginDir,
+            envDir,
+            requirements,
+            lockPath: lock,
+            index: OFFICIAL_PYPI_INDEX,
+          });
+        } catch {
+          throw new Error(PYTHON_DEPS_FAILED_MESSAGE);
+        }
+      } else {
+        throw new Error(PYTHON_DEPS_FAILED_MESSAGE);
+      }
     }
     bins.python = venvPython(envDir);
   }
@@ -384,8 +420,45 @@ function linkNodeModules(envDir: string, pluginDir: string): void {
   fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
 }
 
-function toolEnv(): NodeJS.ProcessEnv {
-  return { ...process.env, UV_DEFAULT_INDEX: pypiIndex() };
+function toolEnv(index?: string): NodeJS.ProcessEnv {
+  return { ...process.env, UV_DEFAULT_INDEX: index ?? pypiIndex() };
+}
+
+async function createPythonEnvAndInstallDeps(input: {
+  run: CommandRunner;
+  tools: RuntimeTools;
+  pluginDir: string;
+  envDir: string;
+  requirements: string;
+  lockPath: string;
+  index: string;
+}): Promise<void> {
+  const { run, tools, pluginDir, envDir, requirements, lockPath, index } = input;
+  fs.rmSync(envDir, { recursive: true, force: true });
+  const uvEnv = toolEnv(index);
+  const created = await run(tools.uv, ['venv', envDir, '--python', tools.python, '--clear'], {
+    cwd: pluginDir,
+    env: uvEnv,
+  });
+  assertRan(created, '创建 Python 环境失败');
+  if (fs.existsSync(lockPath)) {
+    const synced = await run(
+      tools.uv,
+      ['sync', '--frozen', '--no-dev', '--no-install-project'],
+      {
+        cwd: pluginDir,
+        env: { ...uvEnv, UV_PROJECT_ENVIRONMENT: envDir },
+      },
+    );
+    assertRan(synced, '安装 Python 依赖失败');
+    return;
+  }
+  const installed = await run(
+    tools.uv,
+    ['pip', 'install', '-r', requirements, '--python', venvPython(envDir)],
+    { cwd: pluginDir, env: uvEnv },
+  );
+  assertRan(installed, '安装 Python 依赖失败');
 }
 
 function assertRan(result: CommandResult, title: string): void {

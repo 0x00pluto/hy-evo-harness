@@ -63,7 +63,7 @@ FastAPI 或 Next.js 同样在 `apply` 里启动，在 `dispose` 里关掉。宿�
 
 没有第三方依赖的单个 `.js` 脚本可以用 Electron 加 `ELECTRON_RUN_AS_NODE=1` 拉起，不必声明 Node 运行时。
 
-解释器放在七牛 `dex-buddy/runtimes/`，版本常量在 `src/main/plugin-runtime.ts`。包索引可以用环境变量 `DEX_BUDDY_PYPI_INDEX` 和 `DEX_BUDDY_NPM_REGISTRY` 改掉，默认是国内镜像。
+解释器放在七牛 `dex-buddy/runtimes/`，版本常量在 `src/main/plugin-runtime.ts`。包索引可以用环境变量 `DEX_BUDDY_PYPI_INDEX` 和 `DEX_BUDDY_NPM_REGISTRY` 改掉。Python 默认是清华 simple（`https://pypi.tuna.tsinghua.edu.cn/simple`）；同一次准备里若默认索引对依赖返回 403 或下载失败，宿主会改用官方 `https://pypi.org/simple` 再装一次。若 `DEX_BUDDY_PYPI_INDEX` 已经是官方，只装一次、不再二次尝试。Node 默认仍是 npmmirror，本篇不换官方 npm。
 
 页面这边仍然只有：
 

@@ -552,6 +552,10 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       ? shell.plugins.find((item) => item.id === session.pluginsFocus)
       : null;
     if (plugin) {
+      // 仍已安装（含环境未就绪）时，顶栏不得继续留着上一次「插件已卸载」。
+      if (plugin.source === 'installed' && statusEl.textContent === '插件已卸载') {
+        setStatus('');
+      }
       marketPane.hidden = true;
       detail.hidden = false;
       renderDetail(plugin);

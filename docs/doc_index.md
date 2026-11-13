@@ -17,7 +17,7 @@
 - `docs/plugin-development/settings.md`: configSchema、分组、密钥输入与眼睛、settingsEntry、pluginEnv；保存后下次读取即新值，没有保存事件；缺配置时可链到导航协议跳本插件字段
 - `docs/plugin-development/navigate.md`: 插件导航协议：SDK navigate(ctx,href) / window.dex.navigate、dex://settings/self 地址表、错误码；独立跑静默成功；扩地址表不必重拷 SDK
 - `docs/plugin-development/data.md`: 插件页加载的本地实例数据仍在仓库，设置和 plugin-data 用实例 id，与清单 id 隔离；装进 installed_plugins 之后 ctx.dirs 分开，卸载只删运行环境和缓存；市场换 id 后旧目录会标成孤儿，可在插件页删除
-- `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node；externalTools 在 apply 前只查 PATH，缺了给可复制的安装说明，ctx.tools 给绝对路径；未声明的命令仍靠本机 PATH；pluginEnv 与 runtime.env 每次读取都是当前已保存配置，未设置时补 PYTHONIOENCODING 与 PYTHONUTF8；dex.call 参数须可 JSON 序列化，宿主 IPC 前再圆整一次
+- `docs/plugin-development/runtime.md`: index.js 跑在 Electron 的 Node 里；清单声明 runtime 后由宿主准备钉死版本的 Python 或官方 Node；Python 默认清华 PyPI，403/下载失败时同一次改官方源；externalTools 在 apply 前只查 PATH，缺了给可复制的安装说明，ctx.tools 给绝对路径；未声明的命令仍靠本机 PATH；pluginEnv 与 runtime.env 每次读取都是当前已保存配置，未设置时补 PYTHONIOENCODING 与 PYTHONUTF8；dex.call 参数须可 JSON 序列化，宿主 IPC 前再圆整一次
 - `docs/plugin-development/models.md`: 必拷接口层 SDK；独立跑再拷 standalone；SDK_VERSION 只表契约；本机 DEX_BUDDY_API_KEY、requireEntitlement / navigate 再 bindModels、childEnv；参考图文件键按字节 sha256（宿主/standalone）；生图传 idempotencyKey；页面不接触网关
 - `docs/plugin-development/snippets/dex-buddy-sdk.js`: 插件必拷的 Node 接口层（bindModels、requireEntitlement、navigate、childEnv、SDK_VERSION 1.0.4）
 - `docs/plugin-development/snippets/dex-buddy-standalone.js`: 独立跑默认实现（STANDALONE_VERSION 1.0.3；参考图按内容哈希；工作台不必拷）
