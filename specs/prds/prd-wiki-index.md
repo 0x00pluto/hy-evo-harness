@@ -22,3 +22,4 @@
 - `specs/prds/prd-00016-stale-installed-plugin.md`：00016，市场装过且当前插件中心目录没有这个 id 的本机目录是孤儿；插件页标出并可删除该目录，新 id 安装与云端已购不动。工程 backlog
 - `specs/prds/prd-00017-plugin-settings-navigate.md`：00017，插件用 `navigate(dex://settings/self[#FIELD])` 打开自己的设置并可落到字段；页面与后端都能发；买断与检测不迁入协议。工程 accepted
 - `specs/prds/prd-00018-first-open-plugin-ready.md`：00018，Windows 首次安装后第一次点开界面插件不得露出丢样式裸页；未就绪则准备中，失败仍「环境未就绪」。来源飞书 `20261106_0006`。界面参考图在 `specs/prds/images/prd-00018-first-open-plugin-ready/`。工程 accepted
+- `specs/prds/prd-00019-insufficient-credits-prompt.md`：00019，积分不够时工作台弹出「购买积分」并打开 `/shop`；必验用模型试玩「演示积分不够」；来源飞书 `20261112_0020`。工程 accepted

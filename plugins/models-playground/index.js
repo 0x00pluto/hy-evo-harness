@@ -113,6 +113,17 @@ module.exports = {
         await requireEntitlement(ctx, { pluginId: listedId, mockOwned: false });
         return { ok: true, entitled: true };
       },
+      /** 验收用：不打真实报价，只触发工作台「积分不够」弹层。 */
+      async demoInsufficientCredits() {
+        await models.chat.completions.create(
+          {
+            model: 'dexbuddy-chat',
+            messages: [{ role: 'user', content: 'demo insufficient credits' }],
+          },
+          { forceInsufficientCredits: true },
+        );
+        return { ok: true };
+      },
       async chat(params) {
         const prompt = params && typeof params.prompt === 'string' ? params.prompt.trim() : '';
         const replay = !!(params && params.replay);

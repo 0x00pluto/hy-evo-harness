@@ -160,6 +160,62 @@ test('余额不够时不转发，onBlocked 一次', async () => {
   assert.equal(calls[0]?.path, '/v1/billing/quote');
 });
 
+test('试玩 forceInsufficientCredits 文案不打报价并通知壳', async () => {
+  const { models, calls, blocked } = makeHost({
+    pluginId: 'models-playground',
+  });
+  await assert.rejects(
+    () =>
+      models.chat.completions.create(
+        { model: 'dexbuddy-chat', messages: [{ role: 'user', content: 'hi' }] },
+        { forceInsufficientCredits: true },
+      ),
+    (err: unknown) => err instanceof GatewayError && err.code === 'INSUFFICIENT_CREDITS',
+  );
+  assert.deepEqual(blocked, [{ pluginId: 'models-playground', reason: 'INSUFFICIENT_CREDITS' }]);
+  assert.equal(calls.some((item) => item.path === '/v1/billing/quote'), false);
+  assert.equal(calls.some((item) => item.path === '/v1/chat/completions'), false);
+});
+
+test('试玩 forceInsufficientCredits 生图不打报价并通知壳', async () => {
+  const { models, calls, blocked } = makeHost({
+    pluginId: 'models-playground',
+  });
+  await assert.rejects(
+    () =>
+      models.images.generate(
+        {
+          model: 'dexbuddy-image',
+          input: { prompt: 'a cat' },
+          outputPath: '/tmp/force-poor.png',
+        },
+        { forceInsufficientCredits: true },
+      ),
+    (err: unknown) => err instanceof GatewayError && err.code === 'INSUFFICIENT_CREDITS',
+  );
+  assert.deepEqual(blocked, [{ pluginId: 'models-playground', reason: 'INSUFFICIENT_CREDITS' }]);
+  assert.equal(calls.some((item) => item.path === '/v1/billing/quote'), false);
+  assert.equal(calls.some((item) => item.path === '/v1/images/generate'), false);
+});
+
+test('非试玩 forceInsufficientCredits 无效，仍走报价', async () => {
+  const { models, calls, blocked } = makeHost({
+    request: async (path) => {
+      if (path === '/v1/billing/quote') return chatQuote(true);
+      if (path === '/v1/chat/completions') return { choices: [] };
+      return {};
+    },
+  });
+  const body = await models.chat.completions.create(
+    { model: 'dexbuddy-chat', messages: [] },
+    { forceInsufficientCredits: true },
+  );
+  assert.deepEqual(body, { choices: [] });
+  assert.equal(blocked.length, 0);
+  assert.equal(calls[0]?.path, '/v1/billing/quote');
+  assert.equal(calls[1]?.path, '/v1/chat/completions');
+});
+
 test('未登录烧模型时通知 UNAUTHORIZED，不查买断', async () => {
   const { models, calls, blocked, traces } = makeHost({
     requireSession: async () => {

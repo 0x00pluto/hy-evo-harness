@@ -95,7 +95,7 @@
 <body>
   <main>
     <h1>模型试玩</h1>
-    <p class="intro">「买断」区校验登录与 mock 商品。「文案 / 图片」只烧模型；「重放」用同一把幂等键取回上次结果，不换新 key。装进 Dex Buddy 后走宿主登录会话。独立跑时把 DEX_BUDDY_API_KEY 写进本机环境变量，不要打进 zip。</p>
+    <p class="intro">「买断」区校验登录与 mock 商品。「门禁演示」可验积分不够弹层（不扣真积分）。「文案 / 图片」只烧模型；「重放」用同一把幂等键取回上次结果，不换新 key。装进 Dex Buddy 后走宿主登录会话。独立跑时把 DEX_BUDDY_API_KEY 写进本机环境变量，不要打进 zip。</p>
     <label for="prompt">提示词</label>
     <textarea id="prompt">用一句话介绍 Dex Buddy</textarea>
 
@@ -106,6 +106,14 @@
         <button id="access" type="button">需要买断</button>
         <button id="owned" type="button">检测已买断</button>
         <button id="unowned" type="button">检测未买断</button>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="sec-gate">
+      <h2 id="sec-gate">门禁演示</h2>
+      <p class="hint">不扣真积分。已登录时点一下，工作台应弹出「积分不够」，可验「购买积分」与「取消」。</p>
+      <div class="actions">
+        <button id="demo-insufficient" type="button">演示积分不够</button>
       </div>
     </section>
 
@@ -169,6 +177,8 @@
     document.getElementById('access').onclick = () => run('checkAccess', [], '正在校验…');
     document.getElementById('owned').onclick = () => run('checkOwned', [], '正在校验已买断…');
     document.getElementById('unowned').onclick = () => run('checkUnowned', [], '正在校验未买断…');
+    document.getElementById('demo-insufficient').onclick = () =>
+      run('demoInsufficientCredits', [], '正在演示积分不够…');
     document.getElementById('chat').onclick = () => generate('chat', false);
     document.getElementById('chat-replay').onclick = () => generate('chat', true);
     document.getElementById('python').onclick = () => generate('pythonChat', false);

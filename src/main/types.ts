@@ -47,6 +47,11 @@ export interface HostModelsCallOptions {
   idempotencyKey?: string;
   /** 参考图垫图方式。默认 signed：直传后交 fileUrls。direct：交 fileIds。 */
   referenceUpload?: ReferenceUploadMode;
+  /**
+   * 仅 models-playground：跳过真实报价，直接抛 INSUFFICIENT_CREDITS 并通知壳弹层。
+   * 其它插件传入无效。
+   */
+  forceInsufficientCredits?: boolean;
 }
 
 export interface HostImageGenerateInput {

@@ -220,11 +220,22 @@ export function createRequireEntitlement(deps: HostModelsDeps): (...args: unknow
   };
 }
 
+/** 试玩验收用：不打报价，仍走 spendOrThrow → 壳弹「积分不够」。 */
+function maybeForceInsufficientCredits(
+  deps: HostModelsDeps,
+  options?: HostModelsCallOptions,
+): void {
+  if (deps.pluginId !== PLAYGROUND_ID) return;
+  if (options?.forceInsufficientCredits !== true) return;
+  throw new GatewayError('INSUFFICIENT_CREDITS', '积分不足', 402);
+}
+
 async function quoteOrThrow(
   deps: HostModelsDeps,
   body: Record<string, unknown>,
   options?: HostModelsCallOptions,
 ): Promise<BillingQuote> {
+  maybeForceInsufficientCredits(deps, options);
   const raw = await deps.request('/v1/billing/quote', {
     method: 'POST',
     body,
@@ -246,6 +257,7 @@ async function quoteBeforeImageGenerate(
   model: string,
   options?: HostModelsCallOptions,
 ): Promise<void> {
+  maybeForceInsufficientCredits(deps, options);
   const hasReplayKey =
     typeof options?.idempotencyKey === 'string' && options.idempotencyKey.trim() !== '';
   const raw = await deps.request('/v1/billing/quote', {

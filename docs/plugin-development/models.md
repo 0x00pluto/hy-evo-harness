@@ -70,7 +70,7 @@ const env = await childEnv(ctx, { ...process.env, ...(ctx.pluginEnv ? ctx.plugin
 spawn(pythonBin, [script], { cwd: __dirname, env });
 ```
 
-对照例子在仓库 `plugins/models-playground/`（只在 `pnpm start` 出现）。当前接口母版 `SDK_VERSION` 是 `1.0.4`；独立跑默认实现 `STANDALONE_VERSION` 仍为 `1.0.3`。
+对照例子在仓库 `plugins/models-playground/`（只在 `pnpm start` 出现）。试玩页「门禁演示 → 演示积分不够」会带 `forceInsufficientCredits: true` 调文案出口：宿主只对清单 id `models-playground` 认这个选项，跳过真实报价并通知工作台弹「积分不够」，用来验收弹层，不扣真积分；其它插件传入无效。当前接口母版 `SDK_VERSION` 是 `1.0.4`；独立跑默认实现 `STANDALONE_VERSION` 仍为 `1.0.3`。
 
 接口层与 standalone 只用标准库（Node `http` / Python `urllib`）。不声明 `runtime.python`，工作台会走 PATH 上的 `python3`。只有脚本要装 pip 包时才在清单里声明 `runtime`，写法见 [运行](runtime.md)。
 
