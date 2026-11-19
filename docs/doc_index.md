@@ -41,3 +41,4 @@
 - `docs/faqs/how-to-prevent-popup-clipping.md`: 工作台弹出层不要绝对定位在 overflow 容器里；用 fixed 按按钮摆放，否则只剩一条
 - `docs/faqs/dev-and-prod-side-by-side.md`: 未打包用 Dex Buddy Dev 和独立 userData，可与安装包同时开；开发版仍单实例；pnpm start 无挂载日志即闪退是锁失败
 - `docs/faqs/first-open-plugin-unstyled.md`: 首次打开丢样式：env 联接曾被协议拒绝、遮罩过早撤下；现放行宿主 env 并加样式门闩
+- `docs/faqs/plugin-update-stale-ui.md`: 更新后挤左侧/缺样式：persist 分区缓存了旧 app-plugin 响应或 404；现 no-cache 头且安装/卸载后清分区缓存

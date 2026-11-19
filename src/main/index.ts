@@ -49,7 +49,12 @@ import {
   type SilentInstallResult,
 } from './plugin-silent-update.ts';
 import { exampleSettingIdsToDrop, PluginSettingsStore } from './plugin-settings.ts';
-import { ensurePluginProtocol, pluginPartition, registerPluginScheme } from './protocol.ts';
+import {
+  clearPluginPartitionCache,
+  ensurePluginProtocol,
+  pluginPartition,
+  registerPluginScheme,
+} from './protocol.ts';
 import { ServiceRegistry } from './registry.ts';
 import { applyUnpackagedIdentity } from './app-identity.ts';
 import { applyUserSearchPath } from './shell-path.ts';
@@ -318,6 +323,7 @@ async function installFromZip(zipFilePath: string): Promise<DexResult> {
         userPluginsDir: installedPluginsDir(),
       });
       recordFileOrigin(installed.installedId);
+      await clearPluginPartitionCache(installed.installedId);
       return { ok: true, plugins: installed.plugins, installedId: installed.installedId };
     } catch (err) {
       return {
@@ -349,6 +355,7 @@ async function installKnownRelease(release: PluginRelease): Promise<SilentInstal
       sha256: release.sha256,
       installedAt: new Date().toISOString(),
     });
+    await clearPluginPartitionCache(installed.installedId);
     return { ok: true, plugins: installed.plugins, installedId: installed.installedId };
   } catch (err) {
     return {
@@ -810,6 +817,7 @@ function registerIpc(): void {
           userPluginsDir: installedPluginsDir(),
           originsFile: pluginOriginsFile(),
         });
+        await clearPluginPartitionCache(id);
         return { ok: true, plugins };
       } catch (err) {
         return {

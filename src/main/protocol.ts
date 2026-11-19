@@ -30,8 +30,50 @@ interface ElectronProtocolModule {
       protocol: {
         handle: (scheme: string, handler: (request: Request) => Response | Promise<Response>) => void;
       };
+      clearCache: () => Promise<void>;
     };
   };
+}
+
+/** 插件静态资源须每次向磁盘校验；覆盖安装后同一 URL 内容会变。不用 no-store，以免误伤 bfcache。 */
+export function pluginAssetResponseHeaders(): Record<string, string> {
+  return { 'Cache-Control': 'no-cache' };
+}
+
+export function pluginAssetResponse(body: BodyInit | null, init?: ResponseInit): Response {
+  const headers = new Headers(init?.headers);
+  for (const [key, value] of Object.entries(pluginAssetResponseHeaders())) {
+    headers.set(key, value);
+  }
+  return new Response(body, { ...init, headers });
+}
+
+export async function withPluginAssetCacheHeaders(source: Response): Promise<Response> {
+  const headers = new Headers(source.headers);
+  for (const [key, value] of Object.entries(pluginAssetResponseHeaders())) {
+    headers.set(key, value);
+  }
+  return new Response(source.body, {
+    status: source.status,
+    statusText: source.statusText,
+    headers,
+  });
+}
+
+/**
+ * 清掉该插件 persist 分区的 HTTP 缓存。覆盖安装后同一 app-plugin URL 可能仍命中旧正文或旧 404。
+ * 失败只打日志，不让安装/卸载失败。
+ */
+export async function clearPluginPartitionCache(pluginId: string): Promise<void> {
+  if (typeof pluginId !== 'string' || pluginId.trim() === '') return;
+  try {
+    const { session } = require('electron') as ElectronProtocolModule;
+    await session.fromPartition(pluginPartition(pluginId)).clearCache();
+  } catch (err) {
+    console.error(
+      `[protocol] 清理插件分区缓存失败 (${pluginId}): ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /** 词法路径必须落在插件目录内。空路径、绝对路径和 `..` 都拒绝。 */
@@ -127,7 +169,7 @@ export function ensurePluginProtocol(lookup: PluginPathLookup, partition: string
   if (hookedPartitions.has(partition)) return;
   const { session, net } = require('electron') as ElectronProtocolModule;
   const partitionSession = session.fromPartition(partition);
-  partitionSession.protocol.handle('app-plugin', (request) => {
+  partitionSession.protocol.handle('app-plugin', async (request) => {
     let pluginId = '';
     let filePath = '';
     try {
@@ -135,17 +177,18 @@ export function ensurePluginProtocol(lookup: PluginPathLookup, partition: string
       pluginId = url.hostname;
       filePath = decodeURIComponent(url.pathname).replace(/^\/+/, '');
     } catch {
-      return new Response('Bad request', { status: 400 });
+      return pluginAssetResponse('Bad request', { status: 400 });
     }
 
     const context = lookup.resolveAssetContext(pluginId);
-    if (!context) return new Response('Not found', { status: 404 });
+    if (!context) return pluginAssetResponse('Not found', { status: 404 });
 
     const asset = resolvePluginAsset(context.absPath, filePath, {
       allowedRealRoots: context.allowedRealRoots,
     });
-    if (!asset) return new Response('Not found', { status: 404 });
-    return net.fetch(pathToFileURL(asset).toString());
+    if (!asset) return pluginAssetResponse('Not found', { status: 404 });
+    const fetched = await net.fetch(pathToFileURL(asset).toString());
+    return withPluginAssetCacheHeaders(fetched);
   });
   hookedPartitions.add(partition);
 }

@@ -24,3 +24,4 @@
 - `specs/prds/prd-00018-first-open-plugin-ready.md`：00018，Windows 首次安装后第一次点开界面插件不得露出丢样式裸页；未就绪则准备中，失败仍「环境未就绪」。来源飞书 `20261106_0006`。界面参考图在 `specs/prds/images/prd-00018-first-open-plugin-ready/`。工程 accepted
 - `specs/prds/prd-00019-insufficient-credits-prompt.md`：00019，积分不够时工作台弹出「购买积分」并打开 `/shop`；必验用模型试玩「演示积分不够」；来源飞书 `20261112_0020`。工程 accepted
 - `specs/prds/prd-00020-plugin-python-index-fallback.md`：00020，已安装插件装 Python 依赖时默认镜像 403 / 下载失败则同一次改官方源；失败首层说真话；来源飞书 `20261110_0011`。工程 accepted
+- `specs/prds/prd-00021-plugin-update-stale-ui.md`：00021，市场插件更新后必须呈现新包界面；退出再开与重新加载仍对新版，不依赖卸载重装；来源飞书 `20261118_0024`。界面参考图在 `specs/prds/images/prd-00021-plugin-update-stale-ui/`。工程 accepted
