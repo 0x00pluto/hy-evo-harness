@@ -10,6 +10,7 @@
 - `docs/memo/phase1-repos-and-auth.md`: 第一期仓库与登录备忘（未上线）：两仓划分、三种页面、PKCE/设备码交接、Bearer 与 refresh 用法；给接手开工用
 - `docs/memo/phase1-roadmap-and-skills-gate.md`: 第一期之后备忘：上线门槛与 P1.5–P5 Roadmap；huyuan-ai-skills-gate 可借鉴（登录/支付/权益门禁）与勿照搬（无用量钱包、勿整仓 fork）
 - `docs/memo/plugin-signing.md`: 插件打包签名已讨论不立项：货架钉公钥可挡仍声称自己是 A；挡不住改成未上架 id 走买断放行
+- `docs/memo/host-error-collection.md`: 宿主 Electron 错误收集调研（已讨论不立项）：官方 JS 钩子+本机复制、crashReporter 落盘、可选上传/Sentry；与插件 00022 分界
 - `docs/memo/stale-installed-plugin.md`: 商店换 id 后本机市场旧安装成孤儿（小红书改 id）；判定见 `specs/prds/prd-00016-stale-installed-plugin.md`
 - `docs/plugin-development.md`: 插件开发说明已拆到 `docs/plugin-development/`，本文件只保留入口
 - `docs/plugin-development/README.md`: 可单独转发的插件开发目录：交什么、两种插件，以及清单、设置、导航、数据、运行、模型、后端 JavaScript、打包、发布、插件中心、配色的入口
