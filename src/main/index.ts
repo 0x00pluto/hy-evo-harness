@@ -16,7 +16,12 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import type { CallServicePayload } from '../shared/dex-ipc.ts';
-import type { GatewaySessionView, NavigateCompletePayload, SpendBlockedPayload } from '../shared/dex-bridge.ts';
+import type {
+  GatewaySessionView,
+  NavigateCompletePayload,
+  PluginAssetErrorEvent,
+  SpendBlockedPayload,
+} from '../shared/dex-bridge.ts';
 import {
   DexNavigateError,
   parseDexNavigate,
@@ -177,6 +182,12 @@ function applyCatalogSnapshot(catalog: PluginCatalogSnapshot): void {
   }
 }
 
+function broadcastPluginAssetError(event: PluginAssetErrorEvent): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('dex:plugin-asset-error', event);
+  }
+}
+
 async function loadPluginCatalog(): Promise<PluginCatalog> {
   try {
     const catalog = await fetchPluginCatalog();
@@ -229,7 +240,7 @@ function attachWebviewGuard(): void {
       webPreferences.sandbox = true;
       webPreferences.partition = partition;
       webPreferences.preload = pluginPreloadFile();
-      ensurePluginProtocol(registry, partition);
+      ensurePluginProtocol(registry, partition, broadcastPluginAssetError);
     });
   });
 }
@@ -287,7 +298,7 @@ function createWindow(icon: NativeImage | null): void {
     win.show();
   });
   // 宿主页用 img 加载 app-plugin:// 图标。协议原先只挂在插件 partition 上，默认 session 也要有一份。
-  ensurePluginProtocol(registry, '');
+  ensurePluginProtocol(registry, '', broadcastPluginAssetError);
   win.webContents.once('did-finish-load', () => {
     startSilentPluginUpdates();
   });
@@ -617,7 +628,7 @@ function registerIpc(): void {
       throw new Error('插件不存在');
     }
     const partition = pluginPartition(id);
-    ensurePluginProtocol(registry, partition);
+    ensurePluginProtocol(registry, partition, broadcastPluginAssetError);
     return {
       partition,
       preloadUrl: pathToFileURL(pluginPreloadFile()).href,

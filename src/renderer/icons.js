@@ -35,6 +35,7 @@ const ICON_NAMES = [
   'Info',
   'CircleCheck',
   'CircleX',
+  'TriangleAlert',
   'X',
 ];
 

@@ -25,4 +25,4 @@
 - `specs/prds/prd-00019-insufficient-credits-prompt.md`：00019，积分不够时工作台弹出「购买积分」并打开 `/shop`；必验用模型试玩「演示积分不够」；来源飞书 `20261112_0020`。工程 accepted
 - `specs/prds/prd-00020-plugin-python-index-fallback.md`：00020，已安装插件装 Python 依赖时默认镜像 403 / 下载失败则同一次改官方源；失败首层说真话；来源飞书 `20261110_0011`。工程 accepted
 - `specs/prds/prd-00021-plugin-update-stale-ui.md`：00021，市场插件更新后必须呈现新包界面；退出再开与重新加载仍对新版，不依赖卸载重装；来源飞书 `20261118_0024`。界面参考图在 `specs/prds/images/prd-00021-plugin-update-stale-ui/`。工程 accepted
-- `specs/prds/prd-00022-plugin-page-diagnostics.md`：00022，界面插件资源 404 或脚本报错时用 Electron 现成事件给出说明并可复制诊断；不用 did-fail-load 捕子资源、不做空页探针。来源飞书 `20261120_0027`。界面参考图在 `specs/prds/images/prd-00022-plugin-page-diagnostics/`。工程 backlog
+- `specs/prds/prd-00022-plugin-page-diagnostics.md`：00022，界面插件资源 404 或脚本报错时用 Electron 现成事件给出说明并可复制诊断；不用 did-fail-load 捕子资源、不做空页探针。来源飞书 `20261120_0027`。界面参考图在 `specs/prds/images/prd-00022-plugin-page-diagnostics/`。工程 accepted

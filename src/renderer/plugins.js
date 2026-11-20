@@ -3,6 +3,22 @@ import { mountPluginViews } from './plugin-views.js';
 import { mountPluginBoot } from './plugin-boot.js';
 import { showShellToast } from './shell-toast.js';
 import { byId } from './dom.js';
+import {
+  diagnoseStatus,
+  diagnosticFingerprint,
+  formatDiagnosticText,
+  pushAssetFailure,
+  pushConsoleRing,
+} from './plugin-diagnostics.js';
+
+/**
+ * @typedef {{
+ *   openFailure: string | null;
+ *   guestGone: string | null;
+ *   assetFailures: Array<{ url: string; kind?: string; resourceType?: string; error?: string }>;
+ *   consoleEntries: Array<{ level: number; message: string; sourceId?: string; line?: number }>;
+ * }} PluginDiagSession
+ */
 
 /**
  * @param {{
@@ -32,7 +48,19 @@ export function mountPlugins({
   const welcome = byId('welcome-screen', 'section');
   const headless = byId('headless-screen', 'section');
   const viewportHost = byId('viewport-host', 'div');
+  const diagBanner = byId('plugin-diag-banner', 'div');
+  const diagBannerCopy = byId('plugin-diag-banner-copy', 'button');
+  const diagBannerClose = byId('plugin-diag-banner-close', 'button');
   let openSeq = 0;
+  /** @type {Map<string, PluginDiagSession>} */
+  const diagnostics = new Map();
+  /** @type {Map<string, string>} */
+  const dismissedFingerprints = new Map();
+  /** 欢迎页失败后 activeId 已清空，仍用这个 id 复制诊断。 */
+  /** @type {string | null} */
+  let diagFocusId = null;
+  /** @type {string} */
+  let hostVersionCache = '';
   const boot = mountPluginBoot(viewportHost);
   const views = mountPluginViews({
     viewportHost,
@@ -41,9 +69,20 @@ export function mountPlugins({
     },
     onLoaded(id) {
       boot.hide(id);
+      syncDiagnosticsUi(id);
     },
     onFailed(id, message) {
       handleViewFailed(id, message);
+    },
+    onConsoleMessage(id, entry) {
+      const session = ensureDiag(id);
+      session.consoleEntries = pushConsoleRing(session.consoleEntries, entry);
+      syncDiagnosticsUi(id);
+    },
+    onGuestGone(id, reason) {
+      const session = ensureDiag(id);
+      session.guestGone = reason;
+      syncDiagnosticsUi(id);
     },
   });
   const openMarket = byId('open-market', 'button');
@@ -163,6 +202,23 @@ export function mountPlugins({
       void window.dex.openPluginFolder(plugin.rootPath);
     });
     card.append(name, status, hoverRule());
+    if (hasDiagnostics(plugin.id)) {
+      const copyDiag = document.createElement('button');
+      copyDiag.type = 'button';
+      copyDiag.className = 'nav-hover-row nav-hover-copy-diagnostics';
+      const copyIcon = hoverIcon('triangle-alert');
+      copyIcon.setAttribute('aria-hidden', 'true');
+      const copyLabel = document.createElement('span');
+      copyLabel.textContent = '一键复制错误信息';
+      copyDiag.append(copyIcon, copyLabel);
+      copyDiag.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        clearHoverCard();
+        void copyDiagnostics(plugin.id);
+      });
+      card.append(copyDiag);
+    }
     const source = hoverSource(plugin);
     if (source) {
       const sourceRow = hoverRow(source.icon, source.text);
@@ -324,14 +380,147 @@ export function mountPlugins({
     void views.enforceQuota(null);
   }
 
+  function hideDiagBanner() {
+    diagBanner.hidden = true;
+  }
+
+  function clearStatusAndDiagUi() {
+    setStatus('');
+    hideDiagBanner();
+  }
+
+  /** @param {string} id */
+  function ensureDiag(id) {
+    let session = diagnostics.get(id);
+    if (!session) {
+      session = {
+        openFailure: null,
+        guestGone: null,
+        assetFailures: [],
+        consoleEntries: [],
+      };
+      diagnostics.set(id, session);
+    }
+    return session;
+  }
+
+  /** @param {string} id */
+  function clearDiag(id) {
+    diagnostics.delete(id);
+    dismissedFingerprints.delete(id);
+    if (diagFocusId === id) diagFocusId = null;
+    if (shell.activeId === id || !shell.activeId) {
+      hideDiagBanner();
+    }
+  }
+
+  /**
+   * @param {string} id
+   */
+  function hasDiagnostics(id) {
+    const session = diagnostics.get(id);
+    return !!(session && diagnoseStatus(session));
+  }
+
+  /**
+   * @param {string} [id]
+   */
+  function syncDiagnosticsUi(id) {
+    const targetId = id || shell.activeId || diagFocusId;
+    if (!targetId) return;
+    if (shell.activeId && shell.activeId !== targetId) return;
+    if (!shell.activeId && diagFocusId !== targetId) return;
+    const session = diagnostics.get(targetId);
+    if (!session) {
+      hideDiagBanner();
+      return;
+    }
+    const status = diagnoseStatus(session);
+    if (!status) {
+      hideDiagBanner();
+      return;
+    }
+    diagFocusId = targetId;
+    const fingerprint = diagnosticFingerprint(session);
+    const dismissed = dismissedFingerprints.get(targetId);
+    if (dismissed && dismissed !== fingerprint) {
+      dismissedFingerprints.delete(targetId);
+    }
+    const ignored = dismissedFingerprints.get(targetId) === fingerprint;
+    if (ignored) {
+      hideDiagBanner();
+      return;
+    }
+    diagBanner.hidden = false;
+    mountIcons(diagBanner);
+  }
+
+  /** @param {string} id */
+  function dismissDiagBanner(id) {
+    const session = diagnostics.get(id);
+    if (!session || !diagnoseStatus(session)) return;
+    dismissedFingerprints.set(id, diagnosticFingerprint(session));
+    hideDiagBanner();
+  }
+
+  /**
+   * @param {string} id
+   */
+  async function copyDiagnostics(id) {
+    if (!id) return;
+    const session = diagnostics.get(id);
+    if (!session || !diagnoseStatus(session)) return;
+    const plugin = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === id);
+    if (!hostVersionCache) {
+      try {
+        const info = await window.dex.generalSettings();
+        if (info && typeof info.version === 'string') hostVersionCache = info.version;
+      } catch {
+        // 复制仍继续，版本写未知。
+      }
+    }
+    const text = formatDiagnosticText(
+      {
+        hostVersion: hostVersionCache,
+        system: typeof navigator !== 'undefined' ? (navigator.platform || navigator.userAgent || '') : '',
+        pluginId: id,
+        pluginVersion: plugin ? plugin.version : '',
+        pluginSource: plugin ? plugin.source : '',
+      },
+      session,
+    );
+    try {
+      const result = await window.dex.copyText(text);
+      if (!result || !result.ok) {
+        setStatus('无法复制', 'error');
+        return;
+      }
+      showShellToast('已复制诊断', 'ok');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : '无法复制', 'error');
+    }
+  }
+
+  async function copyActiveDiagnostics() {
+    const id = shell.activeId || diagFocusId;
+    if (id) await copyDiagnostics(id);
+  }
+
   /**
    * @param {string} id
    * @param {string} message
    */
   function handleViewFailed(id, message) {
-    if (shell.activeId !== id || !workspaceOpen()) return;
+    const session = ensureDiag(id);
+    session.openFailure = message || '打开插件失败';
+    diagFocusId = id;
+    if (shell.activeId !== id || !workspaceOpen()) {
+      syncDiagnosticsUi(id);
+      return;
+    }
     showWelcome();
-    setStatus(message || '打开插件失败', 'error');
+    // 主帧/样式失败回欢迎页；说明走粉红条，不再写长句到 #status。
+    syncDiagnosticsUi(id);
   }
 
   /** @param {PluginSummary} plugin */
@@ -344,7 +533,20 @@ export function mountPlugins({
     const seq = ++openSeq;
     pluginPane.hidden = false;
     shell.activeId = plugin.id;
-    setStatus('');
+    diagFocusId = plugin.id;
+    if (!views.has(plugin.id)) {
+      clearDiag(plugin.id);
+      diagFocusId = plugin.id;
+      clearStatusAndDiagUi();
+    } else {
+      const existing = diagnostics.get(plugin.id);
+      if (existing && diagnoseStatus(existing)) {
+        setStatus('');
+        syncDiagnosticsUi(plugin.id);
+      } else {
+        clearStatusAndDiagUi();
+      }
+    }
     settings.dismissSurface();
     renderNav();
 
@@ -421,7 +623,10 @@ export function mountPlugins({
     shell.plugins = nextPlugins || (await window.dex.listPlugins());
     const live = new Set(shell.plugins.map((/** @type {PluginSummary} */ plugin) => plugin.id));
     for (const id of views.ids()) {
-      if (!live.has(id)) views.drop(id, 'force');
+      if (!live.has(id)) {
+        views.drop(id, 'force');
+        clearDiag(id);
+      }
     }
     renderNav();
     syncPreviewStrip();
@@ -481,6 +686,7 @@ export function mountPlugins({
   /** @param {string} id */
   function releaseView(id) {
     views.drop(id, 'force');
+    clearDiag(id);
   }
 
   /** @param {string | null | undefined} id */
@@ -515,6 +721,7 @@ export function mountPlugins({
       if (next) await openPlugin(next);
       return;
     }
+    clearDiag(plugin.id);
     views.drop(plugin.id, 'force');
     await openPlugin(plugin);
   }
@@ -525,6 +732,13 @@ export function mountPlugins({
   previewStripEnd.addEventListener('click', () => {
     void endActivePreview();
   });
+  diagBannerCopy.addEventListener('click', () => {
+    void copyActiveDiagnostics();
+  });
+  diagBannerClose.addEventListener('click', () => {
+    const id = shell.activeId || diagFocusId;
+    if (id) dismissDiagBanner(id);
+  });
 
   if (window.dex.onRuntimeProgress) {
     window.dex.onRuntimeProgress((event) => {
@@ -532,6 +746,20 @@ export function mountPlugins({
       if (!workspaceOpen()) return;
       const bin = typeof event.bin === 'string' && event.bin ? `（${event.bin}）` : '';
       setStatus(`正在准备运行环境${bin}`);
+    });
+  }
+
+  if (window.dex.onPluginAssetError) {
+    window.dex.onPluginAssetError((event) => {
+      if (!event || typeof event.pluginId !== 'string' || typeof event.url !== 'string') return;
+      const session = ensureDiag(event.pluginId);
+      session.assetFailures = pushAssetFailure(session.assetFailures, {
+        url: event.url,
+        kind: event.kind,
+        resourceType: event.resourceType,
+        error: event.error,
+      });
+      syncDiagnosticsUi(event.pluginId);
     });
   }
 
@@ -548,5 +776,7 @@ export function mountPlugins({
     parkHot: () => views.parkHot(),
     /** @param {string} id */
     present: (id) => views.present(id),
+    hasDiagnostics,
+    copyDiagnostics,
   };
 }

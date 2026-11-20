@@ -130,6 +130,18 @@ declare global {
     isMainFrame: boolean;
     errorCode: number;
     errorDescription: string;
+    validatedURL?: string;
+  }
+
+  interface ElectronConsoleMessageEvent extends Event {
+    level: number;
+    message: string;
+    line: number;
+    sourceId: string;
+  }
+
+  interface ElectronRenderProcessGoneEvent extends Event {
+    reason?: string;
   }
 
   interface UpdaterBridge {

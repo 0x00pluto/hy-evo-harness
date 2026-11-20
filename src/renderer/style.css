@@ -11,6 +11,7 @@
   --hover: #f3f3f3;
   --status: #2f80ed;
   --danger: #8d3a2f;
+  --warn: #ca8a04;
   --ok: #2d6a4f;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
   --focus: #171717;
@@ -776,6 +777,26 @@ body[data-surface="settings"] .split-section {
   cursor: pointer;
 }
 
+.nav-hover-copy-diagnostics {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--danger);
+  font-size: var(--text-ui);
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-hover-copy-diagnostics svg {
+  color: var(--warn);
+}
+
+.nav-hover-copy-diagnostics:hover {
+  background: var(--hover);
+}
+
 .nav-hover-path {
   width: 100%;
   border: 0;
@@ -802,6 +823,7 @@ body[data-surface="settings"] .split-section {
 .nav-hover-settings:hover { background: var(--hover); }
 
 .nav-hover-settings:focus-visible,
+.nav-hover-copy-diagnostics:focus-visible,
 .nav-hover-path:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
@@ -888,9 +910,11 @@ body[data-surface="settings"] .split-section {
 }
 
 body[data-surface="settings"] #workspace-pane,
-body[data-surface="settings"] #status,
+body[data-surface="settings"] #status-row,
+body[data-surface="settings"] #plugin-diag-banner,
 body[data-surface="plugins"] #workspace-pane,
-body[data-surface="plugins"] #status {
+body[data-surface="plugins"] #status-row,
+body[data-surface="plugins"] #plugin-diag-banner {
   display: none;
 }
 
@@ -946,15 +970,121 @@ h1 {
   line-height: 1.6;
 }
 
-#status {
+#plugin-diag-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 12px 10px 14px;
+  background: color-mix(in srgb, var(--danger) 12%, var(--paper));
+  color: var(--danger);
+  font-size: var(--text-ui);
+  line-height: 1.35;
+  animation: plugin-diag-banner-in 180ms ease-out;
+}
+
+#plugin-diag-banner[hidden] {
+  display: none;
+}
+
+.plugin-diag-banner-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.plugin-diag-warn-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--warn);
+}
+
+.plugin-diag-banner-label {
+  flex: none;
+  font-weight: 500;
+}
+
+#plugin-diag-banner-copy {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  font: inherit;
+  font-size: var(--text-ui);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+#plugin-diag-banner-copy:hover {
+  color: var(--muted);
+}
+
+#plugin-diag-banner-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+#plugin-diag-banner-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+#plugin-diag-banner-close:hover {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+#plugin-diag-banner-copy:focus-visible,
+#plugin-diag-banner-close:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@keyframes plugin-diag-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+#status-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
   margin: 0;
   padding: 0 18px;
   min-height: 0;
-  font-size: var(--text-body);
 }
 
-#status:not(:empty) {
+#status-row:has(#status:not(:empty)) {
   padding: 12px 18px 0;
+}
+
+#status {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-body);
 }
 
 #status[data-kind="error"] { color: var(--danger); }
@@ -1460,6 +1590,31 @@ h1 {
   gap: 8px;
   grid-column: 2;
   grid-row: 1;
+}
+
+.plugin-detail-copy-diagnostics {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  font: inherit;
+  font-size: var(--text-ui);
+  line-height: 1.3;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plugin-detail-copy-diagnostics:hover {
+  color: var(--muted);
+}
+
+.plugin-detail-copy-diagnostics:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .plugin-more-wrap { position: relative; }
@@ -2029,4 +2184,8 @@ h1 {
   }
 
   .market-spinner { animation: none; }
+
+  #plugin-diag-banner {
+    animation: none;
+  }
 }

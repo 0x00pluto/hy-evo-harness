@@ -252,6 +252,15 @@ export interface NavigateCompletePayload {
   message?: string;
 }
 
+/** 插件分区资源失败（协议 404 或 webRequest）。 */
+export interface PluginAssetErrorEvent {
+  pluginId: string;
+  url: string;
+  kind: 'protocol-404' | 'web-request';
+  resourceType?: string;
+  error?: string;
+}
+
 /** 对照预加载暴露的 window.dex；底层通道见 dex-ipc.ts。 */
 export interface DexHost {
   devFlags(): Promise<DevFlags>;
@@ -276,6 +285,7 @@ export interface DexHost {
   setWatchingPlugin(id: string | null): void;
   onPluginSilentUpdate(callback: (payload: SilentUpdateEvent) => void): () => void;
   onPluginList(callback: (payload: PluginSummary[]) => void): () => void;
+  onPluginAssetError(callback: (payload: PluginAssetErrorEvent) => void): () => void;
   settingsCatalog(): Promise<SettingsPluginView[]>;
   savePluginSettings(id: string, draft: unknown): Promise<SettingsSaveResult>;
   revealPluginSecret(id: string, key: string): Promise<RevealSecretResult>;

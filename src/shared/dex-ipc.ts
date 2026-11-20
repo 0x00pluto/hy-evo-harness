@@ -25,6 +25,7 @@ import type {
   UpdaterStatusPayload,
   PluginNavigatePayload,
   NavigateCompletePayload,
+  PluginAssetErrorEvent,
 } from './dex-bridge.ts';
 
 export interface CallServicePayload {
@@ -101,6 +102,7 @@ export type DexPushMap = {
   'dex:runtime-progress': RuntimeProgress;
   'dex:plugin-silent-update': SilentUpdateEvent;
   'dex:plugin-list': PluginSummary[];
+  'dex:plugin-asset-error': PluginAssetErrorEvent;
   'updater:status': UpdaterStatusPayload;
   'dex:session': GatewaySessionView;
   'dex:spend-blocked': SpendBlockedPayload;

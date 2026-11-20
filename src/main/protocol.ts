@@ -16,6 +16,17 @@ export interface PluginPathLookup {
   resolveAssetContext(id: string): PluginAssetContext | undefined;
 }
 
+/** 插件资源失败（协议 404 或分区 webRequest），推给宿主窗展示与复制。 */
+export type PluginAssetErrorReporter = (event: {
+  pluginId: string;
+  url: string;
+  kind: 'protocol-404' | 'web-request';
+  resourceType?: string;
+  error?: string;
+}) => void;
+
+const ASSET_ERROR_TYPES = new Set(['script', 'stylesheet']);
+
 interface ElectronProtocolModule {
   protocol: {
     registerSchemesAsPrivileged: (
@@ -29,6 +40,18 @@ interface ElectronProtocolModule {
     fromPartition: (name: string) => {
       protocol: {
         handle: (scheme: string, handler: (request: Request) => Response | Promise<Response>) => void;
+      };
+      webRequest: {
+        onErrorOccurred: (
+          filter: { urls: string[] } | null,
+          listener:
+            | ((details: {
+                url: string;
+                resourceType: string;
+                error: string;
+              }) => void)
+            | null,
+        ) => void;
       };
       clearCache: () => Promise<void>;
     };
@@ -165,7 +188,29 @@ export function registerPluginScheme(): void {
   ]);
 }
 
-export function ensurePluginProtocol(lookup: PluginPathLookup, partition: string): void {
+function reportProtocol404(
+  onAssetError: PluginAssetErrorReporter | undefined,
+  pluginId: string,
+  url: string,
+): void {
+  if (!onAssetError || !pluginId) return;
+  onAssetError({
+    pluginId,
+    url,
+    kind: 'protocol-404',
+    error: 'Not found',
+  });
+}
+
+/**
+ * 每个 partition 只挂一次 app-plugin 协议。
+ * 可选 onAssetError：协议回 404，以及同分区 script/stylesheet 的 webRequest 错误。
+ */
+export function ensurePluginProtocol(
+  lookup: PluginPathLookup,
+  partition: string,
+  onAssetError?: PluginAssetErrorReporter,
+): void {
   if (hookedPartitions.has(partition)) return;
   const { session, net } = require('electron') as ElectronProtocolModule;
   const partitionSession = session.fromPartition(partition);
@@ -181,14 +226,51 @@ export function ensurePluginProtocol(lookup: PluginPathLookup, partition: string
     }
 
     const context = lookup.resolveAssetContext(pluginId);
-    if (!context) return pluginAssetResponse('Not found', { status: 404 });
+    if (!context) {
+      reportProtocol404(onAssetError, pluginId, request.url);
+      return pluginAssetResponse('Not found', { status: 404 });
+    }
 
     const asset = resolvePluginAsset(context.absPath, filePath, {
       allowedRealRoots: context.allowedRealRoots,
     });
-    if (!asset) return pluginAssetResponse('Not found', { status: 404 });
+    if (!asset) {
+      reportProtocol404(onAssetError, pluginId, request.url);
+      return pluginAssetResponse('Not found', { status: 404 });
+    }
     const fetched = await net.fetch(pathToFileURL(asset).toString());
     return withPluginAssetCacheHeaders(fetched);
   });
+
+  if (onAssetError) {
+    try {
+      partitionSession.webRequest.onErrorOccurred(
+        { urls: ['app-plugin://*/*', '*://*/*'] },
+        (details) => {
+        if (!ASSET_ERROR_TYPES.has(details.resourceType)) return;
+        let pluginId = '';
+        try {
+          pluginId = new URL(details.url).hostname;
+        } catch {
+          return;
+        }
+        if (!pluginId) return;
+        onAssetError({
+          pluginId,
+          url: details.url,
+          kind: 'web-request',
+          resourceType: details.resourceType,
+          error: details.error,
+        });
+      });
+    } catch (err) {
+      console.error(
+        `[protocol] 挂载 webRequest.onErrorOccurred 失败 (${partition}): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
   hookedPartitions.add(partition);
 }

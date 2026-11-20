@@ -22,6 +22,8 @@ const OTHER_CATEGORY = '其他';
  *     refresh: (list?: PluginSummary[]) => Promise<void>;
  *     releaseView: (id: string) => void;
  *     reopenIfWatching: (id: string | null | undefined) => void;
+ *     hasDiagnostics?: (id: string) => boolean;
+ *     copyDiagnostics?: (id: string) => Promise<void>;
  *   };
  *   chrome: ChromeBridge;
  * }} opts
@@ -438,6 +440,16 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
 
     const actions = document.createElement('div');
     actions.className = 'plugin-detail-actions';
+    if (plugins.hasDiagnostics?.(plugin.id)) {
+      const copyDiag = document.createElement('button');
+      copyDiag.type = 'button';
+      copyDiag.className = 'plugin-detail-copy-diagnostics';
+      copyDiag.textContent = '一键复制错误信息';
+      copyDiag.addEventListener('click', () => {
+        void plugins.copyDiagnostics?.(plugin.id);
+      });
+      actions.appendChild(copyDiag);
+    }
     const menuItems = plugin.source === 'installed'
       ? [{
           label: '卸载',

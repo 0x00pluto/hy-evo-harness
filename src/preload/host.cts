@@ -89,6 +89,9 @@ const dex: DexHost = {
   onPluginList(callback) {
     return onPush('dex:plugin-list', callback);
   },
+  onPluginAssetError(callback) {
+    return onPush('dex:plugin-asset-error', callback);
+  },
   settingsCatalog() {
     return invoke('dex:settings-catalog');
   },

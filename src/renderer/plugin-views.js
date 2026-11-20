@@ -65,9 +65,18 @@ async function stylesheetsReady(entry) {
  *   onReopened: () => void;
  *   onLoaded: (id: string) => void;
  *   onFailed: (id: string, message: string) => void;
+ *   onConsoleMessage?: (id: string, entry: { level: number; message: string; sourceId?: string; line?: number }) => void;
+ *   onGuestGone?: (id: string, reason: string) => void;
  * }} opts
  */
-export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed }) {
+export function mountPluginViews({
+  viewportHost,
+  onReopened,
+  onLoaded,
+  onFailed,
+  onConsoleMessage = () => {},
+  onGuestGone = () => {},
+}) {
   /** @type {Map<string, ViewEntry>} */
   const views = new Map();
   const evicted = new Set();
@@ -201,6 +210,7 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
     webview.addEventListener('did-fail-load', (raw) => {
       const event = /** @type {ElectronDidFailLoadEvent} */ (raw);
       if (entry.closing || views.get(entry.id) !== entry) return;
+      // 子资源失败不走这里（Electron 主文档事件）；资源 404 由主进程协议 / webRequest 推送。
       if (event.isMainFrame === false) return;
       if (event.errorCode === ABORTED) return;
       drop(entry.id, 'fail');
@@ -208,6 +218,24 @@ export function mountPluginViews({ viewportHost, onReopened, onLoaded, onFailed 
         ? event.errorDescription
         : '打开插件失败';
       onFailed(entry.id, message);
+    });
+    webview.addEventListener('console-message', (raw) => {
+      const event = /** @type {ElectronConsoleMessageEvent} */ (raw);
+      if (entry.closing || views.get(entry.id) !== entry) return;
+      onConsoleMessage(entry.id, {
+        level: event.level,
+        message: typeof event.message === 'string' ? event.message : String(event.message ?? ''),
+        sourceId: typeof event.sourceId === 'string' ? event.sourceId : undefined,
+        line: typeof event.line === 'number' ? event.line : undefined,
+      });
+    });
+    webview.addEventListener('render-process-gone', (raw) => {
+      const event = /** @type {ElectronRenderProcessGoneEvent} */ (raw);
+      if (entry.closing || views.get(entry.id) !== entry) return;
+      const reason = typeof event.reason === 'string' && event.reason
+        ? event.reason
+        : 'crashed';
+      onGuestGone(entry.id, `插件页面进程退出（${reason}）`);
     });
 
     viewportHost.appendChild(webview);
