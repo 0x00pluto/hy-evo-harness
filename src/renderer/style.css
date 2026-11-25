@@ -1159,12 +1159,17 @@ h1 {
   border: 0;
 }
 
-#viewport-host webview.is-parked,
-#viewport-host webview.is-booting {
+/* 保活隐藏：不占布局。与 booting 拆开，避免冷启动 0×0 放大后 guest 不补画。 */
+#viewport-host webview.is-parked {
   position: absolute;
   width: 0;
   height: 0;
   visibility: hidden;
+  pointer-events: none;
+}
+
+/* 冷启动：保持工作区真实尺寸，由 #plugin-boot 遮罩盖住；勿收成 0×0。 */
+#viewport-host webview.is-booting {
   pointer-events: none;
 }
 

@@ -81,9 +81,9 @@ macOS 使用隐藏系统标题栏。顶栏是全宽 `#titlebar`：高 `--titleba
 
 颜色过渡约 180ms。浮层侧栏约 120ms：出现时从右侧 16px 滑到原位并淡入，消失时向右滑出并淡出。`prefers-reduced-motion: reduce` 时关掉过渡，也不做这段位移动画。交互控件的焦点环是 2px `--focus`，不能拿掉。
 
-带界面的插件第一次挂上页面、到 webview `did-finish-load` 之前，工作区 `#viewport-host` 可盖一层白底遮罩（`--paper`），中央是约 120px 的 Lottie（`src/renderer/lottie/plugin-boot.json`）。打开后约 300ms 仍未就绪才显示遮罩；更早就绪则不显示，避免快启动闪一下。动画自带彩色圆点，不改成壳的灰阶。已经加载过、还停在内存里的插件切回来不播。重新加载或被内存配额丢掉后再打开会再走这段逻辑。`prefers-reduced-motion: reduce` 时停在第一帧、不自动播放。
+带界面的插件第一次挂上页面、到 webview `did-finish-load` 之前，工作区 `#viewport-host` 可盖一层白底遮罩（`--paper`），中央是约 120px 的 Lottie（`src/renderer/lottie/plugin-boot.json`）。打开后约 300ms 仍未就绪才显示遮罩；更早就绪则不显示，避免快启动闪一下。动画自带彩色圆点，不改成壳的灰阶。已经加载过、还停在内存里的插件切回来不播。重新加载或被内存配额丢掉后再打开会再走这段逻辑。`prefers-reduced-motion: reduce` 时停在第一帧、不自动播放。冷启动时 webview 带 `is-booting`：**保持工作区真实宽高**，`pointer-events: none`，由上述遮罩盖住；**不要**再收成 0×0（那是 `is-parked` 保活隐藏页的做法）。遮罩收起时页面已在最终尺寸上画过。
 
-插件页诊断不用 `#status` 长句。有协议 404、`webRequest` 资源错误或访客 `console-message` warning/error 时，工作区顶部下浮 `#plugin-diag-banner`：软粉红底（`color-mix` 自 `--danger`）、黄感叹号（`--warn`）、文案「插件报错」、文字按钮「一键复制错误信息」、右侧关闭。复制内容仍是宿主版本、插件 id/版本与上述字段的纯文本。用户关掉后同指纹不再下浮粉红条，工作区不留残余行；需要再抄时可到侧栏悬停卡片分割线下第一行，或插件页详情眉右侧的红色「一键复制错误信息」（均仅该插件仍有诊断时出现，与粉红条关没关无关）。指纹变了（新错误）或冷开 / 重新加载重建会话后再下浮粉红条。`#status-row` 只留给「正在准备运行环境」「已重新加载」等通用反馈。设置页与插件页藏起报错条和 `#status-row`。`prefers-reduced-motion: reduce` 时粉红条无滑入动画。
+插件页诊断不用 `#status` 长句。有协议 404、`webRequest` 资源错误或访客 `console-message` warning/error 时，工作区顶部下浮 `#plugin-diag-banner`：软粉红底（`color-mix` 自 `--danger`）、黄感叹号（`--warn`）、文案「插件报错」、文字按钮「一键复制错误信息」、右侧关闭。复制内容仍是宿主版本、插件 id/版本、启动布局（遮罩收起前后宿主侧盒模型）与上述字段的纯文本。用户关掉后同指纹不再下浮粉红条，工作区不留残余行；需要再抄时可到侧栏悬停卡片分割线下第一行，或插件页详情眉右侧的红色「一键复制错误信息」（均仅该插件仍有诊断时出现，与粉红条关没关无关）。**没有**上述失败信号、但遮罩已收起时：不粉红打扰；插件详情「⋯」菜单最前可出现「复制启动信息」（Lucide `info`），同样带上启动布局，便于白屏零报错时交给支持；不放在详情眉或侧栏悬停卡，以免日常干扰。指纹变了（新错误）或冷开 / 重新加载重建会话后再下浮粉红条。`#status-row` 只留给「正在准备运行环境」「已重新加载」等通用反馈。设置页与插件页藏起报错条和 `#status-row`。`prefers-reduced-motion: reduce` 时粉红条无滑入动画。
 
 ## 禁止
 

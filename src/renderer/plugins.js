@@ -7,6 +7,7 @@ import {
   diagnoseStatus,
   diagnosticFingerprint,
   formatDiagnosticText,
+  hasBootLayoutReport,
   pushAssetFailure,
   pushConsoleRing,
 } from './plugin-diagnostics.js';
@@ -17,6 +18,8 @@ import {
  *   guestGone: string | null;
  *   assetFailures: Array<{ url: string; kind?: string; resourceType?: string; error?: string }>;
  *   consoleEntries: Array<{ level: number; message: string; sourceId?: string; line?: number }>;
+ *   bootLayoutDuring: string | null;
+ *   bootLayoutAfter: string | null;
  * }} PluginDiagSession
  */
 
@@ -70,6 +73,12 @@ export function mountPlugins({
     onLoaded(id) {
       boot.hide(id);
       syncDiagnosticsUi(id);
+      onListChanged();
+    },
+    onBootLayout(id, layout) {
+      const session = ensureDiag(id);
+      session.bootLayoutDuring = layout.during;
+      session.bootLayoutAfter = layout.after;
     },
     onFailed(id, message) {
       handleViewFailed(id, message);
@@ -398,6 +407,8 @@ export function mountPlugins({
         guestGone: null,
         assetFailures: [],
         consoleEntries: [],
+        bootLayoutDuring: null,
+        bootLayoutAfter: null,
       };
       diagnostics.set(id, session);
     }
@@ -420,6 +431,16 @@ export function mountPlugins({
   function hasDiagnostics(id) {
     const session = diagnostics.get(id);
     return !!(session && diagnoseStatus(session));
+  }
+
+  /**
+   * 遮罩收起后已有启动布局，零诊断时仍可复制给支持。
+   *
+   * @param {string} id
+   */
+  function hasBootReport(id) {
+    const session = diagnostics.get(id);
+    return !!(session && hasBootLayoutReport(session));
   }
 
   /**
@@ -469,7 +490,9 @@ export function mountPlugins({
   async function copyDiagnostics(id) {
     if (!id) return;
     const session = diagnostics.get(id);
-    if (!session || !diagnoseStatus(session)) return;
+    if (!session) return;
+    const hasError = Boolean(diagnoseStatus(session));
+    if (!hasError && !hasBootLayoutReport(session)) return;
     const plugin = shell.plugins.find((/** @type {PluginSummary} */ item) => item.id === id);
     if (!hostVersionCache) {
       try {
@@ -495,7 +518,7 @@ export function mountPlugins({
         setStatus('无法复制', 'error');
         return;
       }
-      showShellToast('已复制诊断', 'ok');
+      showShellToast(hasError ? '已复制诊断' : '已复制启动信息', 'ok');
     } catch (err) {
       setStatus(err instanceof Error ? err.message : '无法复制', 'error');
     }
@@ -777,6 +800,7 @@ export function mountPlugins({
     /** @param {string} id */
     present: (id) => views.present(id),
     hasDiagnostics,
+    hasBootReport,
     copyDiagnostics,
   };
 }

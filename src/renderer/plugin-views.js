@@ -1,7 +1,18 @@
 import { selectEvictions } from './view-quota.js';
 import { STYLESHEET_PROBE, stylesheetReady } from './page-ready.js';
+import { formatBootLayoutSize } from './plugin-diagnostics.js';
 
 const ABORTED = -3;
+
+/** @param {ElectronWebviewElement} webview */
+function measureBootLayout(webview) {
+  try {
+    const rect = webview.getBoundingClientRect();
+    return formatBootLayoutSize(rect.width, rect.height);
+  } catch {
+    return '（未知）';
+  }
+}
 
 /**
  * @typedef {{
@@ -65,6 +76,7 @@ async function stylesheetsReady(entry) {
  *   onReopened: () => void;
  *   onLoaded: (id: string) => void;
  *   onFailed: (id: string, message: string) => void;
+ *   onBootLayout?: (id: string, layout: { during: string; after: string }) => void;
  *   onConsoleMessage?: (id: string, entry: { level: number; message: string; sourceId?: string; line?: number }) => void;
  *   onGuestGone?: (id: string, reason: string) => void;
  * }} opts
@@ -74,6 +86,7 @@ export function mountPluginViews({
   onReopened,
   onLoaded,
   onFailed,
+  onBootLayout = () => {},
   onConsoleMessage = () => {},
   onGuestGone = () => {},
 }) {
@@ -132,7 +145,7 @@ export function mountPluginViews({
     const entry = views.get(id);
     if (!entry) return false;
     entry.webview.classList.remove('is-parked');
-    // 未就绪时藏起 guest，否则 Electron webview 会盖住 Lottie 遮罩。
+    // 未就绪时保持 is-booting：真实尺寸 + pointer-events none，由 Lottie 遮罩盖住。
     entry.webview.classList.toggle('is-booting', !entry.loaded);
     entry.state = entry.loaded ? 'hot' : 'loading';
     entry.lastHotAt = Date.now();
@@ -161,7 +174,10 @@ export function mountPluginViews({
 
     const first = !entry.loaded;
     entry.loaded = true;
+    const during = measureBootLayout(entry.webview);
     entry.webview.classList.remove('is-booting');
+    const after = measureBootLayout(entry.webview);
+    onBootLayout(entry.id, { during, after });
     entry.state = parked(entry.webview) ? 'warm' : 'hot';
     void applyThrottle(entry);
     onLoaded(entry.id);

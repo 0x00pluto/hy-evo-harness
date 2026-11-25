@@ -23,6 +23,7 @@ const OTHER_CATEGORY = '其他';
  *     releaseView: (id: string) => void;
  *     reopenIfWatching: (id: string | null | undefined) => void;
  *     hasDiagnostics?: (id: string) => boolean;
+ *     hasBootReport?: (id: string) => boolean;
  *     copyDiagnostics?: (id: string) => Promise<void>;
  *   };
  *   chrome: ChromeBridge;
@@ -450,6 +451,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
       });
       actions.appendChild(copyDiag);
     }
+    /** @type {PluginMenuItem[]} */
     const menuItems = plugin.source === 'installed'
       ? [{
           label: '卸载',
@@ -458,6 +460,13 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
           run: () => { void uninstallPlugin(plugin.id); },
         }]
       : localMenuItems(plugin);
+    if (plugins.hasBootReport?.(plugin.id)) {
+      menuItems.unshift({
+        label: '复制启动信息',
+        icon: 'info',
+        run: () => { void plugins.copyDiagnostics?.(plugin.id); },
+      });
+    }
     if (menuItems.length > 0) actions.appendChild(moreMenu(menuItems));
 
     const orphanDeleteOnly = Boolean(plugin.orphan && plugin.runtimeError);

@@ -7,7 +7,9 @@ import {
   STATUS_SUBRESOURCE,
   diagnoseStatus,
   diagnosticFingerprint,
+  formatBootLayoutSize,
   formatDiagnosticText,
+  hasBootLayoutReport,
   isConsoleDiagnosable,
   pushAssetFailure,
   pushConsoleRing,
@@ -158,5 +160,53 @@ test('同 URL 资源失败去重；复制文本含约定字段不含密钥样例
   assert.match(text, /app-plugin:\/\/p\/a\.js/);
   assert.match(text, /ReferenceError: x/);
   assert.match(text, /只清 HTTP 缓存/);
+  assert.match(text, /启动布局（遮罩收起前）：（未知）/);
+  assert.match(text, /启动布局（遮罩收起后）：（未知）/);
   assert.doesNotMatch(text, /api[_-]?key|secret|token|password/i);
+});
+
+test('formatBootLayoutSize 与 hasBootLayoutReport', () => {
+  assert.equal(formatBootLayoutSize(0, 0), '0x0');
+  assert.equal(formatBootLayoutSize(120.4, 80.6), '120x81');
+  assert.equal(formatBootLayoutSize(Number.NaN, 10), '（未知）');
+  assert.equal(hasBootLayoutReport({ assetFailures: [], consoleEntries: [] }), false);
+  assert.equal(
+    hasBootLayoutReport({
+      assetFailures: [],
+      consoleEntries: [],
+      bootLayoutDuring: '0x0',
+      bootLayoutAfter: '800x600',
+    }),
+    true,
+  );
+});
+
+test('零诊断时复制文本仍含启动布局字段', () => {
+  const text = formatDiagnosticText(
+    {
+      hostVersion: '0.21.0',
+      system: 'MacIntel',
+      pluginId: 'demo',
+      pluginVersion: '1.0.0',
+      pluginSource: 'installed',
+    },
+    {
+      assetFailures: [],
+      consoleEntries: [],
+      bootLayoutDuring: '0x0',
+      bootLayoutAfter: '960x640',
+    },
+  );
+  assert.match(text, /状态：（无）/);
+  assert.match(text, /启动布局（遮罩收起前）：0x0/);
+  assert.match(text, /启动布局（遮罩收起后）：960x640/);
+  assert.equal(
+    diagnoseStatus({
+      assetFailures: [],
+      consoleEntries: [],
+      bootLayoutDuring: '0x0',
+      bootLayoutAfter: '960x640',
+    }),
+    null,
+  );
 });

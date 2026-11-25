@@ -31,6 +31,8 @@ const CACHE_NOTE = '更新只清 HTTP 缓存，不清插件页面自己的本地
  *   assetFailures: readonly AssetFailure[];
  *   consoleEntries: readonly ConsoleEntry[];
  *   guestGone?: string | null;
+ *   bootLayoutDuring?: string | null;
+ *   bootLayoutAfter?: string | null;
  * }} DiagnosticSignals
  *
  * @typedef {{
@@ -43,6 +45,24 @@ const CACHE_NOTE = '更新只清 HTTP 缓存，不清插件页面自己的本地
  *
  * @typedef {{ kind: 'asset' | 'console' | 'openFailure' | 'guestGone'; message: string }} DiagnosticStatus
  */
+
+/**
+ * @param {number} width
+ * @param {number} height
+ */
+export function formatBootLayoutSize(width, height) {
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return '（未知）';
+  return `${Math.round(width)}x${Math.round(height)}`;
+}
+
+/**
+ * 有启动布局字段即可复制给支持（不单独触发粉红条）。
+ *
+ * @param {DiagnosticSignals} signals
+ */
+export function hasBootLayoutReport(signals) {
+  return Boolean(signals.bootLayoutDuring || signals.bootLayoutAfter);
+}
 
 /**
  * @param {number} level
@@ -175,6 +195,8 @@ export function formatDiagnosticText(meta, signals) {
     `来源：${meta.pluginSource || '（未知）'}`,
     `加载阶段：${phase}`,
     `状态：${status ? status.message : '（无）'}`,
+    `启动布局（遮罩收起前）：${signals.bootLayoutDuring || '（未知）'}`,
+    `启动布局（遮罩收起后）：${signals.bootLayoutAfter || '（未知）'}`,
     CACHE_NOTE,
   ];
 
