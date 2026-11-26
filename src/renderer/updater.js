@@ -1,5 +1,11 @@
 import { showUpdateDot, updateRowMode } from './chrome-state.js';
 import { byId } from './dom.js';
+import {
+  RAIL_UPDATE_TIP_TEXT,
+  bindHoverTip,
+  createHoverTip,
+  hideHoverTip,
+} from './ui/hover-tip.js';
 
 /**
  * @param {{ setStatus: (message: string, kind?: string) => void }} opts
@@ -26,6 +32,13 @@ export function mountUpdater({ setStatus }) {
   let updaterOwnsStatus = false;
   /** @type {Set<(payload: UpdaterStatusPayload) => void>} */
   const statusListeners = new Set();
+
+  const railUpdateTip = createHoverTip({
+    id: 'rail-update-tip',
+    className: 'hover-tip',
+    content: RAIL_UPDATE_TIP_TEXT,
+  });
+  bindHoverTip(updateRail, railUpdateTip, { placement: 'right' });
 
   /** @param {string | undefined} version */
   function versionLabel(version) {
@@ -145,12 +158,15 @@ export function mountUpdater({ setStatus }) {
     updateBtn.hidden = row !== 'install' && !showPreviewRow;
     updateRetry.hidden = row !== 'retry';
     updateRail.hidden = !(ready || forceUpdateIcon);
+    if (updateRail.hidden) hideHoverTip(railUpdateTip);
 
     if (row === 'install' && updateState) {
       const version = versionLabel(updateState.availableVersion);
       const label = isMacUpdate(updateState) ? `下载 ${version}` : `安装 ${version}`;
       updateLabel.textContent = label;
-      updateBtn.setAttribute('aria-label', isMacUpdate(updateState) ? '下载新版本' : '重启并安装更新');
+      const actionLabel = isMacUpdate(updateState) ? '下载新版本' : '重启并安装更新';
+      updateBtn.setAttribute('aria-label', actionLabel);
+      updateRail.setAttribute('aria-label', actionLabel);
       return;
     }
 
@@ -158,7 +174,9 @@ export function mountUpdater({ setStatus }) {
     const preview = previewPayload();
     const label = isMacUpdate(preview) ? '下载 v0.0.0' : '安装 v0.0.0';
     updateLabel.textContent = label;
-    updateBtn.setAttribute('aria-label', isMacUpdate(preview) ? '下载新版本' : '重启并安装更新');
+    const actionLabel = isMacUpdate(preview) ? '下载新版本' : '重启并安装更新';
+    updateBtn.setAttribute('aria-label', actionLabel);
+    updateRail.setAttribute('aria-label', actionLabel);
   }
 
   /** @param {UpdaterStatusPayload | null | undefined} payload */
@@ -203,6 +221,7 @@ export function mountUpdater({ setStatus }) {
   }
 
   function openUpdateDialog() {
+    hideHoverTip(railUpdateTip);
     if (updateState && updateState.status === 'readyToInstall') {
       previewDialog = false;
       fillUpdateDialog(updateState);

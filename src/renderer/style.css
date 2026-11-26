@@ -1574,6 +1574,7 @@ h1 {
   height: 16px;
 }
 
+.hover-tip:not([hidden]),
 .plugin-folder-tip:not([hidden]) {
   position: fixed;
   z-index: 20;

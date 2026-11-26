@@ -1,6 +1,7 @@
 import { mountIcons } from './icons.js';
 import { showShellToast as showToast } from './shell-toast.js';
 import { byId } from './dom.js';
+import { bindHoverTip, clearHoverTips, createHoverTip } from './ui/hover-tip.js';
 
 const SOURCE_LABEL = {
   bundled: '示例',
@@ -233,24 +234,7 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
   }
 
   function clearFolderTips() {
-    document.querySelectorAll('.plugin-folder-tip').forEach((node) => node.remove());
-  }
-
-  /**
-   * @param {HTMLElement} button
-   * @param {HTMLElement} tip
-   */
-  function placeFolderTip(button, tip) {
-    tip.hidden = false;
-    const anchor = button.getBoundingClientRect();
-    const box = tip.getBoundingClientRect();
-    let top = anchor.top - 8 - box.height;
-    if (top < 8) top = anchor.bottom + 8;
-    let left = anchor.left + anchor.width / 2 - box.width / 2;
-    const maxLeft = window.innerWidth - box.width - 8;
-    left = Math.max(8, Math.min(left, maxLeft));
-    tip.style.top = `${top}px`;
-    tip.style.left = `${left}px`;
+    clearHoverTips();
   }
 
   /** @param {string | { path?: string; sourceLabel?: string; openable?: boolean }} options */
@@ -265,26 +249,20 @@ export function mountPluginsPage({ shell, plugins, chrome }) {
     const icon = document.createElement('i');
     icon.dataset.lucide = 'folder';
     button.appendChild(icon);
-    const tip = document.createElement('div');
-    tip.className = 'plugin-folder-tip';
-    tip.setAttribute('role', 'tooltip');
+    /** @type {string | Node[]} */
+    let tipContent = rootPath || '';
     if (label) {
       const source = document.createElement('div');
       source.textContent = label;
       const pathLine = document.createElement('div');
       pathLine.textContent = rootPath || '';
-      tip.append(source, pathLine);
-    } else {
-      tip.textContent = rootPath || '';
+      tipContent = [source, pathLine];
     }
-    tip.hidden = true;
-    document.body.appendChild(tip);
-    const show = () => placeFolderTip(button, tip);
-    const hide = () => { tip.hidden = true; };
-    button.addEventListener('pointerenter', show);
-    button.addEventListener('pointerleave', hide);
-    button.addEventListener('focus', show);
-    button.addEventListener('blur', hide);
+    const tip = createHoverTip({
+      className: 'hover-tip plugin-folder-tip',
+      content: tipContent,
+    });
+    bindHoverTip(button, tip, { placement: 'top' });
     if (openable && rootPath) {
       button.addEventListener('click', () => {
         void window.dex.openPluginFolder(rootPath);

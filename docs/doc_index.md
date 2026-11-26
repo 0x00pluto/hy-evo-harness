@@ -3,7 +3,7 @@
 ## Index
 
 - `README.md`: Dex Buddy 产品说明：Electron 宿主、插件契约、开发挂载与打包
-- `docs/DESIGN.md`: 工作台壳视觉事实源：白底、浅灰选中、细线文字按钮、双色独角兽字标；程序坞与安装包图标用 build/icon.png 与 build/icon.icns；图标轨拼图打开插件市场；未登录点轨或齿轮摘要即浏览器登录；通用设置含账号三态，积分页进入已登录则自动同步一次，含余额、已购插件列表与购买积分；烧模型未登录/未买断/积分不够时工作台弹出层（圆角 12）去登录或购买，打开时藏起当前插件 webview 以免被原生层盖住；开发挂载下模型试玩可「演示积分不够」验收弹层（不扣真积分）；标题栏前进右侧有重新加载（refresh-cw），只在工作区显示界面插件时出现且不参与拖拽；本地实例和来自示例的重新加载从源码重挂后端，已安装只刷新页面；顶栏下方 toast 用现有色令牌；插件冷启动时工作区白底 Lottie 遮罩，is-booting 保持真实尺寸不收 0×0；插件报错用可关闭粉红条；有诊断时侧栏悬停卡与详情页可「一键复制错误信息」，零诊断时详情「⋯」菜单可「复制启动信息」；发布预览中侧栏写「预览中」、工作区顶条可结束预览；插件页孤儿行来源小字仍是「已安装」另标「孤儿」；控件第二次出现再抽到 src/renderer/ui/；改 src/renderer 外观前先读
+- `docs/DESIGN.md`: 工作台壳视觉事实源：白底、浅灰选中、细线文字按钮、双色独角兽字标；程序坞与安装包图标用 build/icon.png 与 build/icon.icns；图标轨拼图打开插件市场；未登录点轨或齿轮摘要即浏览器登录；通用设置含账号三态，积分页进入已登录则自动同步一次，含余额、已购插件列表与购买积分；烧模型未登录/未买断/积分不够时工作台弹出层（圆角 12）去登录或购买，打开时藏起当前插件 webview 以免被原生层盖住；开发挂载下模型试玩可「演示积分不够」验收弹层（不扣真积分）；标题栏前进右侧有重新加载（refresh-cw），只在工作区显示界面插件时出现且不参与拖拽；本地实例和来自示例的重新加载从源码重挂后端，已安装只刷新页面；顶栏下方 toast 用现有色令牌；插件冷启动时工作区白底 Lottie 遮罩，is-booting 保持真实尺寸不收 0×0；插件报错用可关闭粉红条；有诊断时侧栏悬停卡与详情页可「一键复制错误信息」，零诊断时详情「⋯」菜单可「复制启动信息」；发布预览中侧栏写「预览中」、工作区顶条可结束预览；插件页孤儿行来源小字仍是「已安装」另标「孤儿」；有可安装更新时图标轨蓝钮悬停显示「有可用更新」（与目录 tip 共用 src/renderer/ui/hover-tip）；控件第二次出现再抽到 src/renderer/ui/；改 src/renderer 外观前先读
 - `docs/build-and-release.md`: 桌面安装包、三端 CI、GitHub Release 页，以及从七牛下载的应用内自动更新；macOS Finder 图标来自 build/icon.icns（勿让 26.15.x 从 png 现转）；七牛 dex-buddy/ 安装包只留最近 3 个版本；解释器单独用 publish-runtimes 传到 dex-buddy/runtimes/，不打进安装包
 - `docs/hub-plugin-architecture.md`: Dex Buddy 插件化技术选型与方案原文备份：注册表、app-plugin 协议、开发挂载、ZIP 安装；预加载编到 dist/preload；后端同主进程、跨插件调用保持公开；第一期插件中心见 publish-plugin 工作流，不改技能中心
 - `docs/memo/phase1-billing.md`: 第一期收费备忘（未上线）：登录与买断、额度充值包、网关转发模型并扣费；提示词仍本机拼；破解靠服务端校验；Chat 对齐 OpenAI 形态、生图包一层不透传 Replicate
@@ -40,6 +40,7 @@
 - `.cursor/commands/team/`: 团队命令（产品经理、工程验收官、前端工程师、测试工程师、自主交付工程师、飞书需求管理工程师）；母版在 Obsidian，不在此复制全文
 - `docs/renderer-layout.md`: 设置页和插件页共用一份 #split-layout；渲染层 checkJs 开 strict；IPC 通道表在 shared/dex-ipc，预加载编到 dist/preload；仍不打包前端；Lucide/lottie 继续 node_modules UMD；以后在第四个分栏表面把间距改散，或单页拼 DOM 超过约 800 行时，再引入 Lit 具名插槽，本次不安装
 - `docs/faqs/how-to-prevent-popup-clipping.md`: 工作台弹出层不要绝对定位在 overflow 容器里；用 fixed 按按钮摆放，否则只剩一条
+- `docs/faqs/hover-tip-gone-after-plugins-nav.md`: 进过插件页后蓝钮悬停无提示：clearHoverTips 勿用 `.hover-tip` 误删 `#rail-update-tip`，只清 `.plugin-folder-tip`
 - `docs/faqs/dev-and-prod-side-by-side.md`: 未打包用 Dex Buddy Dev 和独立 userData，可与安装包同时开；开发版仍单实例；pnpm start 无挂载日志即闪退是锁失败
 - `docs/faqs/first-open-plugin-unstyled.md`: 首次打开丢样式：env 联接曾被协议拒绝、遮罩过早撤下；现放行宿主 env 并加样式门闩
 - `docs/faqs/plugin-update-stale-ui.md`: 更新后挤左侧/缺样式：persist 分区缓存了旧 app-plugin 响应或 404；现 no-cache 头且安装/卸载后清分区缓存

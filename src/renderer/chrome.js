@@ -14,6 +14,7 @@ import {
 } from './chrome-state.js';
 import { accountHeadline, isLoginPending, renderAccountPanel } from './account-session.js';
 import { byId } from './dom.js';
+import { hideAllHoverTips } from './ui/hover-tip.js';
 
 /** @returns {GatewaySessionView} */
 function emptySessionView() {
@@ -178,6 +179,7 @@ export function mountChrome({ settings, plugins, pluginsPage, shell, setStatus, 
     popover.hidden = !open;
     gearBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     if (open) {
+      hideAllHoverTips();
       setAccountOpen(false);
       paintGearAccount();
     }
